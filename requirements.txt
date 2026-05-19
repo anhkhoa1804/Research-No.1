@@ -1,0 +1,14 @@
+# Core
+numpy
+pillow
+
+# Training
+torch
+torchvision
+transformers
+datasets
+huggingface_hub
+
+# Plotting / analysis
+pandas
+matplotlib

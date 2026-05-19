@@ -1,0 +1,10 @@
+# Optional deps for synthetic rendering + VLM filtering
+# Install only if you need diffusion rendering or prefer requests over stdlib HTTP.
+
+# Better HTTP client (used if present)
+requests
+
+# Diffusion rendering (optional)
+diffusers>=0.25.0
+accelerate
+safetensors

@@ -1,0 +1,43 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb}
+\usepackage{booktabs}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{array}
+
+\title{CORE: Compositional Relation Evaluation}
+\author{Research Notes}
+\date{2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+CORE, short for \emph{Compositional Relation Evaluation}, is the diagnostic dataset and evaluation direction associated with PURE. It is designed to expose relation understanding failures that aggregate recall on VG150 can hide, including role swaps, attribute perturbations, spatial contradictions, and predicate confusability.
+\end{abstract}
+
+\section{Current Status}
+CORE is a real generated dataset produced by the report pipeline. It currently contains several thousand images organized into six relation groups. This status should be reported honestly: CORE exists as a curated diagnostic resource, but it has not yet been used as the primary training or evaluation benchmark for the current PURE model.
+
+\section{Purpose}
+CORE should be framed as a diagnostic complement to Visual Genome/VG150 rather than a replacement. Its intended measurements include:
+\begin{itemize}[leftmargin=1.5em]
+  \item role-swap consistency for asymmetric predicates;
+  \item robustness to attribute and object perturbations;
+  \item predicate confusability under visually similar scenes;
+  \item multi-label relation plausibility rather than single hard-label correctness.
+\end{itemize}
+
+\section{Relationship to PURE}
+The present PURE implementation is trained and evaluated primarily on VG150-style data. CORE should be listed as future work for stress-testing PURE once the dataset is larger, fully audited, and equipped with a stable metric protocol. If preliminary CORE examples are shown in the report, they should be qualitative dataset demonstrations rather than completed model-performance claims.
+
+\section{Recommended Report Language}
+Use \textbf{CORE (Compositional Relation Evaluation)} consistently. Avoid the older name \texttt{COMPREL-OV} unless it appears as a historical note. State that CORE has six generated scenario groups and several thousand images, but keep training/evaluation claims prospective unless new completed runs exist.
+
+\section{Future Work}
+The next CORE milestones are scale expansion, human/VLM audit reconciliation, split definition, metric freezing, and integration into the PURE evaluation suite. Only after these steps should CORE be used to support quantitative claims about PURE robustness.
+
+\bibliographystyle{plain}
+\bibliography{draft}
+\end{document}

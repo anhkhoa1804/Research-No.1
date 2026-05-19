@@ -1,0 +1,91 @@
+# PURE-v3 deformable hardware presets aligned with openvocab_rel/config.py.
+# Use via --gpu_preset for single-GPU runs, or --a100_ddp_preset for DDP.
+
+presets:
+  a100_80gb_balanced:
+    description: "A100 80GB balanced preset for stable PURE-v3 training/eval"
+    gpu_preset: a100_80gb_balanced
+    amp: true
+    amp_dtype: bf16
+    fp8_enabled: false
+    channels_last: true
+    loader_prefetch_factor: 4
+    eval_fast_mode: false
+    eval_sgg_report_nograph: true
+    eval_sgg_use_no_interaction_prior: false
+    vector_fusion_gate: true
+    deformable_routing_enabled: true
+    deformable_num_points: 8
+    deformable_offset_scale: 0.35
+    eval_sgg_use_clip_obj_classifier: true
+    eval_sgg_grounding_dino_enabled: true
+    stages:
+      stage1: {stage: 1, clip_input_res: 336, batch_size: 128, epochs: 2, freeze_clip: true, gradient_checkpointing: false, deformable_routing_enabled: true}
+      stage2: {stage: 2, clip_input_res: 448, batch_size: 16, epochs: 8, freeze_clip: false, progressive_unfreeze: true, gradient_checkpointing: true, deformable_routing_enabled: true}
+      stage3: {stage: 3, clip_input_res: 448, batch_size: 24, freeze_clip: false, gradient_checkpointing: true, deformable_routing_enabled: true}
+
+  a100_80gb_throughput:
+    description: "A100 80GB throughput preset; use when dataloader and VRAM headroom are healthy"
+    gpu_preset: a100_80gb_throughput
+    amp: true
+    amp_dtype: bf16
+    fp8_enabled: false
+    channels_last: true
+    loader_prefetch_factor: 4
+    eval_fast_mode: false
+    eval_sgg_report_nograph: true
+    eval_sgg_use_no_interaction_prior: false
+    vector_fusion_gate: true
+    deformable_routing_enabled: true
+    deformable_num_points: 8
+    deformable_offset_scale: 0.35
+    eval_sgg_use_clip_obj_classifier: true
+    eval_sgg_grounding_dino_enabled: true
+    stages:
+      stage1: {stage: 1, clip_input_res: 336, batch_size: 128, epochs: 2, freeze_clip: true, gradient_checkpointing: false, deformable_routing_enabled: true}
+      stage2: {stage: 2, clip_input_res: 448, batch_size: 16, epochs: 8, freeze_clip: false, progressive_unfreeze: true, gradient_checkpointing: true, deformable_routing_enabled: true}
+      stage3: {stage: 3, clip_input_res: 448, batch_size: 32, freeze_clip: false, gradient_checkpointing: true, deformable_routing_enabled: true}
+
+  l4_24gb:
+    description: "L4 24GB preset for single-GPU PURE-v3 runs"
+    gpu_preset: l4_24gb
+    amp: true
+    amp_dtype: bf16
+    fp8_enabled: false
+    expandable_segments: true
+    channels_last: true
+    loader_prefetch_factor: 2
+    eval_fast_mode: false
+    eval_sgg_report_nograph: true
+    eval_sgg_use_no_interaction_prior: false
+    vector_fusion_gate: true
+    deformable_routing_enabled: true
+    deformable_num_points: 8
+    deformable_offset_scale: 0.35
+    eval_sgg_use_clip_obj_classifier: true
+    eval_sgg_grounding_dino_enabled: false
+    stages:
+      stage1: {stage: 1, clip_input_res: 336, batch_size: 64, epochs: 2, freeze_clip: true, gradient_checkpointing: false, deformable_routing_enabled: true}
+      stage2: {stage: 2, clip_input_res: 448, batch_size: 16, epochs: 8, freeze_clip: false, progressive_unfreeze: true, gradient_checkpointing: true, deformable_routing_enabled: true}
+      stage3: {stage: 3, clip_input_res: 448, batch_size: 12, freeze_clip: false, gradient_checkpointing: true, deformable_routing_enabled: true}
+
+  stage2_a100_ddp4:
+    description: "PURE-v3 Stage 2 on 4x A100 using the dedicated DDP preset"
+    stage: 2
+    a100_ddp_preset: 4x
+    clip_input_res: 448
+    epochs: 8
+    amp: true
+    amp_dtype: bf16
+    fp8_enabled: false
+    deformable_routing_enabled: true
+  stage3_a100_ddp8:
+    description: "PURE-v3 Stage 3 on 8x A100 using the dedicated DDP preset"
+    stage: 3
+    a100_ddp_preset: 8x
+    clip_input_res: 448
+    epochs: 6
+    amp: true
+    amp_dtype: bf16
+    fp8_enabled: false
+    deformable_routing_enabled: true

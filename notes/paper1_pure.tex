@@ -1,0 +1,62 @@
+\documentclass[11pt]{article}
+\usepackage[utf8]{inputenc}
+\usepackage{amsmath,amssymb,amsfonts}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{hyperref}
+\usepackage{enumitem}
+\usepackage{array}
+
+\title{PURE: Predicate-aware Uncropped Relation Embedding}
+\author{Research Notes}
+\date{2026}
+
+\begin{document}
+\maketitle
+
+\begin{abstract}
+PURE, short for \emph{Predicate-aware Uncropped Relation Embedding}, is a one-stage relation representation framework for scene graph prediction. The current implementation combines dense CLIP vision tokens, deformable object routing, geometry-aware relation decoding, optional multimodal entity anchors, relation-level context mixing, and transparent Bayesian calibration. The maintained training objective is intentionally compact: predicate cross-entropy with logit adjustment, counterfactual SPOA alignment, and dense grounding.
+\end{abstract}
+
+\section{Motivation}
+Scene graph systems often overfit to cropped object features or dataset frequency shortcuts. PURE keeps the image field uncropped at the relation-reasoning stage: object nodes query dense CLIP features, relation embeddings preserve geometry and contextual visual evidence, and semantic priors are introduced through explicit, auditable modules rather than hidden label leakage.
+
+\section{Architecture}
+The current PURE forward path is:
+\begin{enumerate}[leftmargin=1.5em]
+  \item \textbf{Dense visual field}: CLIP patch tokens are reshaped into a two-dimensional feature map.
+  \item \textbf{Deformable object routing}: object boxes initialize queries that sample learned points in the dense field.
+  \item \textbf{Multimodal entity representation}: in scaling/eval phases, object nodes can be fused with CLIP text embeddings of object labels. PredCls uses ground-truth object labels because the protocol provides them; SGCls/SGDet must use predicted labels.
+  \item \textbf{Geometry-aware relation decoding}: ordered subject--object pairs are combined with Fourier-style geometry and edge-conditioned updates.
+  \item \textbf{Relation context Transformer}: after pair embeddings are formed, per-image relation sequences can exchange information through a lightweight Transformer encoder.
+  \item \textbf{Predicate scoring and calibration}: relation embeddings are scored by a classifier/text ensemble and optionally calibrated with a subject--object frequency prior.
+\end{enumerate}
+
+\section{Objective}
+The report should describe three main training pillars:
+\begin{equation}
+\mathcal{L}_{\mathrm{PURE}} =
+\lambda_{\mathrm{ce}}\mathcal{L}_{\mathrm{PredCE\text{-}LA}}+
+\lambda_{\mathrm{spoa}}\mathcal{L}_{\mathrm{Counterfactual\text{-}SPOA}}+
+\lambda_{\mathrm{ground}}\mathcal{L}_{\mathrm{Ground}}.
+\end{equation}
+Counterfactual role/predicate negatives are part of the SPOA pillar, not a separate fourth headline loss. Visual hard negatives, bilinear mixing, and other branch-ramp options are ablation-only implementation paths.
+
+\section{Curriculum}
+PURE uses a single script and a phase-controlled curriculum:
+\begin{itemize}[leftmargin=1.5em]
+  \item \texttt{PURE\_PHASE=core}: frozen CLIP, no object language anchor, no relation context, no frequency calibration;
+  \item \texttt{PURE\_PHASE=scaling}: resume from core, enable object language anchors and relation context;
+  \item \texttt{PURE\_PHASE=eval}: evaluate the scaling model while sweeping Bayesian calibration weights.
+\end{itemize}
+This avoids the scientific/code debt of maintaining separate ``base'' and ``heavy'' models while still protecting the visual router from early shortcut gradients.
+
+\section{Reporting Rules}
+PredCls, SGCls, and SGDet must state the object-label source. Ground-truth object labels are valid for PredCls, but clean SGCls should use CLIP-predicted object labels or another declared object classifier. Frequency-prior or Bayesian calibration results must be reported separately from no-prior model outputs.
+
+\section{Deprecated Draft Language}
+Avoid the report-facing names \texttt{PURE-v3} and \texttt{PURE-SPOA}. Use \textbf{PURE (Predicate-aware Uncropped Relation Embedding)}. The old branch-ramp workflow should be described only as debugging/ablation evidence, not as the final architecture.
+
+\bibliographystyle{plain}
+\bibliography{draft}
+\end{document}

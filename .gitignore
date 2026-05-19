@@ -1,0 +1,44 @@
+# Python bytecode and virtual environments
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+.eggs/
+.venv/
+venv/
+ENV/
+.env
+
+# Notebook noise
+.ipynb_checkpoints/
+
+# Training / evaluation outputs
+runs/
+checkpoints/
+suite_reports/
+synthetic_out/
+datasets/
+datasets_old/
+third_party_models/
+data_prep/
+*.log
+*.tmp
+*.bak
+*.old
+*.orig
+*.dump
+*.pt
+*.pth
+*.ckpt
+*.h5
+*.parquet
+*.zip
+*.pdf
+
+# OS and editor metadata
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+

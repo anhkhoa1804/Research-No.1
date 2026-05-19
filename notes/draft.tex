@@ -1,0 +1,29 @@
+\documentclass{article}
+\usepackage[utf8]{inputenc}
+\usepackage{hyperref}
+\usepackage{booktabs}
+
+\title{PURE and CORE Draft Index}
+\author{Research Notes}
+\date{2026}
+
+\begin{document}
+\maketitle
+
+\section*{Draft Index}
+This directory contains working notes for the current architecture and report direction. Report-facing terminology should use \textbf{PURE} for \emph{Predicate-aware Uncropped Relation Embedding} and \textbf{CORE} for \emph{Compositional Relation Evaluation}.
+
+\begin{itemize}
+  \item \textbf{PURE note:} \texttt{notes/paper1\_pure.tex} --- current architecture, phase curriculum, three training pillars, and reporting rules.
+  \item \textbf{CORE note:} \texttt{notes/paper2\_core.tex} --- dataset status, six-group diagnostic role, and future evaluation plan.
+  \item \textbf{Diagrams:} \texttt{notes/diagrams.tex} --- figures aligned with the current PURE code path.
+  \item \textbf{Current status:} \texttt{notes/current\_status.tex} --- concise implementation snapshot and report guidance.
+\end{itemize}
+
+\section*{Do Not Overclaim}
+Branch-ramp runs are debug/ablation runs. CORE exists as generated data, but it is not yet the main training or evaluation protocol for PURE. Final report claims should separate no-prior metrics, calibration metrics, and future-work items.
+
+\section*{Build Notes}
+Compile drafts independently from the repository root with \texttt{pdflatex -interaction=nonstopmode -output-directory=notes notes/<file>.tex}.
+
+\end{document}
