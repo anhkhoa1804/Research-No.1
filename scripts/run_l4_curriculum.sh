@@ -49,6 +49,7 @@ run_stage1() {
   STAGE=1 \
   PURE_PHASE=core \
   GPU_PRESET=l4_22gb_lowmem \
+  FREEZE_CLIP=true \
   TRAIN_OBJECTIVE=ce_only \
   PREDICATE_CE_POSITIVE_ONLY=true \
   LAMBDA_PREDICATE_CE=2.0 \
@@ -82,6 +83,7 @@ run_stage2() {
   STAGE=2 \
   PURE_PHASE=core \
   GPU_PRESET=l4_22gb_lowmem \
+  FREEZE_CLIP=true \
   TRAIN_OBJECTIVE=full \
   PREDICATE_CE_POSITIVE_ONLY=true \
   LAMBDA_PREDICATE_CE=2.0 \
@@ -117,6 +119,7 @@ run_stage3_safe() {
   STAGE=3 \
   PURE_PHASE=core \
   GPU_PRESET=l4_22gb_lowmem \
+  FREEZE_CLIP=true \
   TRAIN_OBJECTIVE=full \
   PREDICATE_CE_POSITIVE_ONLY=true \
   LAMBDA_PREDICATE_CE=2.0 \
@@ -156,6 +159,7 @@ run_stage3_continue() {
   STAGE=3 \
   PURE_PHASE=core \
   GPU_PRESET=l4_22gb_lowmem \
+  FREEZE_CLIP=true \
   TRAIN_OBJECTIVE=full \
   PREDICATE_CE_POSITIVE_ONLY=true \
   LAMBDA_PREDICATE_CE=2.0 \

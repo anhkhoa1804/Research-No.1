@@ -59,6 +59,7 @@ tmux attach -t pure
 STAGE=3 \
 PURE_PHASE=core \
 GPU_PRESET=l4_22gb_lowmem \
+FREEZE_CLIP=true \
 TRAIN_OBJECTIVE=full \
 PREDICATE_CE_POSITIVE_ONLY=true \
 LAMBDA_PREDICATE_CE=2.0 \
@@ -165,4 +166,4 @@ find checkpoints archive -type f -name '*.pt' -printf '%TY-%Tm-%Td %TH:%TM %9s %
 
 - The old branch-ramp, bilinear probe, Kaggle notebook, and debug Stage 1/2 scripts were removed from the maintained workspace to avoid protocol confusion.
 - Visual hard negatives and bilinear mixing are ablation ideas, not maintained default contributions.
-- Use `NUM_WORKERS=0`, `CLIP_INPUT_RES=336`, and `GPU_PRESET=l4_22gb_lowmem` first on L4 if there is any OOM instability.
+- Use `FREEZE_CLIP=true`, `NUM_WORKERS=0`, `CLIP_INPUT_RES=336`, and `GPU_PRESET=l4_22gb_lowmem` first on L4 if there is any OOM instability.
