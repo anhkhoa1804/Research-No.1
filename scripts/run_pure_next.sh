@@ -33,6 +33,9 @@ case "${PURE_PHASE}" in
     DEFAULT_OBJECT_LANGUAGE_ANCHOR_ENABLED=false
     DEFAULT_RELATION_CONTEXT_LAYERS=0
     DEFAULT_LOGIT_ADJ_TAU=0.25
+    DEFAULT_EVAL_LOGIT_ADJ_TAU=0.0
+    DEFAULT_EVAL_SCORE_MODE=classifier
+    DEFAULT_EVAL_COMPARE_SCORE_MODES=classifier,text,ensemble
     DEFAULT_FREQ_BIAS_ENABLED=false
     ;;
   scaling)
@@ -40,6 +43,9 @@ case "${PURE_PHASE}" in
     DEFAULT_OBJECT_LANGUAGE_ANCHOR_ENABLED=true
     DEFAULT_RELATION_CONTEXT_LAYERS=0
     DEFAULT_LOGIT_ADJ_TAU=0.25
+    DEFAULT_EVAL_LOGIT_ADJ_TAU=0.0
+    DEFAULT_EVAL_SCORE_MODE=classifier
+    DEFAULT_EVAL_COMPARE_SCORE_MODES=classifier,text,ensemble
     DEFAULT_FREQ_BIAS_ENABLED=false
     ;;
   eval)
@@ -47,6 +53,9 @@ case "${PURE_PHASE}" in
     DEFAULT_OBJECT_LANGUAGE_ANCHOR_ENABLED=true
     DEFAULT_RELATION_CONTEXT_LAYERS=0
     DEFAULT_LOGIT_ADJ_TAU=0.0
+    DEFAULT_EVAL_LOGIT_ADJ_TAU=0.0
+    DEFAULT_EVAL_SCORE_MODE=ensemble
+    DEFAULT_EVAL_COMPARE_SCORE_MODES=classifier,text,ensemble
     DEFAULT_FREQ_BIAS_ENABLED=true
     ;;
   *)
@@ -56,7 +65,13 @@ case "${PURE_PHASE}" in
 esac
 
 OUT_ROOT=${OUT_ROOT:-${DEFAULT_OUT_ROOT}}
+RUN_NAME=${RUN_NAME:-pure_next_l3}
+LOG_PATH=${LOG_PATH:-logs/${RUN_NAME}.log}
 LOGIT_ADJ_TAU=${LOGIT_ADJ_TAU:-${DEFAULT_LOGIT_ADJ_TAU}}
+EVAL_LOGIT_ADJ_TAU=${EVAL_LOGIT_ADJ_TAU:-${DEFAULT_EVAL_LOGIT_ADJ_TAU}}
+EVAL_SCORE_MODE=${EVAL_SCORE_MODE:-${DEFAULT_EVAL_SCORE_MODE}}
+EVAL_ENSEMBLE_ALPHA=${EVAL_ENSEMBLE_ALPHA:-0.5}
+EVAL_COMPARE_SCORE_MODES=${EVAL_COMPARE_SCORE_MODES:-${DEFAULT_EVAL_COMPARE_SCORE_MODES}}
 FUSION_GATE_TEMPERATURE=${FUSION_GATE_TEMPERATURE:-0.7}
 GATE_REGULARIZER_WEIGHT=${GATE_REGULARIZER_WEIGHT:-0.005}
 OBJECT_LANGUAGE_ANCHOR_ENABLED=${OBJECT_LANGUAGE_ANCHOR_ENABLED:-${DEFAULT_OBJECT_LANGUAGE_ANCHOR_ENABLED}}
@@ -69,6 +84,12 @@ FREQ_BIAS_ENABLED=${FREQ_BIAS_ENABLED:-${DEFAULT_FREQ_BIAS_ENABLED}}
 FREQ_BIAS_ALPHA=${FREQ_BIAS_ALPHA:-1.0}
 FREQ_BIAS_PATH=${FREQ_BIAS_PATH:-${DATA_ROOT}/frequency_prior.json}
 EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER=${EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER:-true}
+TRAIN_OBJECTIVE=${TRAIN_OBJECTIVE:-full}
+PREDICATE_CE_POSITIVE_ONLY=${PREDICATE_CE_POSITIVE_ONLY:-false}
+LAMBDA_PREDICATE_CE=${LAMBDA_PREDICATE_CE:-1.2}
+LAMBDA_SPOA_ALIGNMENT=${LAMBDA_SPOA_ALIGNMENT:-0.75}
+LAMBDA_DENSE_GROUNDING=${LAMBDA_DENSE_GROUNDING:-0.25}
+LAMBDA_COUNTERFACTUAL=${LAMBDA_COUNTERFACTUAL:-0.05}
 
 mkdir -p "${OUT_ROOT}" "${CHECKPOINT_DIR}" logs
 
@@ -89,7 +110,7 @@ if [[ "${FREQ_BIAS_ENABLED}" == "true" && ! -f "${FREQ_BIAS_PATH}" ]]; then
   exit 2
 fi
 
-echo "[PURE-next] phase=${PURE_PHASE} out=${OUT_ROOT} save=${SAVE_PATH} resume=${RESUME_FROM:-none} lr=${LR} epochs=${EPOCHS} freeze_clip=${FREEZE_CLIP} anchor=${OBJECT_LANGUAGE_ANCHOR_ENABLED} rel_ctx=${RELATION_CONTEXT_LAYERS} logit_adj_tau=${LOGIT_ADJ_TAU} freq_alpha=${FREQ_BIAS_ALPHA}"
+echo "[PURE-next] phase=${PURE_PHASE} out=${OUT_ROOT} save=${SAVE_PATH} resume=${RESUME_FROM:-none} lr=${LR} epochs=${EPOCHS} objective=${TRAIN_OBJECTIVE} freeze_clip=${FREEZE_CLIP} anchor=${OBJECT_LANGUAGE_ANCHOR_ENABLED} rel_ctx=${RELATION_CONTEXT_LAYERS} logit_adj_tau=${LOGIT_ADJ_TAU} eval_tau=${EVAL_LOGIT_ADJ_TAU} score=${EVAL_SCORE_MODE} freq_alpha=${FREQ_BIAS_ALPHA}"
 
 PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --stage 3 \
@@ -114,25 +135,29 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --amp true \
   --amp_dtype bf16 \
   "${RESUME_ARGS[@]}" \
-  --train_objective full \
-  --lambda_predicate_ce 1.2 \
-  --lambda_spoa_alignment 0.75 \
-  --lambda_dense_grounding 0.25 \
-  --lambda_counterfactual 0.05 \
+  --train_objective "${TRAIN_OBJECTIVE}" \
+  --lambda_predicate_ce "${LAMBDA_PREDICATE_CE}" \
+  --lambda_spoa_alignment "${LAMBDA_SPOA_ALIGNMENT}" \
+  --lambda_dense_grounding "${LAMBDA_DENSE_GROUNDING}" \
+  --lambda_counterfactual "${LAMBDA_COUNTERFACTUAL}" \
   --lambda_visual_hard_negative 0.0 \
   --visual_hard_negative_enabled false \
   --predicate_counterfactual_enabled true \
   --gate_regularizer_weight "${GATE_REGULARIZER_WEIGHT}" \
   --fusion_gate_temperature "${FUSION_GATE_TEMPERATURE}" \
   --logit_adj_tau "${LOGIT_ADJ_TAU}" \
+  --eval_logit_adj_tau "${EVAL_LOGIT_ADJ_TAU}" \
   --progressive_bilinear_layers 0 \
   --deformable_routing_enabled true \
-  --predicate_ce_positive_only false \
+  --predicate_ce_positive_only "${PREDICATE_CE_POSITIVE_ONLY}" \
   --rel_queue_min_negatives 128 \
   --eval_fast_mode true \
   --eval_batches "${EVAL_BATCHES}" \
   --eval_on_train_split "${EVAL_ON_TRAIN_SPLIT}" \
   --eval_sgg_use_gt_pairs true \
+  --eval_sgg_predicate_score_mode "${EVAL_SCORE_MODE}" \
+  --eval_sgg_predicate_ensemble_alpha "${EVAL_ENSEMBLE_ALPHA}" \
+  --eval_sgg_compare_score_modes "${EVAL_COMPARE_SCORE_MODES}" \
   --eval_sgg_use_clip_obj_classifier "${EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER}" \
   --eval_sgg_grounding_dino_enabled false \
   --eval_sgg_report_nograph false \
@@ -143,7 +168,7 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --eval_research_suite false \
   --log_every "${LOG_EVERY}" \
   --timing_breakdown "${TIMING_BREAKDOWN}" \
-  --run_name pure_next_l3 \
+  --run_name "${RUN_NAME}" \
   --out_dir "${OUT_ROOT}" \
   --save_path "${SAVE_PATH}" \
-  --save_metrics_json "${OUT_ROOT}/metrics.jsonl" 2>&1 | tee -a "logs/pure_next_l3.log"
+  --save_metrics_json "${OUT_ROOT}/metrics.jsonl" 2>&1 | tee -a "${LOG_PATH}"
