@@ -233,6 +233,8 @@ def apply_gpu_preset(cfg: TrainConfig, preset: str) -> TrainConfig:
         "a100_80gb": "a100_80gb_balanced",
         "a100_balanced": "a100_80gb_balanced",
         "a100_throughput": "a100_80gb_throughput",
+        "high": "a100_80gb_throughput",
+        "high_80gb": "a100_80gb_throughput",
         "l4": "l4_24gb",
         "l4_24g": "l4_24gb",
         "l4_lowmem": "l4_22gb_lowmem",
@@ -243,7 +245,7 @@ def apply_gpu_preset(cfg: TrainConfig, preset: str) -> TrainConfig:
     if key not in {"a100_80gb_balanced", "a100_80gb_throughput", "l4_24gb", "l4_22gb_lowmem"}:
         raise ValueError(
             f"Unsupported GPU preset: {preset}. "
-            "Use a100_80gb_balanced, a100_80gb_throughput, l4_24gb, or l4_22gb_lowmem."
+            "Use a100_80gb_balanced, a100_80gb_throughput, high_80gb, l4_24gb, or l4_22gb_lowmem."
         )
 
     cfg.loader_persistent_workers = True
