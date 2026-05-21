@@ -24,6 +24,9 @@ LOG_EVERY=${LOG_EVERY:-50}
 TIMING_BREAKDOWN=${TIMING_BREAKDOWN:-false}
 EPOCHS=${EPOCHS:-8}
 LR=${LR:-2e-6}
+LR_SCHEDULE=${LR_SCHEDULE:-cosine}
+WARMUP_STEPS=${WARMUP_STEPS:-500}
+WARMUP_EPOCHS=${WARMUP_EPOCHS:-0}
 PURE_PHASE=${PURE_PHASE:-core}
 FREEZE_CLIP=${FREEZE_CLIP:-true}
 PROGRESSIVE_UNFREEZE=${PROGRESSIVE_UNFREEZE:-false}
@@ -169,6 +172,9 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --seed "${SEED}" \
   --epochs "${EPOCHS}" \
   --lr "${LR}" \
+  --lr_schedule "${LR_SCHEDULE}" \
+  --warmup_steps "${WARMUP_STEPS}" \
+  --warmup_epochs "${WARMUP_EPOCHS}" \
   --freeze_clip "${FREEZE_CLIP}" \
   --progressive_unfreeze "${PROGRESSIVE_UNFREEZE}" \
   --pure_phase "${PURE_PHASE}" \

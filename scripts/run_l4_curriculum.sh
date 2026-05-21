@@ -32,6 +32,10 @@ L4_NUM_WORKERS="${L4_NUM_WORKERS:-0}"
 L4_CLIP_INPUT_RES="${L4_CLIP_INPUT_RES:-336}"
 L4_REL_QUEUE_SIZE="${L4_REL_QUEUE_SIZE:-8192}"
 L4_REL_QUEUE_MIN_NEGATIVES="${L4_REL_QUEUE_MIN_NEGATIVES:-96}"
+L4_WARMUP_STEPS="${L4_WARMUP_STEPS:-50}"
+L4_L1_LR="${L4_L1_LR:-2e-5}"
+L4_L3_LR="${L4_L3_LR:-8e-6}"
+L4_L4_LR="${L4_L4_LR:-3e-6}"
 L4_PURGE_OLD_RUNS="${L4_PURGE_OLD_RUNS:-true}"
 L4_RUN_L3="${L4_RUN_L3:-true}"
 L4_RUN_L4_BILINEAR="${L4_RUN_L4_BILINEAR:-false}"
@@ -92,7 +96,7 @@ purge_old_l4_artifacts() {
   \) -print -exec rm -rf {} + 2>/dev/null || true
 }
 
-echo "[L4 branch curriculum] preset=${L4_GPU_PRESET} images=${L4_MAX_IMAGES} samples=${L4_SAMPLES_PER_EPOCH} batch=${L4_BATCH_SIZE} accum=${L4_ACCUM_STEPS} pairs=${L4_MAX_PAIRS} eval=${L4_EVAL_BATCHES} l1_epochs=${L4_L1_EPOCHS} l3_epochs=${L4_L3_EPOCHS} run_l3=${L4_RUN_L3} run_l4=${L4_RUN_L4_BILINEAR}"
+echo "[L4 branch curriculum] preset=${L4_GPU_PRESET} images=${L4_MAX_IMAGES} samples=${L4_SAMPLES_PER_EPOCH} batch=${L4_BATCH_SIZE} accum=${L4_ACCUM_STEPS} pairs=${L4_MAX_PAIRS} eval=${L4_EVAL_BATCHES} warmup=${L4_WARMUP_STEPS} l1_lr=${L4_L1_LR} l3_lr=${L4_L3_LR} l1_epochs=${L4_L1_EPOCHS} l3_epochs=${L4_L3_EPOCHS} run_l3=${L4_RUN_L3} run_l4=${L4_RUN_L4_BILINEAR}"
 wait_for_vram
 if [[ "${L4_PURGE_OLD_RUNS}" == "true" ]]; then
   purge_old_l4_artifacts
@@ -117,7 +121,8 @@ run_l1_spoa_ground() {
   GATE_REGULARIZER_WEIGHT=0.002 \
   REL_QUEUE_SIZE="${L4_REL_QUEUE_SIZE}" \
   REL_QUEUE_MIN_NEGATIVES="${L4_REL_QUEUE_MIN_NEGATIVES}" \
-  LR=4e-6 \
+  LR="${L4_L1_LR}" \
+  WARMUP_STEPS="${L4_WARMUP_STEPS}" \
   EPOCHS="${L4_L1_EPOCHS}" \
   MAX_IMAGES="${L4_MAX_IMAGES}" \
   SAMPLES_PER_EPOCH="${L4_SAMPLES_PER_EPOCH}" \
@@ -130,7 +135,7 @@ run_l1_spoa_ground() {
   LOGIT_ADJ_TAU=0.0 \
   EVAL_LOGIT_ADJ_TAU=0.0 \
   BILINEAR_LAYERS=0 \
-  EVAL_SCORE_MODE=classifier \
+  EVAL_SCORE_MODE=ensemble \
   EVAL_COMPARE_SCORE_MODES=classifier,text,ensemble \
   FREQ_BIAS_ENABLED=false \
   RUN_NAME=l1_spoa_ground_fast_l4 \
@@ -163,7 +168,8 @@ run_l3_counterfactual() {
   GATE_REGULARIZER_WEIGHT=0.002 \
   REL_QUEUE_SIZE="${L4_REL_QUEUE_SIZE}" \
   REL_QUEUE_MIN_NEGATIVES="${L4_REL_QUEUE_MIN_NEGATIVES}" \
-  LR=2e-6 \
+  LR="${L4_L3_LR}" \
+  WARMUP_STEPS="${L4_WARMUP_STEPS}" \
   EPOCHS="${L4_L3_EPOCHS}" \
   MAX_IMAGES="${L4_MAX_IMAGES}" \
   SAMPLES_PER_EPOCH="${L4_SAMPLES_PER_EPOCH}" \
@@ -176,7 +182,7 @@ run_l3_counterfactual() {
   LOGIT_ADJ_TAU=0.0 \
   EVAL_LOGIT_ADJ_TAU=0.0 \
   BILINEAR_LAYERS=0 \
-  EVAL_SCORE_MODE=classifier \
+  EVAL_SCORE_MODE=ensemble \
   EVAL_COMPARE_SCORE_MODES=classifier,text,ensemble \
   FREQ_BIAS_ENABLED=false \
   RUN_NAME=l3_counterfactual_fast_l4 \
@@ -207,7 +213,8 @@ run_l4_bilinear_probe() {
   GATE_REGULARIZER_WEIGHT=0.001 \
   REL_QUEUE_SIZE="${L4_REL_QUEUE_SIZE}" \
   REL_QUEUE_MIN_NEGATIVES="${L4_REL_QUEUE_MIN_NEGATIVES}" \
-  LR=1e-6 \
+  LR="${L4_L4_LR}" \
+  WARMUP_STEPS="${L4_WARMUP_STEPS}" \
   EPOCHS="${L4_L4_EPOCHS}" \
   MAX_IMAGES="${L4_MAX_IMAGES}" \
   SAMPLES_PER_EPOCH="${L4_SAMPLES_PER_EPOCH}" \
@@ -221,7 +228,7 @@ run_l4_bilinear_probe() {
   BILINEAR_LOW_RANK=true \
   BILINEAR_RANK=32 \
   BILINEAR_RESIDUAL_SCALE=0.1 \
-  EVAL_SCORE_MODE=classifier \
+  EVAL_SCORE_MODE=ensemble \
   EVAL_COMPARE_SCORE_MODES=classifier,text,ensemble \
   FREQ_BIAS_ENABLED=false \
   RUN_NAME=l4_bilinear_probe_fast_l4 \
