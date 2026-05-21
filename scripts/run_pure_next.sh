@@ -95,6 +95,28 @@ LAMBDA_VISUAL_HARD_NEGATIVE=${LAMBDA_VISUAL_HARD_NEGATIVE:-0.0}
 PREDICATE_COUNTERFACTUAL_ENABLED=${PREDICATE_COUNTERFACTUAL_ENABLED:-true}
 REL_QUEUE_MIN_NEGATIVES=${REL_QUEUE_MIN_NEGATIVES:-128}
 EVAL_FAST_MODE=${EVAL_FAST_MODE:-true}
+BATCH_SIZE=${BATCH_SIZE:-}
+MAX_PAIRS=${MAX_PAIRS:-}
+NUM_WORKERS=${NUM_WORKERS:-}
+ACCUM_STEPS=${ACCUM_STEPS:-}
+CLIP_INPUT_RES=${CLIP_INPUT_RES:-}
+
+EXTRA_ARGS=()
+if [[ -n "${BATCH_SIZE}" ]]; then
+  EXTRA_ARGS+=(--batch_size "${BATCH_SIZE}")
+fi
+if [[ -n "${MAX_PAIRS}" ]]; then
+  EXTRA_ARGS+=(--max_pairs "${MAX_PAIRS}")
+fi
+if [[ -n "${NUM_WORKERS}" ]]; then
+  EXTRA_ARGS+=(--num_workers "${NUM_WORKERS}")
+fi
+if [[ -n "${ACCUM_STEPS}" ]]; then
+  EXTRA_ARGS+=(--accum_steps "${ACCUM_STEPS}")
+fi
+if [[ -n "${CLIP_INPUT_RES}" ]]; then
+  EXTRA_ARGS+=(--clip_input_res "${CLIP_INPUT_RES}")
+fi
 
 mkdir -p "${OUT_ROOT}" "${CHECKPOINT_DIR}" logs
 
@@ -146,6 +168,7 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --relation_context_layers "${RELATION_CONTEXT_LAYERS}" \
   --relation_context_heads "${RELATION_CONTEXT_HEADS}" \
   --bayes_calibration_weight "${BAYES_CALIBRATION_WEIGHT}" \
+  "${EXTRA_ARGS[@]}" \
   --amp true \
   --amp_dtype bf16 \
   "${RESUME_ARGS[@]}" \

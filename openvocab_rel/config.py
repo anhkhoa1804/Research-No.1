@@ -235,12 +235,15 @@ def apply_gpu_preset(cfg: TrainConfig, preset: str) -> TrainConfig:
         "a100_throughput": "a100_80gb_throughput",
         "l4": "l4_24gb",
         "l4_24g": "l4_24gb",
+        "l4_lowmem": "l4_22gb_lowmem",
+        "l4_22gb": "l4_22gb_lowmem",
+        "l4_22g": "l4_22gb_lowmem",
     }
     key = aliases.get(key, key)
-    if key not in {"a100_80gb_balanced", "a100_80gb_throughput", "l4_24gb"}:
+    if key not in {"a100_80gb_balanced", "a100_80gb_throughput", "l4_24gb", "l4_22gb_lowmem"}:
         raise ValueError(
             f"Unsupported GPU preset: {preset}. "
-            "Use a100_80gb_balanced, a100_80gb_throughput, or l4_24gb."
+            "Use a100_80gb_balanced, a100_80gb_throughput, l4_24gb, or l4_22gb_lowmem."
         )
 
     cfg.loader_persistent_workers = True
@@ -288,6 +291,24 @@ def apply_gpu_preset(cfg: TrainConfig, preset: str) -> TrainConfig:
         elif int(cfg.stage) == 3:
             cfg.batch_size = 12
             cfg.gradient_checkpointing = True
+    elif key == "l4_22gb_lowmem":
+        cfg.num_workers = min(max(int(cfg.num_workers), 2), 4)
+        cfg.loader_prefetch_factor = 1
+        cfg.loader_persistent_workers = False
+        cfg.expandable_segments = True
+        cfg.gradient_checkpointing = True
+        cfg.max_pairs = min(int(cfg.max_pairs), 48)
+        cfg.rel_queue_size = min(int(cfg.rel_queue_size), 8192)
+        if int(cfg.stage) == 1:
+            cfg.batch_size = 32
+            cfg.clip_input_res = min(int(cfg.clip_input_res), 336)
+            cfg.gradient_checkpointing = False
+        elif int(cfg.stage) == 2:
+            cfg.batch_size = 8
+            cfg.clip_input_res = min(int(cfg.clip_input_res), 384)
+        elif int(cfg.stage) == 3:
+            cfg.batch_size = 6
+            cfg.clip_input_res = min(int(cfg.clip_input_res), 384)
 
 
     return cfg
