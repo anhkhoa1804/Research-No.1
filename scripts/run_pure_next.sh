@@ -12,6 +12,7 @@ DATA_ROOT=${DATA_ROOT:-datasets}
 OUT_ROOT=${OUT_ROOT:-}
 CHECKPOINT_DIR=${CHECKPOINT_DIR:-checkpoints}
 GPU_PRESET=${GPU_PRESET:-l4_24gb}
+STAGE=${STAGE:-3}
 RESUME_FROM=${RESUME_FROM:-}
 SAVE_PATH=${SAVE_PATH:-${CHECKPOINT_DIR}/pure_next_l3.pt}
 MAX_IMAGES=${MAX_IMAGES:-0}
@@ -114,10 +115,19 @@ if [[ "${FREQ_BIAS_ENABLED}" == "true" && ! -f "${FREQ_BIAS_PATH}" ]]; then
   exit 2
 fi
 
-echo "[PURE-next] phase=${PURE_PHASE} out=${OUT_ROOT} save=${SAVE_PATH} resume=${RESUME_FROM:-none} lr=${LR} epochs=${EPOCHS} objective=${TRAIN_OBJECTIVE} freeze_clip=${FREEZE_CLIP} anchor=${OBJECT_LANGUAGE_ANCHOR_ENABLED} rel_ctx=${RELATION_CONTEXT_LAYERS} logit_adj_tau=${LOGIT_ADJ_TAU} eval_tau=${EVAL_LOGIT_ADJ_TAU} score=${EVAL_SCORE_MODE} freq_alpha=${FREQ_BIAS_ALPHA}"
+if [[ "${STAGE}" != "1" && "${STAGE}" != "2" && "${STAGE}" != "3" ]]; then
+  echo "[PURE-next] unknown STAGE=${STAGE}; expected 1, 2, or 3" >&2
+  exit 2
+fi
+
+if [[ "${STAGE}" != "3" && -n "${RESUME_FROM}" ]]; then
+  echo "[PURE-next] warning: resuming with STAGE=${STAGE}; make sure the checkpoint was trained for the same stage/protocol." >&2
+fi
+
+echo "[PURE-next] stage=${STAGE} phase=${PURE_PHASE} out=${OUT_ROOT} save=${SAVE_PATH} resume=${RESUME_FROM:-none} lr=${LR} epochs=${EPOCHS} objective=${TRAIN_OBJECTIVE} freeze_clip=${FREEZE_CLIP} anchor=${OBJECT_LANGUAGE_ANCHOR_ENABLED} rel_ctx=${RELATION_CONTEXT_LAYERS} logit_adj_tau=${LOGIT_ADJ_TAU} eval_tau=${EVAL_LOGIT_ADJ_TAU} score=${EVAL_SCORE_MODE} freq_alpha=${FREQ_BIAS_ALPHA}"
 
 PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
-  --stage 3 \
+  --stage "${STAGE}" \
   --gpu_preset "${GPU_PRESET}" \
   --vg150_enabled true \
   --vg150_source local-jsonl \
