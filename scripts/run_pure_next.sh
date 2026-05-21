@@ -92,7 +92,9 @@ LAMBDA_SPOA_ALIGNMENT=${LAMBDA_SPOA_ALIGNMENT:-0.75}
 LAMBDA_DENSE_GROUNDING=${LAMBDA_DENSE_GROUNDING:-0.25}
 LAMBDA_COUNTERFACTUAL=${LAMBDA_COUNTERFACTUAL:-0.05}
 LAMBDA_VISUAL_HARD_NEGATIVE=${LAMBDA_VISUAL_HARD_NEGATIVE:-0.0}
+VISUAL_HARD_NEGATIVE_ENABLED=${VISUAL_HARD_NEGATIVE_ENABLED:-false}
 PREDICATE_COUNTERFACTUAL_ENABLED=${PREDICATE_COUNTERFACTUAL_ENABLED:-true}
+BILINEAR_LAYERS=${BILINEAR_LAYERS:-0}
 REL_QUEUE_MIN_NEGATIVES=${REL_QUEUE_MIN_NEGATIVES:-128}
 EVAL_FAST_MODE=${EVAL_FAST_MODE:-true}
 BATCH_SIZE=${BATCH_SIZE:-}
@@ -178,13 +180,13 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --lambda_dense_grounding "${LAMBDA_DENSE_GROUNDING}" \
   --lambda_counterfactual "${LAMBDA_COUNTERFACTUAL}" \
   --lambda_visual_hard_negative "${LAMBDA_VISUAL_HARD_NEGATIVE}" \
-  --visual_hard_negative_enabled false \
+  --visual_hard_negative_enabled "${VISUAL_HARD_NEGATIVE_ENABLED}" \
   --predicate_counterfactual_enabled "${PREDICATE_COUNTERFACTUAL_ENABLED}" \
   --gate_regularizer_weight "${GATE_REGULARIZER_WEIGHT}" \
   --fusion_gate_temperature "${FUSION_GATE_TEMPERATURE}" \
   --logit_adj_tau "${LOGIT_ADJ_TAU}" \
   --eval_logit_adj_tau "${EVAL_LOGIT_ADJ_TAU}" \
-  --progressive_bilinear_layers 0 \
+  --progressive_bilinear_layers "${BILINEAR_LAYERS}" \
   --deformable_routing_enabled true \
   --predicate_ce_positive_only "${PREDICATE_CE_POSITIVE_ONLY}" \
   --rel_queue_min_negatives "${REL_QUEUE_MIN_NEGATIVES}" \

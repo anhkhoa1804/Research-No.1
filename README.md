@@ -14,7 +14,7 @@ openvocab_rel/evals.py                 PredCls/SGCls/SGDet and diagnostic evals
 openvocab_rel/losses.py                InfoNCE, queue, hard-negative losses
 openvocab_rel/clip_utils.py            CLIP setup and text/image helpers
 scripts/run_pure_next.sh               maintained configurable train/eval entrypoint
-scripts/run_l4_curriculum.sh           low-memory L4 curriculum runner
+scripts/run_l4_curriculum.sh           L4 strong curriculum runner with frozen CLIP
 tools/prepare_vg150_subset.py          HF -> local JSONL/images with validation
 tools/check_vg150_diagnostics.py       local dataset diagnostics guard
 tools/build_vg150_frequency_prior.py   subject-object predicate prior builder
@@ -53,7 +53,7 @@ tmux attach -t pure
 
 ### Main configurable entrypoint
 
-`run_pure_next.sh` supports the current knobs through environment variables:
+`run_pure_next.sh` supports the current knobs through environment variables. On L4, keep `FREEZE_CLIP=true` and scale samples before increasing batch/resolution:
 
 ```bash
 STAGE=3 \
@@ -74,9 +74,9 @@ NUM_WORKERS=0 \
 CLIP_INPUT_RES=336 \
 EVAL_SCORE_MODE=classifier \
 EVAL_COMPARE_SCORE_MODES=classifier,text,ensemble \
-RUN_NAME=stage3_full_safe_l4 \
-OUT_ROOT=runs/stage3_full_safe_l4 \
-SAVE_PATH=checkpoints/stage3_full_safe_l4.pt \
+RUN_NAME=stage3_full_strong_l4 \
+OUT_ROOT=runs/stage3_full_strong_l4 \
+SAVE_PATH=checkpoints/stage3_full_strong_l4.pt \
 bash scripts/run_pure_next.sh
 ```
 
@@ -134,9 +134,8 @@ Summarize run metrics:
 
 ```bash
 python3 tools/summarize_metrics.py \
-  runs/stage1_ce_warmup_l4/metrics.jsonl \
-  runs/stage2_light_bridge_l4/metrics.jsonl \
-  runs/stage3_full_safe_l4/metrics.jsonl \
+  runs/stage3_ce_warmup_l4/metrics.jsonl \
+  runs/stage3_full_strong_l4/metrics.jsonl \
   runs/stage3_stable_continue_l4/metrics.jsonl
 ```
 
@@ -149,9 +148,9 @@ Keep only milestone checkpoints such as:
 ```text
 checkpoints/best_current.pt
 checkpoints/branch_level3_cf005.pt
-checkpoints/stage1_ce_warmup_l4_best_R50.pt
-checkpoints/stage3_full_safe_l4_best_R50.pt
-checkpoints/stage3_full_safe_l4_best_mR50.pt
+checkpoints/stage3_ce_warmup_l4_best_R50.pt
+checkpoints/stage3_full_strong_l4_best_R50.pt
+checkpoints/stage3_full_strong_l4_best_mR50.pt
 checkpoints/stage3_stable_continue_l4_best_R50.pt
 checkpoints/stage3_stable_continue_l4_best_mR50.pt
 ```
