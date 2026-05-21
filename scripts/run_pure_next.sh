@@ -32,7 +32,7 @@ case "${PURE_PHASE}" in
     DEFAULT_OUT_ROOT=runs/pure_next_core
     DEFAULT_OBJECT_LANGUAGE_ANCHOR_ENABLED=false
     DEFAULT_RELATION_CONTEXT_LAYERS=0
-    DEFAULT_LOGIT_ADJ_TAU=0.25
+    DEFAULT_LOGIT_ADJ_TAU=0.0
     DEFAULT_EVAL_LOGIT_ADJ_TAU=0.0
     DEFAULT_EVAL_SCORE_MODE=classifier
     DEFAULT_EVAL_COMPARE_SCORE_MODES=classifier,text,ensemble
@@ -42,7 +42,7 @@ case "${PURE_PHASE}" in
     DEFAULT_OUT_ROOT=runs/pure_next_scaling
     DEFAULT_OBJECT_LANGUAGE_ANCHOR_ENABLED=true
     DEFAULT_RELATION_CONTEXT_LAYERS=0
-    DEFAULT_LOGIT_ADJ_TAU=0.25
+    DEFAULT_LOGIT_ADJ_TAU=0.0
     DEFAULT_EVAL_LOGIT_ADJ_TAU=0.0
     DEFAULT_EVAL_SCORE_MODE=classifier
     DEFAULT_EVAL_COMPARE_SCORE_MODES=classifier,text,ensemble
@@ -90,6 +90,10 @@ LAMBDA_PREDICATE_CE=${LAMBDA_PREDICATE_CE:-1.2}
 LAMBDA_SPOA_ALIGNMENT=${LAMBDA_SPOA_ALIGNMENT:-0.75}
 LAMBDA_DENSE_GROUNDING=${LAMBDA_DENSE_GROUNDING:-0.25}
 LAMBDA_COUNTERFACTUAL=${LAMBDA_COUNTERFACTUAL:-0.05}
+LAMBDA_VISUAL_HARD_NEGATIVE=${LAMBDA_VISUAL_HARD_NEGATIVE:-0.0}
+PREDICATE_COUNTERFACTUAL_ENABLED=${PREDICATE_COUNTERFACTUAL_ENABLED:-true}
+REL_QUEUE_MIN_NEGATIVES=${REL_QUEUE_MIN_NEGATIVES:-128}
+EVAL_FAST_MODE=${EVAL_FAST_MODE:-true}
 
 mkdir -p "${OUT_ROOT}" "${CHECKPOINT_DIR}" logs
 
@@ -140,9 +144,9 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --lambda_spoa_alignment "${LAMBDA_SPOA_ALIGNMENT}" \
   --lambda_dense_grounding "${LAMBDA_DENSE_GROUNDING}" \
   --lambda_counterfactual "${LAMBDA_COUNTERFACTUAL}" \
-  --lambda_visual_hard_negative 0.0 \
+  --lambda_visual_hard_negative "${LAMBDA_VISUAL_HARD_NEGATIVE}" \
   --visual_hard_negative_enabled false \
-  --predicate_counterfactual_enabled true \
+  --predicate_counterfactual_enabled "${PREDICATE_COUNTERFACTUAL_ENABLED}" \
   --gate_regularizer_weight "${GATE_REGULARIZER_WEIGHT}" \
   --fusion_gate_temperature "${FUSION_GATE_TEMPERATURE}" \
   --logit_adj_tau "${LOGIT_ADJ_TAU}" \
@@ -150,8 +154,8 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --progressive_bilinear_layers 0 \
   --deformable_routing_enabled true \
   --predicate_ce_positive_only "${PREDICATE_CE_POSITIVE_ONLY}" \
-  --rel_queue_min_negatives 128 \
-  --eval_fast_mode true \
+  --rel_queue_min_negatives "${REL_QUEUE_MIN_NEGATIVES}" \
+  --eval_fast_mode "${EVAL_FAST_MODE}" \
   --eval_batches "${EVAL_BATCHES}" \
   --eval_on_train_split "${EVAL_ON_TRAIN_SPLIT}" \
   --eval_sgg_use_gt_pairs true \
