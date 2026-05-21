@@ -1,6 +1,6 @@
 # PURE Relation Modeling
 
-PURE (Predicate-aware Uncropped Relation Embedding) is a compact research codebase for VG150-style visual relation learning. The maintained path is now the phase/script-controlled PURE curriculum in `scripts/run_pure_next.sh`, plus the L4-safe wrapper `scripts/run_l4_curriculum.sh`.
+PURE (Predicate-aware Uncropped Relation Embedding) is a compact research codebase for VG150-style visual relation learning. The maintained path is now the phase/script-controlled PURE entrypoint in `scripts/run_pure_next.sh`, plus the L4 branch-ramp-style ablation/recovery runner `scripts/run_l4_ablation_recovery.sh` (`scripts/run_l4_curriculum.sh` delegates to it).
 
 ## Codebase Map
 
@@ -14,7 +14,8 @@ openvocab_rel/evals.py                 PredCls/SGCls/SGDet and diagnostic evals
 openvocab_rel/losses.py                InfoNCE, queue, hard-negative losses
 openvocab_rel/clip_utils.py            CLIP setup and text/image helpers
 scripts/run_pure_next.sh               maintained configurable train/eval entrypoint
-scripts/run_l4_curriculum.sh           L4 strong curriculum runner with frozen CLIP
+scripts/run_l4_ablation_recovery.sh    L4 branch-ramp-style L1->L3 recovery runner
+scripts/run_l4_curriculum.sh           compatibility wrapper for the recovery runner
 tools/prepare_vg150_subset.py          HF -> local JSONL/images with validation
 tools/check_vg150_diagnostics.py       local dataset diagnostics guard
 tools/build_vg150_frequency_prior.py   subject-object predicate prior builder
@@ -27,7 +28,7 @@ notes/current_status.tex               concise implementation/status note
 
 Use classifier scoring as the primary debug metric. CLIP-text and ensemble scores are reported as diagnostics because text scoring can improve mean recall while hurting head-class recall.
 
-### L4-safe full curriculum
+### L4 branch-ramp recovery curriculum
 
 ```bash
 cd /home/khoa_le1804/Research-No.1
@@ -35,13 +36,13 @@ source .venv/bin/activate
 export PYTHON="$(pwd)/.venv/bin/python"
 export CUDA_VISIBLE_DEVICES=0
 export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-bash scripts/run_l4_curriculum.sh
+bash scripts/run_l4_ablation_recovery.sh
 ```
 
 Run inside tmux and keep the shell open after errors:
 
 ```bash
-tmux new -s pure "bash -lc 'cd /home/khoa_le1804/Research-No.1 && source .venv/bin/activate && export PYTHON=\$(pwd)/.venv/bin/python && export CUDA_VISIBLE_DEVICES=0 && export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True && bash scripts/run_l4_curriculum.sh; echo; echo DONE_OR_FAILED_EXIT_CODE=\$?; exec bash'"
+tmux new -s pure "bash -lc 'cd /home/khoa_le1804/Research-No.1 && source .venv/bin/activate && export PYTHON=\$(pwd)/.venv/bin/python && export CUDA_VISIBLE_DEVICES=0 && export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True && bash scripts/run_l4_ablation_recovery.sh; echo; echo DONE_OR_FAILED_EXIT_CODE=\$?; exec bash'"
 ```
 
 Attach/detach:
@@ -53,7 +54,7 @@ tmux attach -t pure
 
 ### Main configurable entrypoint
 
-`run_pure_next.sh` supports the current knobs through environment variables. On L4, keep `FREEZE_CLIP=true` and scale samples before increasing batch/resolution:
+`run_pure_next.sh` supports the current knobs through environment variables. Prefer `run_l4_ablation_recovery.sh` for maintained L4 experiments. On L4, keep `FREEZE_CLIP=true`, use classifier as the primary debug score, and scale samples/eval before increasing architecture complexity:
 
 ```bash
 STAGE=3 \

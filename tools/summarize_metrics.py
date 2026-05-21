@@ -29,6 +29,8 @@ def main() -> None:
         for row in rows:
             pred_top = _get(row, ["val_sgg", "predicate_diag", "pred_top"], []) or []
             gt_top = _get(row, ["val_sgg", "predicate_diag", "gt_top"], []) or []
+            score_modes = _get(row, ["val_sgg", "score_modes"], {}) or _get(row, ["val_sgg", "score_mode_metrics"], {}) or {}
+            best = _get(row, ["best_so_far"], {}) or {}
             print(
                 "epoch={epoch} loss={loss:.4f} predcls_R50={r50:.4f} predcls_mR50={mr50:.4f} "
                 "ground_R50={gr50:.4f} pos={pos} cand={cand}".format(
@@ -41,6 +43,17 @@ def main() -> None:
                     cand=int(_get(row, ["train", "candidate_pairs"], 0) or 0),
                 )
             )
+            if best:
+                print("  best_so_far:", best)
+            if isinstance(score_modes, dict) and score_modes:
+                compact = {}
+                for mode, metrics in score_modes.items():
+                    if isinstance(metrics, dict):
+                        predcls = metrics.get("predcls", metrics)
+                        if isinstance(predcls, dict):
+                            compact[mode] = {"R@50": predcls.get("R@50"), "mR@50": predcls.get("mR@50")}
+                if compact:
+                    print("  score_modes:", compact)
             print("  gt_top:", [(x.get("label"), x.get("count")) for x in gt_top[:5] if isinstance(x, dict)])
             print("  pred_top:", [(x.get("label"), x.get("count")) for x in pred_top[:5] if isinstance(x, dict)])
 
