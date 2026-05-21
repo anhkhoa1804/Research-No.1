@@ -100,6 +100,7 @@ CFG
 }
 
 common_env() {
+  env \
   STAGE=3 \
   PURE_PHASE=core \
   GPU_PRESET="${L4_GPU_PRESET}" \
