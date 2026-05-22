@@ -116,6 +116,12 @@ class TrainConfig:
     relation_context_layers: int = 0
     relation_context_heads: int = 8
     bayes_calibration_weight: float = 0.0
+    adaptive_calibration_enabled: bool = False
+    adaptive_prior_enabled: bool = True
+    bias_residual_enabled: bool = True
+    adaptive_prior_scale: float = 1.0
+    bias_residual_scale: float = 0.25
+    lambda_calibration_reg: float = 0.001
 
     # LoRA fine-tuning.
     unfreeze_clip_lora: bool = False

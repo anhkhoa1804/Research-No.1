@@ -217,6 +217,12 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--relation_context_layers", type=int, default=getattr(TrainConfig, "relation_context_layers", 0))
     p.add_argument("--relation_context_heads", type=int, default=getattr(TrainConfig, "relation_context_heads", 8))
     p.add_argument("--bayes_calibration_weight", type=float, default=getattr(TrainConfig, "bayes_calibration_weight", 0.0))
+    p.add_argument("--adaptive_calibration_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "adaptive_calibration_enabled", False))
+    p.add_argument("--adaptive_prior_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "adaptive_prior_enabled", True))
+    p.add_argument("--bias_residual_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "bias_residual_enabled", True))
+    p.add_argument("--adaptive_prior_scale", type=float, default=getattr(TrainConfig, "adaptive_prior_scale", 1.0))
+    p.add_argument("--bias_residual_scale", type=float, default=getattr(TrainConfig, "bias_residual_scale", 0.25))
+    p.add_argument("--lambda_calibration_reg", type=float, default=getattr(TrainConfig, "lambda_calibration_reg", 0.001))
     p.add_argument("--emb_dim", type=int, default=TrainConfig.emb_dim)
     p.add_argument("--model_name", type=str, default=TrainConfig.model_name)
     p.add_argument("--pure_local_alpha", type=float, default=TrainConfig.pure_local_alpha)
@@ -340,6 +346,9 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "object_language_anchor_alpha": float(getattr(cfg, "object_language_anchor_alpha", 0.0)),
             "relation_context_layers": int(getattr(cfg, "relation_context_layers", 0)),
             "bayes_calibration_weight": float(getattr(cfg, "bayes_calibration_weight", 0.0)),
+            "adaptive_calibration": bool(getattr(cfg, "adaptive_calibration_enabled", False)),
+            "adaptive_prior": bool(getattr(cfg, "adaptive_prior_enabled", True)),
+            "bias_residual": bool(getattr(cfg, "bias_residual_enabled", True)),
         },
         "architecture": {
             "geom_bias": bool(getattr(cfg, "use_geom_bias", True)),
@@ -358,6 +367,9 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "fusion_gate_temperature": float(getattr(cfg, "fusion_gate_temperature", 1.0)),
             "logit_adj_tau": float(getattr(cfg, "logit_adj_tau", 0.0)),
             "bayes_calibration_weight": float(getattr(cfg, "bayes_calibration_weight", 0.0)),
+            "adaptive_calibration": bool(getattr(cfg, "adaptive_calibration_enabled", False)),
+            "adaptive_prior": bool(getattr(cfg, "adaptive_prior_enabled", True)),
+            "bias_residual": bool(getattr(cfg, "bias_residual_enabled", True)),
         },
     }
 
@@ -1387,7 +1399,10 @@ def main(argv: Optional[List[str]] = None) -> None:
                         ce_targets = pos_pred_ids if bool(getattr(cfg, "predicate_ce_positive_only", True)) else flat_pred_ids
                         valid_ce = (ce_targets >= 0) & (ce_targets < int(pred_emb_s2o.shape[0]))
                         if bool(valid_ce.any()):
-                            ce_logits = out.predicate_logits(ce_feats[valid_ce]).float()
+                            if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and hasattr(out, "calibrated_predicate_logits"):
+                                ce_logits = out.calibrated_predicate_logits(ce_feats[valid_ce], pred_log_prior).float()
+                            else:
+                                ce_logits = out.predicate_logits(ce_feats[valid_ce]).float()
                             if int(ce_logits.shape[-1]) == int(pred_emb_s2o.shape[0]):
                                 if logit_adj_tau > 0.0 and int(pred_log_prior.numel()) == int(ce_logits.shape[-1]):
                                     ce_logits = ce_logits - (logit_adj_tau * pred_log_prior.view(1, -1))
@@ -1423,6 +1438,11 @@ def main(argv: Optional[List[str]] = None) -> None:
                     gate_reg = decoder.last_gate_reg
                     gate_val = decoder.last_gate_val
                 loss_total = spoa_term + ground_term + pred_ce_term
+                calib_reg_weight = float(getattr(cfg, "lambda_calibration_reg", 0.0))
+                if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and calib_reg_weight > 0.0 and hasattr(out, "calibration_regularizer"):
+                    calib_reg = out.calibration_regularizer()
+                    if calib_reg is not None:
+                        loss_total = loss_total + (calib_reg_weight * calib_reg)
                 gate_reg_weight = float(getattr(cfg, "gate_regularizer_weight", 0.01))
                 if gate_reg is not None and gate_reg_weight > 0.0:
                     loss_total = loss_total + (gate_reg_weight * gate_reg)
@@ -1539,6 +1559,9 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "object_language_anchor_source": str(getattr(cfg, "object_language_anchor_source", "auto")),
                 "relation_context_layers": int(getattr(cfg, "relation_context_layers", 0)),
                 "bayes_calibration_weight": float(getattr(cfg, "bayes_calibration_weight", 0.0)),
+                "adaptive_calibration_enabled": bool(getattr(cfg, "adaptive_calibration_enabled", False)),
+                "adaptive_prior_scale": float(getattr(cfg, "adaptive_prior_scale", 1.0)),
+                "bias_residual_scale": float(getattr(cfg, "bias_residual_scale", 0.25)),
                 "clip_unfreeze_after_epochs": int(getattr(cfg, "clip_unfreeze_after_epochs", 0)),
                 "num_batches": int(epoch_batches),
                 "positive_pairs": int(epoch_positive_pairs),

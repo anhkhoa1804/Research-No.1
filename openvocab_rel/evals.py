@@ -906,7 +906,10 @@ def _relation_predicate_logits(
     use_classifier = bool(getattr(cfg, "eval_sgg_use_predicate_classifier", False)) and hasattr(out, "predicate_logits")
     if not use_classifier or mode in {"text", "cosine", "clip"}:
         return text_logits
-    cls_logits = out.predicate_logits(rel_feat).float()
+    if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and hasattr(out, "calibrated_predicate_logits"):
+        cls_logits = out.calibrated_predicate_logits(rel_feat, pred_log_prior).float()
+    else:
+        cls_logits = out.predicate_logits(rel_feat).float()
     if int(cls_logits.shape[-1]) != int(pred_emb.shape[0]):
         return text_logits
     cls_logits = _apply_eval_logit_adjustment(cfg, cls_logits, pred_log_prior)

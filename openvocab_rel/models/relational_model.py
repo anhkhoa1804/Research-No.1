@@ -458,6 +458,12 @@ class RelationalModel(nn.Module):
         self.cfg = cfg
         self.predicate_classifier_enabled = bool(getattr(cfg, "predicate_classifier_enabled", True))
         self.predicate_classifier_classes = int(getattr(cfg, "predicate_classifier_classes", 51))
+        self.adaptive_calibration_enabled = bool(getattr(cfg, "adaptive_calibration_enabled", False))
+        self.adaptive_prior_enabled = bool(getattr(cfg, "adaptive_prior_enabled", True))
+        self.bias_residual_enabled = bool(getattr(cfg, "bias_residual_enabled", True))
+        self.adaptive_prior_scale = float(getattr(cfg, "adaptive_prior_scale", 1.0))
+        self.bias_residual_scale = float(getattr(cfg, "bias_residual_scale", 0.25))
+        self._last_calibration_reg: Optional[torch.Tensor] = None
         self.object_language_anchor_enabled = bool(getattr(cfg, "object_language_anchor_enabled", False))
         self.object_language_anchor_source = str(getattr(cfg, "object_language_anchor_source", "auto"))
         self.object_language_anchor_alpha = float(max(0.0, getattr(cfg, "object_language_anchor_alpha", 0.35)))
@@ -485,6 +491,19 @@ class RelationalModel(nn.Module):
             fp8_enabled=bool(getattr(cfg, "fp8_enabled", False)),
         )
         self.predicate_classifier = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, self.dim),
+            nn.GELU(),
+            nn.Dropout(0.1),
+            nn.Linear(self.dim, self.predicate_classifier_classes),
+        )
+        self.calibration_gate = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, max(32, self.dim // 4)),
+            nn.GELU(),
+            nn.Linear(max(32, self.dim // 4), 1),
+        )
+        self.bias_residual_head = nn.Sequential(
             nn.LayerNorm(self.dim),
             nn.Linear(self.dim, self.dim),
             nn.GELU(),
@@ -691,6 +710,33 @@ class RelationalModel(nn.Module):
 
     def predicate_logits(self, rel_feats: torch.Tensor) -> torch.Tensor:
         return self.predicate_classifier(rel_feats)
+
+    def calibrated_predicate_logits(
+        self,
+        rel_feats: torch.Tensor,
+        pred_log_prior: Optional[torch.Tensor] = None,
+    ) -> torch.Tensor:
+        logits = self.predicate_logits(rel_feats).float()
+        self._last_calibration_reg = logits.sum() * 0.0
+        if (not self.adaptive_calibration_enabled) or int(rel_feats.shape[0]) == 0:
+            return logits
+        reg_terms = []
+        if self.bias_residual_enabled:
+            residual = torch.tanh(self.bias_residual_head(rel_feats).float())
+            logits = logits + (self.bias_residual_scale * residual)
+            reg_terms.append(residual.pow(2).mean())
+        if self.adaptive_prior_enabled and pred_log_prior is not None and int(pred_log_prior.numel()) == int(logits.shape[-1]):
+            prior = pred_log_prior.to(device=logits.device, dtype=logits.dtype).view(1, -1)
+            prior = prior - prior.mean(dim=-1, keepdim=True)
+            gate = torch.sigmoid(self.calibration_gate(rel_feats).float())
+            logits = logits + (self.adaptive_prior_scale * gate * prior)
+            reg_terms.append((gate - 0.5).pow(2).mean())
+        if len(reg_terms) > 0:
+            self._last_calibration_reg = torch.stack([t.float() for t in reg_terms]).mean()
+        return logits
+
+    def calibration_regularizer(self) -> Optional[torch.Tensor]:
+        return self._last_calibration_reg
 
     @staticmethod
     def score(rel_feats: torch.Tensor, text_feats: torch.Tensor) -> torch.Tensor:
