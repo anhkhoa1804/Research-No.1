@@ -6,7 +6,13 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 BASE_CKPT="${BASE_CKPT:-checkpoints/l1_spoa_ground_recovery_l4_best_mR50.pt}"
-[[ -f "${BASE_CKPT}" ]] || { echo "[core L3 sweep] base checkpoint not found: ${BASE_CKPT}" >&2; exit 2; }
+if [[ ! -f "${BASE_CKPT}" ]]; then
+  echo "[core L3 sweep] base checkpoint not found: ${BASE_CKPT}" >&2
+  echo "[core L3 sweep] set BASE_CKPT to an existing checkpoint. Available candidates:" >&2
+  find checkpoints -maxdepth 1 -type f \( -name '*.pt' -o -name '*.pth' -o -name '*.ckpt' \) \
+    -printf '  %TY-%Tm-%Td %TH:%TM %p\n' 2>/dev/null | sort >&2 || true
+  exit 2
+fi
 
 MAX_IMAGES="${MAX_IMAGES:-10000}"
 SAMPLES_PER_EPOCH="${SAMPLES_PER_EPOCH:-12000}"

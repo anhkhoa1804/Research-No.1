@@ -14,7 +14,13 @@ BATCH_SIZE="${BATCH_SIZE:-12}"
 NUM_WORKERS="${NUM_WORKERS:-6}"
 RUN_NAME="${RUN_NAME:-eval_l3_final_a0_fa225_eb${EVAL_BATCHES}}"
 
-[[ -f "${CKPT}" ]] || { echo "[PURE calibrated eval] checkpoint not found: ${CKPT}" >&2; exit 2; }
+if [[ ! -f "${CKPT}" ]]; then
+  echo "[PURE calibrated eval] checkpoint not found: ${CKPT}" >&2
+  echo "[PURE calibrated eval] set CKPT to an existing checkpoint. Available candidates:" >&2
+  find checkpoints -maxdepth 1 -type f \( -name '*.pt' -o -name '*.pth' -o -name '*.ckpt' \) \
+    -printf '  %TY-%Tm-%Td %TH:%TM %p\n' 2>/dev/null | sort >&2 || true
+  exit 2
+fi
 [[ -f "${FREQ_BIAS_PATH}" ]] || { echo "[PURE calibrated eval] frequency prior not found: ${FREQ_BIAS_PATH}" >&2; exit 2; }
 
 PURE_PHASE=eval \
