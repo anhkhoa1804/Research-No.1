@@ -1,9 +1,9 @@
-# PURE-v3 deformable hardware presets aligned with openvocab_rel/config.py.
+# PURE deformable hardware presets aligned with openvocab_rel/config.py.
 # Use via --gpu_preset for single-GPU runs, or --a100_ddp_preset for DDP.
 
 presets:
   a100_80gb_balanced:
-    description: "A100 80GB balanced preset for stable PURE-v3 training/eval"
+    description: "A100 80GB balanced preset for stable PURE training/eval"
     gpu_preset: a100_80gb_balanced
     amp: true
     amp_dtype: bf16
@@ -47,7 +47,7 @@ presets:
       stage3: {stage: 3, clip_input_res: 448, batch_size: 32, freeze_clip: false, gradient_checkpointing: true, deformable_routing_enabled: true}
 
   l4_24gb:
-    description: "L4 24GB preset for single-GPU PURE-v3 runs"
+    description: "L4 24GB preset for single-GPU PURE runs"
     gpu_preset: l4_24gb
     amp: true
     amp_dtype: bf16
@@ -70,7 +70,7 @@ presets:
       stage3: {stage: 3, clip_input_res: 448, batch_size: 12, freeze_clip: false, gradient_checkpointing: true, deformable_routing_enabled: true}
 
   stage2_a100_ddp4:
-    description: "PURE-v3 Stage 2 on 4x A100 using the dedicated DDP preset"
+    description: "PURE Stage 2 on 4x A100 using the dedicated DDP preset"
     stage: 2
     a100_ddp_preset: 4x
     clip_input_res: 448
@@ -80,7 +80,7 @@ presets:
     fp8_enabled: false
     deformable_routing_enabled: true
   stage3_a100_ddp8:
-    description: "PURE-v3 Stage 3 on 8x A100 using the dedicated DDP preset"
+    description: "PURE Stage 3 on 8x A100 using the dedicated DDP preset"
     stage: 3
     a100_ddp_preset: 8x
     clip_input_res: 448

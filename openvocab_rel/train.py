@@ -246,6 +246,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--canon_model", type=str, default=TrainConfig.canon_model)
     p.add_argument("--paraphrase_cache_path", type=str, default=TrainConfig.paraphrase_cache_path)
     p.add_argument("--eval_every", type=int, default=TrainConfig.eval_every)
+    p.add_argument("--eval_only", type=_str2bool, nargs="?", const=True, default=False)
     p.add_argument("--eval_batches", type=int, default=TrainConfig.eval_batches)
     p.add_argument("--eval_fast_mode", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_fast_mode)
     p.add_argument("--eval_on_train_split", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_on_train_split)
@@ -1002,7 +1003,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         model.eval()
         unwrap_ddp(clip_model).eval()
         
-        metrics_dump = {}
+        metrics_dump = {"epoch": 0, "train": {"avg_loss": 0.0}}
         _run_core_evals(
             args,
             cfg,

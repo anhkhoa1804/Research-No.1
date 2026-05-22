@@ -15,7 +15,7 @@
 The project name used in report-facing text should be \textbf{PURE}: \emph{Predicate-aware Uncropped Relation Embedding}. The companion diagnostic dataset and benchmark should be \textbf{CORE}: \emph{Compositional Relation Evaluation}. Avoid the older labels \texttt{PURE-v3}, \texttt{PURE-SPOA}, and \texttt{COMPREL-OV} in final report sections unless they are explicitly described as historical draft names.
 
 \section{Maintained Architecture}
-PURE is a one-stage relation model for VG150-style scene graph prediction. It keeps dense CLIP vision tokens active, grounds object nodes with box-conditioned deformable routing, enriches entities with optional language anchors, builds ordered subject--object relation embeddings, and applies an optional relation-context Transformer for graph-level message passing. Predicate scoring combines a lightweight predicate classifier, CLIP-text predicate scoring, and optional Bayesian frequency calibration.
+PURE is a one-stage relation model for VG150-style scene graph prediction. It keeps dense CLIP vision tokens active, grounds object nodes with box-conditioned deformable routing, and builds ordered subject--object relation embeddings with Fourier geometry and vector fusion gates. Predicate scoring reports classifier, CLIP-text, and transparent frequency-calibrated variants separately.
 
 \section{Training Objective}
 Report the objective as three main pillars rather than a long list of independent losses:
@@ -24,19 +24,18 @@ Report the objective as three main pillars rather than a long list of independen
   \item \textbf{Counterfactual-SPOA}: queue-based text alignment with role/predicate counterfactual regularization inside the SPOA alignment term;
   \item \textbf{Dense Grounding}: query-to-pair grounding that keeps visual evidence tied to the dense image field.
 \end{enumerate}
-Visual hard negatives and bilinear mixing are no longer maintained defaults. They are ablation/debug switches only and should not be presented as core report contributions.
+Visual hard negatives, bilinear mixing, object-language anchors, and relation-context scaling are not maintained defaults. Recent ablations showed that these branches reduce mean recall under the calibrated L3 protocol, so they should be presented only as negative ablation evidence if mentioned.
 
 \section{Curriculum}
-The maintained code path is a single PURE script controlled by \texttt{PURE\_PHASE} rather than separate base/heavy models:
+The maintained code path is intentionally narrow:
 \begin{itemize}[leftmargin=1.5em]
-  \item \texttt{core}: freeze CLIP, disable object language anchors, disable relation context, disable frequency calibration. This phase forces deformable routing and the relation decoder to learn visual evidence.
-  \item \texttt{scaling}: resume from core, enable object language anchors and relation-context message passing, and optionally use train-time logit adjustment.
-  \item \texttt{eval}: keep the scaling architecture and sweep Bayesian/frequency calibration weights for transparent reporting.
+  \item \texttt{core}: freeze CLIP, disable object language anchors, disable relation context, disable bilinear mixing, and disable frequency calibration during training. This phase forces deformable routing and the relation decoder to learn visual evidence.
+  \item \texttt{eval}: keep the core architecture and sweep Bayesian/frequency calibration weights for transparent reporting.
 \end{itemize}
-This curriculum is the report-friendly alternative to the older branch-ramp debugging workflow.
+This curriculum is the report-friendly alternative to the older branch-ramp and scaling-branch debugging workflows.
 
 \section{Branch-Ramp Interpretation}
-Branch-ramp runs are diagnostic engineering experiments used to identify which modules help or hurt. They are not the final methodological story. If mentioned in the report, they should appear only as an implementation note or ablation rationale: visual-hard negatives and bilinear mixing were tested, found unstable for mean recall, and moved out of the maintained path.
+Branch-ramp runs are diagnostic engineering experiments used to identify which modules help or hurt. They are not the final methodological story. If mentioned in the report, they should appear only as an implementation note or ablation rationale: visual-hard negatives, bilinear mixing, object-language anchors, and relation-context scaling were tested, found unstable for mean recall, and moved out of the maintained path.
 
 \section{CORE Status}
 CORE is a real generated diagnostic dataset with several thousand images organized into six relation groups through the pipeline described in the report draft. It has not yet been used as the primary training or evaluation source for PURE. The final report should state this clearly and frame CORE as a future evaluation/training resource once its scale, audits, and protocol are sufficiently stable.

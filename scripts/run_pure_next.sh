@@ -19,6 +19,7 @@ MAX_IMAGES=${MAX_IMAGES:-0}
 SAMPLES_PER_EPOCH=${SAMPLES_PER_EPOCH:-0}
 EVAL_BATCHES=${EVAL_BATCHES:-100}
 EVAL_ON_TRAIN_SPLIT=${EVAL_ON_TRAIN_SPLIT:-false}
+EVAL_ONLY=${EVAL_ONLY:-false}
 SEED=${SEED:-0}
 LOG_EVERY=${LOG_EVERY:-50}
 TIMING_BREAKDOWN=${TIMING_BREAKDOWN:-false}
@@ -215,6 +216,7 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --rel_queue_size "${REL_QUEUE_SIZE}" \
   --rel_queue_min_negatives "${REL_QUEUE_MIN_NEGATIVES}" \
   --eval_fast_mode "${EVAL_FAST_MODE}" \
+  --eval_only "${EVAL_ONLY}" \
   --eval_batches "${EVAL_BATCHES}" \
   --eval_on_train_split "${EVAL_ON_TRAIN_SPLIT}" \
   --eval_sgg_use_gt_pairs true \
