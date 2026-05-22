@@ -914,6 +914,10 @@ def _relation_predicate_logits(
         return cls_logits
     cls_norm = _normalize_eval_logits(cls_logits)
     text_norm = _normalize_eval_logits(text_logits)
+    cls_temp = max(1e-4, float(getattr(cfg, "eval_sgg_classifier_temperature", 1.0)))
+    text_temp = max(1e-4, float(getattr(cfg, "eval_sgg_text_temperature", 1.0)))
+    cls_norm = cls_norm / cls_temp
+    text_norm = text_norm / text_temp
     if mode == "auto":
         top2 = cls_norm.topk(k=min(2, int(cls_norm.shape[-1])), dim=-1).values
         if int(top2.shape[-1]) == 2:

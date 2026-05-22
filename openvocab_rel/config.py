@@ -78,6 +78,8 @@ class TrainConfig:
     eval_sgg_use_predicate_classifier: bool = True
     eval_sgg_predicate_score_mode: str = "ensemble"  # ensemble, classifier, text, auto
     eval_sgg_predicate_ensemble_alpha: float = 0.5
+    eval_sgg_classifier_temperature: float = 1.0
+    eval_sgg_text_temperature: float = 1.0
     eval_sgg_predicate_diag_topk: int = 8
     eval_sgg_compare_score_modes: str = ""  # comma list, e.g. classifier,text,ensemble
     freq_bias_enabled: bool = False
