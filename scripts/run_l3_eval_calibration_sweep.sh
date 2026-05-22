@@ -42,8 +42,7 @@ run_eval() {
   RUN_NAME="${name}" \
   OUT_ROOT="runs/${name}" \
   SAVE_PATH="checkpoints/${name}.pt" \
-  "$@" \
-  bash scripts/run_pure_next.sh
+  env "$@" bash scripts/run_pure_next.sh
 }
 
 # Current best mR direction: text-heavy + stronger frequency prior.
