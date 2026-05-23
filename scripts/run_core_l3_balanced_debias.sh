@@ -29,6 +29,7 @@ NUM_WORKERS="${NUM_WORKERS:-4}"
 CLIP_INPUT_RES="${CLIP_INPUT_RES:-336}"
 EPOCHS="${EPOCHS:-3}"
 LR="${LR:-2e-6}"
+BALANCED_VARIANTS="${BALANCED_VARIANTS:-ultra_light adapt_light prior_only}"
 
 run_balanced() {
   local name="$1"
@@ -87,9 +88,27 @@ run_balanced() {
   bash scripts/run_pure_next.sh
 }
 
-run_balanced core_l3_balanced_adapt_light true true 0.50 0.10 0.003 0.50
-run_balanced core_l3_balanced_adapt_mid true true 0.75 0.15 0.005 0.50
-run_balanced core_l3_balanced_prior_only true false 0.50 0.00 0.003 0.50
+run_variant() {
+  case "$1" in
+    ultra_light)
+      run_balanced core_l3_balanced_ultra_light true true 0.30 0.05 0.008 0.35
+      ;;
+    adapt_light)
+      run_balanced core_l3_balanced_adapt_light true true 0.50 0.10 0.003 0.50
+      ;;
+    prior_only)
+      run_balanced core_l3_balanced_prior_only true false 0.35 0.00 0.006 0.35
+      ;;
+    *)
+      echo "[balanced debias] unknown variant: $1" >&2
+      exit 2
+      ;;
+  esac
+}
+
+for variant in ${BALANCED_VARIANTS}; do
+  run_variant "${variant}"
+done
 
 echo
 echo "== balanced debias summary =="
