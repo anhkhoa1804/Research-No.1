@@ -23,6 +23,7 @@ scripts/run_core_recovery_l4.sh           maintained L4 core L1->L3 training run
 scripts/eval_l3_calibrated.sh             maintained calibrated L3 eval runner
 scripts/run_l3_eval_calibration_sweep.sh  calibration probe around known-good L3
 scripts/run_l3_eval_calibration_refine.sh calibration refinement around FA≈2.25
+scripts/run_core_l3_calibration_ablate.sh adaptive calibration and bias-residual ablation
 tools/prepare_vg150_subset.py             HF -> local JSONL/images with validation
 tools/check_vg150_diagnostics.py          local dataset diagnostics guard
 tools/build_vg150_frequency_prior.py      subject-object predicate prior builder
@@ -32,15 +33,15 @@ notes/current_status.tex                  concise implementation/status note
 
 ## Maintained Baseline
 
-The current reliable baseline is:
+The current best local mean-recall baseline is:
 
-- checkpoint: `checkpoints/l3_counterfactual_recovery_l4_best_mR50.pt`
-- score: `EVAL_SCORE_MODE=ensemble`
-- ensemble alpha: `EVAL_ENSEMBLE_ALPHA=0.0` (text-only normalized score before prior)
-- frequency prior: `FREQ_BIAS_ENABLED=true`, `FREQ_BIAS_ALPHA=2.25`
-- observed fast PredCls metric on the current L4 subset: `R@50≈0.6215`, `mR@50≈0.1880`
+- checkpoint: `checkpoints/eval_l3_final_a0_fa225_eb200_best_mR50.pt`
+- calibrated PredCls metric: `R@50≈0.6215`, `mR@50≈0.1880`
+- latest eval-only summary provided by the running workspace: `R@50≈0.6204`, `mR@50≈0.1853`
+- best local R@50 observed after the older L3 sweep: `R@50≈0.6341`, with lower `mR@50≈0.1720`
+- best mR@50 from that sweep: `mR@50≈0.1726`, still below the L3 final baseline
 
-Report no-prior/classifier/text/calibrated metrics separately. Do not mix calibrated eval numbers with no-prior model capacity claims.
+Report no-prior/classifier/text/fixed-prior/adaptive-calibration metrics separately. Do not mix calibrated eval numbers with no-prior model capacity claims.
 
 ## Train Core L1 -> L3
 
@@ -66,7 +67,7 @@ bash scripts/eval_l3_calibrated.sh
 Override checkpoint or prior strength:
 
 ```bash
-CKPT=checkpoints/l3_counterfactual_recovery_l4_best_mR50.pt \
+CKPT=checkpoints/eval_l3_final_a0_fa225_eb200_best_mR50.pt \
 FREQ_BIAS_ALPHA=2.25 \
 EVAL_BATCHES=200 \
 bash scripts/eval_l3_calibrated.sh
@@ -123,46 +124,55 @@ python3 tools/build_vg150_frequency_prior.py \
   --smoothing 1.0
 ```
 
+## Adaptive Calibration Ablation
+
+The code now includes an optional trainable calibration path: classifier logits can be augmented by an adaptive prior gate and a bounded sample-level bias residual. This is disabled by default for backward compatibility and enabled in the dedicated ablation runner:
+
+```bash
+BASE_CKPT=checkpoints/eval_l3_final_a0_fa225_eb200_best_mR50.pt \
+  bash scripts/run_core_l3_calibration_ablate.sh
+```
+
+Evaluate old checkpoints with `ADAPTIVE_CALIBRATION_ENABLED=false`; only checkpoints trained by `run_core_l3_calibration_ablate.sh` should be evaluated with `ADAPTIVE_CALIBRATION_ENABLED=true`.
+
+## Report-Ready LaTeX Snippets
+
+### Metric Table
+
+```latex
+\begin{table}[h]
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrl}
+\toprule
+Method & Setting & PredCls R@50 & PredCls R@100 & PredCls mR@50 & PredCls mR@100 & Notes \\
+\midrule
+PURE L3 sweep cf004/spoa050 & local, calibrated eval & \textbf{63.41} & 63.41 & 17.20 & 17.20 & best local R@50, lower mR \\
+PURE L3 sweep cf004/spoa035 & local, calibrated eval & 63.21 & 63.21 & 17.26 & 17.26 & best sweep mR, below baseline \\
+PURE L3 final & local, calibrated checkpoint & 62.15 & -- & \textbf{18.80} & -- & best local mR@50 so far \\
+PURE eval recovery & local, eval-only summary & 62.04 & 62.04 & 18.53 & 18.53 & latest provided eval summary \\
+ResCAGCN + PUM & VG150, published & -- & -- & 20.20 & 22.00 & semantic ambiguity debiasing \\
+Motifs + CFA & VG150, published & 54.10 & 56.60 & 35.70 & 38.20 & compositional feature augmentation \\
+SBG & VG150, published & 55.80 & 57.60 & 33.30 & 35.70 & sample-level bias guidance \\
+Hydra-SGG & VG150/GQA, published & -- & -- & 16.00 & -- & one-stage SGG setting; not directly PredCls-comparable \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Current PURE metrics and representative external references. Values are percentages. External rows are included for orientation, not as a direct claim of protocol-matched comparison.}
+\end{table}
+```
+
+### Architecture Diagram
+
+See `notes/current_status.tex` for the full TikZ figure. The diagram describes the current PURE pipeline: dense CLIP feature grid, deformable object grounding, ordered subject--object relation construction, Fourier geometry and vector fusion, edge-conditioned relation decoding, predicate scoring, and optional adaptive calibration.
+
 ## Next Research Direction
 
 The next top-tier direction is not more post-hoc branches. It is bias-aware calibrated relation learning:
 
-1. adaptive calibration head instead of fixed `FREQ_BIAS_ALPHA`;
-2. sample-level bias residual for subject-object-predicate priors;
-3. tail-aware predicate prototypes based on CLIP text and visual positives;
-4. one-to-many relation assignment / ambiguous-negative suppression;
+1. finish adaptive calibration head ablations instead of relying only on fixed `FREQ_BIAS_ALPHA`;
+2. validate the sample-level bias residual against the current `mR@50≈0.1880` baseline;
+3. add tail-aware predicate prototypes based on CLIP text and visual positives if calibration improves;
+4. add one-to-many relation assignment / ambiguous-negative suppression after the calibration path is stable;
 5. full VG150/A100 scaling only after the above improves the 10k subset baseline.
-
-# PURE Refactor and Ablation Plan
-
-## Maintained Baseline
-
-- Core checkpoint: `checkpoints/l3_counterfactual_recovery_l4_best_mR50.pt`
-- Calibrated eval: `EVAL_SCORE_MODE=ensemble`, `EVAL_ENSEMBLE_ALPHA=0.0`, `FREQ_BIAS_ALPHA=2.25`
-- Current fast PredCls result: `R@50≈0.6215`, `mR@50≈0.1880`
-
-## Removed From Maintained Workflow
-
-- Object-language anchor scaling: negative mR ablation.
-- Relation-context scaling: negative/unstable mR ablation.
-- Bilinear mixing probes: legacy branch-ramp idea, not maintained.
-- Visual hard negatives: legacy branch-ramp idea, not maintained.
-- High-curriculum and Kaggle scripts: removed to avoid protocol drift.
-
-## Next Strong Ablation Sequence
-
-1. Confirm baseline with `scripts/eval_l3_calibrated.sh`.
-2. Retrain core L3 with controlled seeds and loss weights:
-   - `lambda_counterfactual`: 0.02, 0.04, 0.06
-   - `lambda_spoa_alignment`: 0.35, 0.50, 0.65
-   - `lambda_dense_grounding`: 0.12, 0.18, 0.25
-3. Evaluate every checkpoint with the fixed calibrated protocol.
-4. Implement adaptive calibration only after fixed-prior baseline is stable.
-5. Scale to full VG150/A100 after subset gains are reproducible.
-
-## Top-Tier Upgrade Targets
-
-- Adaptive calibration head replacing fixed frequency-prior alpha.
-- Sample-level bias residual using subject/object/geometry/entropy features.
-- Tail-aware predicate prototypes built from text and visual positives.
-- One-to-many relation assignment and ambiguous-negative suppression.

@@ -3,6 +3,9 @@
 \usepackage{booktabs}
 \usepackage{enumitem}
 \usepackage{hyperref}
+\usepackage{xcolor}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta,positioning,fit,shapes.geometric}
 
 \title{Current PURE Implementation Status}
 \author{Internal Notes}
@@ -15,7 +18,51 @@
 The project name used in report-facing text should be \textbf{PURE}: \emph{Predicate-aware Uncropped Relation Embedding}. The companion diagnostic dataset and benchmark should be \textbf{CORE}: \emph{Compositional Relation Evaluation}. Avoid the older labels \texttt{PURE-v3}, \texttt{PURE-SPOA}, and \texttt{COMPREL-OV} in final report sections unless they are explicitly described as historical draft names.
 
 \section{Maintained Architecture}
-PURE is a one-stage relation model for VG150-style scene graph prediction. It keeps dense CLIP vision tokens active, grounds object nodes with box-conditioned deformable routing, and builds ordered subject--object relation embeddings with Fourier geometry and vector fusion gates. Predicate scoring reports classifier, CLIP-text, and transparent frequency-calibrated variants separately.
+PURE is a compact one-stage relation model for VG150-style scene graph prediction. It keeps dense CLIP ViT-L/336 vision tokens active, grounds object nodes with box-conditioned deformable routing, and builds ordered subject--object relation embeddings through Fourier geometry and vector-gated semantic--geometric fusion. Predicate scoring is reported through classifier, CLIP-text, ensemble, and calibrated variants rather than being collapsed into a single opaque score.
+
+The current code also includes an experimental \textbf{adaptive calibration} path. When enabled, the predicate classifier logits are augmented by a learnable sample-level bias residual and an adaptive prior gate. This turns the earlier fixed frequency-prior trick into a trainable calibration mechanism, while remaining optional so that older checkpoints and no-prior baselines remain comparable.
+
+
+\section{Current Architecture Diagram}
+\begin{figure}[h]
+\centering
+\resizebox{\textwidth}{!}{%
+\begin{tikzpicture}[
+  node distance=9mm and 12mm,
+  block/.style={rectangle, rounded corners, draw=black!45, very thick, align=center, minimum width=36mm, minimum height=10mm, fill=blue!5},
+  core/.style={block, fill=green!8},
+  rel/.style={block, fill=cyan!8},
+  head/.style={block, fill=magenta!8},
+  loss/.style={block, fill=red!7},
+  note/.style={block, fill=gray!8, dashed},
+  arrow/.style={-{Latex[length=2.5mm]}, very thick},
+  dasharrow/.style={-{Latex[length=2.5mm]}, very thick, dashed}
+]
+
+\node[block] (input) {Image + object boxes};
+\node[core, right=of input] (visual) {Dense CLIP feature grid\\uncropped visual tokens};
+\node[core, right=of visual] (objects) {Deformable object grounding\\box-conditioned object tokens};
+\node[rel, right=of objects] (relation) {Relation embedding\\subject--object + geometry fusion};
+\node[head, right=of relation] (scoring) {Predicate scoring\\classifier / text / calibration};
+\node[block, right=of scoring, fill=orange!10] (output) {Scene graph predicates\\PredCls / SGCls};
+
+\node[loss, below=of relation] (losses) {Training objectives\\PredCE-LA + Counterfactual-SPOA + Dense Grounding};
+\node[note, below=of scoring] (calib) {Optional adaptive calibration\\learned prior gate + bias residual};
+\node[note, below=of objects] (disabled) {Not in core path\\anchor / context / bilinear / hard negatives};
+
+\draw[arrow] (input) -- (visual);
+\draw[arrow] (visual) -- (objects);
+\draw[arrow] (objects) -- (relation);
+\draw[arrow] (relation) -- (scoring);
+\draw[arrow] (scoring) -- (output);
+\draw[dasharrow] (losses) -- (relation);
+\draw[dasharrow] (calib) -- (scoring);
+\draw[dasharrow] (disabled) -- (objects);
+
+\end{tikzpicture}%
+}
+\caption{Simplified PURE architecture. The maintained path encodes the uncropped image with dense CLIP tokens, grounds object tokens from boxes, forms subject--object relation embeddings with geometry, and predicts predicates through transparent classifier/text/calibration scoring.}
+\end{figure}
 
 \section{Training Objective}
 Report the objective as three main pillars rather than a long list of independent losses:
@@ -24,13 +71,40 @@ Report the objective as three main pillars rather than a long list of independen
   \item \textbf{Counterfactual-SPOA}: queue-based text alignment with role/predicate counterfactual regularization inside the SPOA alignment term;
   \item \textbf{Dense Grounding}: query-to-pair grounding that keeps visual evidence tied to the dense image field.
 \end{enumerate}
-Visual hard negatives, bilinear mixing, object-language anchors, and relation-context scaling are not maintained defaults. Recent ablations showed that these branches reduce mean recall under the calibrated L3 protocol, so they should be presented only as negative ablation evidence if mentioned.
+The adaptive calibration extension adds a small regularized calibration term only when the adaptive calibration flag is enabled. Visual hard negatives, bilinear mixing, object-language anchors, and relation-context scaling are not maintained defaults. Recent ablations showed that these branches reduce mean recall under the calibrated L3 protocol, so they should be presented only as negative ablation evidence if mentioned.
+
+\section{Current Metric Table}
+Table~\ref{tab:metrics} records the best numbers currently available from local runs and places them next to representative VG150 results from the literature. The table should be read with protocol caution: PURE is currently reported on the local calibrated PredCls/GT-pair setting, whereas published SOTA numbers may use different backbones, graph constraints, debiasing protocols, and full VG150 splits.
+
+\begin{table}[h]
+\centering
+\small
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llrrrrl}
+\toprule
+Method & Setting & PredCls R@50 & PredCls R@100 & PredCls mR@50 & PredCls mR@100 & Notes \\
+\midrule
+PURE L3 sweep cf004/spoa050 & local, calibrated eval & \textbf{63.41} & 63.41 & 17.20 & 17.20 & best local R@50, lower mR \\
+PURE L3 sweep cf004/spoa035 & local, calibrated eval & 63.21 & 63.21 & 17.26 & 17.26 & best sweep mR, below baseline \\
+PURE L3 final & local, calibrated checkpoint & 62.15 & -- & \textbf{18.80} & -- & best local mR@50 so far \\
+PURE eval recovery & local, eval-only summary & 62.04 & 62.04 & 18.53 & 18.53 & latest provided eval summary \\
+ResCAGCN + PUM & VG150, published & -- & -- & 20.20 & 22.00 & semantic ambiguity debiasing \\
+Motifs + CFA & VG150, published & 54.10 & 56.60 & 35.70 & 38.20 & compositional feature augmentation \\
+SBG & VG150, published & 55.80 & 57.60 & 33.30 & 35.70 & sample-level bias guidance \\
+Hydra-SGG & VG150/GQA, published & -- & -- & 16.00 & -- & one-stage SGG setting; not directly PredCls-comparable \\
+\bottomrule
+\end{tabular}%
+}
+\caption{Current PURE metrics and representative external references. Values are percentages. The strongest current PURE number for mean recall is PredCls mR@50 = 18.80 from the calibrated L3 final checkpoint; the later L3 sweep improves R@50 but lowers mR@50. External rows are included for orientation, not as a direct claim of protocol-matched comparison.}
+\label{tab:metrics}
+\end{table}
 
 \section{Curriculum}
 The maintained code path is intentionally narrow:
 \begin{itemize}[leftmargin=1.5em]
   \item \texttt{core}: freeze CLIP, disable object language anchors, disable relation context, disable bilinear mixing, and disable frequency calibration during training. This phase forces deformable routing and the relation decoder to learn visual evidence.
-  \item \texttt{eval}: keep the core architecture and sweep Bayesian/frequency calibration weights for transparent reporting.
+  \item \texttt{adaptive calibration}: optionally train a bias-aware calibration head on top of the predicate classifier using an adaptive prior gate and a bounded residual logit correction.
+  \item \texttt{eval}: keep the core architecture and sweep classifier, text, ensemble, and frequency/adaptive calibration variants for transparent reporting.
 \end{itemize}
 This curriculum is the report-friendly alternative to the older branch-ramp and scaling-branch debugging workflows.
 
@@ -44,9 +118,17 @@ CORE is a real generated diagnostic dataset with several thousand images organiz
 \begin{itemize}[leftmargin=1.5em]
   \item Use \textbf{PURE} and \textbf{CORE} consistently, with full English names at first mention.
   \item Do not claim SOTA unless the exact protocol, split, graph constraint, object-label source, and calibration setting match the compared methods.
-  \item Separate no-prior model metrics from eval-time Bayesian/frequency calibration metrics.
+  \item Separate no-prior model metrics from eval-time Bayesian/frequency calibration metrics and from trainable adaptive calibration metrics.
   \item Report SGCls only with predicted object labels, e.g., CLIP object classification; GT object labels are PredCls-only.
   \item Move CORE training/evaluation claims to future work unless new completed runs are available.
+\end{itemize}
+
+\section{Reference Notes for the Metric Table}
+\begin{itemize}[leftmargin=1.5em]
+  \item The PUM row follows the CVPR 2021 report that ResCAGCN + PUM obtains PredCls mR@50/mR@100 of 20.2/22.0 on VG150.
+  \item The CFA row follows the ICCV 2023 report of Motifs + CFA with PredCls R@50/R@100 of 54.1/56.6 and mR@50/mR@100 of 35.7/38.2.
+  \item The SBG row follows the ECCV 2024 report with PredCls R@50/R@100 of 55.8/57.6 and mR@50/mR@100 of 33.3/35.7.
+  \item The Hydra-SGG row is included only as a one-stage reference and should not be used as a direct PredCls GT-pair comparison.
 \end{itemize}
 
 \end{document}

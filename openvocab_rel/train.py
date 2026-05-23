@@ -1060,7 +1060,21 @@ def main(argv: Optional[List[str]] = None) -> None:
         else:
             print(f"| {'SGDet':<18} | {'N/A':>10} |")
         print("+--------------------+------------+\n")
-        
+
+        out_dir = str(cfg.out_dir)
+        os.makedirs(out_dir, exist_ok=True)
+        path = str(cfg.save_metrics_json).strip()
+        if path == "":
+            path = os.path.join(out_dir, "metrics.jsonl")
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(metrics_dump) + "\n")
+        per_epoch_dir = os.path.join(out_dir, "epoch_metrics")
+        os.makedirs(per_epoch_dir, exist_ok=True)
+        with open(os.path.join(per_epoch_dir, "epoch_000.json"), "w", encoding="utf-8") as f:
+            json.dump(metrics_dump, f, ensure_ascii=False, indent=2)
+        with open(os.path.join(out_dir, "latest_metrics.json"), "w", encoding="utf-8") as f:
+            json.dump(metrics_dump, f, ensure_ascii=False, indent=2)
+
         import sys
         sys.exit(0)
         
