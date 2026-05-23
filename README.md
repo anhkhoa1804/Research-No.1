@@ -1,10 +1,13 @@
 # PURE Relation Modeling
 
-PURE (Predicate-aware Uncropped Relation Embedding) is a compact VG150-style visual relation learning codebase. The maintained path is now deliberately narrow:
+PURE (Predicate-aware Uncropped Relation Embedding) is a compact VG150-style visual relation learning codebase. The maintained path now follows a balanced-debias roadmap:
 
-1. train a core L1 -> L3 relation model;
-2. evaluate it with transparent text/frequency calibration;
-3. only add new mechanisms if they beat the calibrated L3 baseline.
+1. keep the compact L3 core as the backbone;
+2. measure raw classifier-only capacity before any prior boost;
+3. add regularized debias heads only if raw mR improves without collapsing R@50;
+4. run checkpoint-specific alpha sweeps only after the raw model passes acceptance criteria;
+5. add ambiguous-negative suppression and tail prototypes only after the balanced head is stable;
+6. scale to full VG150/A100 after subset gains are reproducible.
 
 Legacy branch-ramp wrappers, high-curriculum probes, Kaggle notebooks, visual hard-negative defaults, bilinear probes, object-language anchor scaling, and relation-context scaling are removed from the maintained workflow because recent ablations showed they hurt mean recall or created protocol confusion.
 
@@ -20,10 +23,10 @@ openvocab_rel/losses.py                   PredCE/SPOA/grounding-related losses
 openvocab_rel/clip_utils.py               CLIP setup and text/image helpers
 scripts/run_pure_next.sh                  low-level configurable train/eval entrypoint
 scripts/run_core_recovery_l4.sh           maintained L4 core L1->L3 training runner
-scripts/eval_l3_calibrated.sh             maintained calibrated L3 eval runner
-scripts/run_l3_eval_calibration_sweep.sh  calibration probe around known-good L3
-scripts/run_l3_eval_calibration_refine.sh calibration refinement around FA≈2.25
-scripts/run_core_l3_calibration_ablate.sh adaptive calibration and bias-residual ablation
+scripts/run_core_l3_l4_sweep.sh           optional CF/SPOA/grounding core-loss sweep
+scripts/run_core_l3_balanced_debias.sh    balanced adaptive-prior/bias-residual A/B/C ablation
+scripts/reeval_balanced_debias_matrix.sh  raw classifier + checkpoint-specific alpha sweep matrix
+scripts/eval_l3_calibrated.sh             single-checkpoint fixed-prior calibrated eval runner
 tools/prepare_vg150_subset.py             HF -> local JSONL/images with validation
 tools/check_vg150_diagnostics.py          local dataset diagnostics guard
 tools/build_vg150_frequency_prior.py      subject-object predicate prior builder
@@ -73,20 +76,31 @@ EVAL_BATCHES=200 \
 bash scripts/eval_l3_calibrated.sh
 ```
 
-## Calibration Sweeps
+## Balanced Debias Ablation
 
-Use these only after a stable L3 checkpoint exists:
-
-```bash
-bash scripts/run_l3_eval_calibration_sweep.sh
-bash scripts/run_l3_eval_calibration_refine.sh
-```
-
-Summarize metrics:
+Train the three maintained balanced-debias candidates after a stable core checkpoint exists:
 
 ```bash
-python3 tools/summarize_metrics.py runs/eval_l3*/metrics.jsonl
+BASE_CKPT=checkpoints/core_l3_cf004_spoa050_g018_lr2e6_best_mR50.pt \
+EPOCHS=3 \
+SAMPLES_PER_EPOCH=12000 \
+EVAL_BATCHES=200 \
+bash scripts/run_core_l3_balanced_debias.sh
 ```
+
+Then evaluate raw capacity and checkpoint-specific calibration curves:
+
+```bash
+ALPHAS="0 0.75 1.25 1.50 1.75 2.25 2.75" \
+EVAL_BATCHES=200 \
+bash scripts/reeval_balanced_debias_matrix.sh
+```
+
+Acceptance criteria for a new default checkpoint:
+
+- raw classifier-only: `R@50 >= 40.0` and `mR@50 >= 13.5`;
+- calibrated: `R@50 >= 62.0` and `mR@50 > 18.6`;
+- prediction histogram: no collapse into only head predicates or only tail predicates.
 
 ## Dataset Preparation
 
@@ -124,16 +138,15 @@ python3 tools/build_vg150_frequency_prior.py \
   --smoothing 1.0
 ```
 
-## Adaptive Calibration Ablation
+## Calibration Policy
 
-The code now includes an optional trainable calibration path: classifier logits can be augmented by an adaptive prior gate and a bounded sample-level bias residual. This is disabled by default for backward compatibility and enabled in the dedicated ablation runner:
+Adaptive prior gates and sample-level bias residuals are trained only in balanced-debias ablations. Fixed frequency priors are treated as post-hoc reporting boosters, not as evidence of raw model capacity.
 
-```bash
-BASE_CKPT=checkpoints/eval_l3_final_a0_fa225_eb200_best_mR50.pt \
-  bash scripts/run_core_l3_calibration_ablate.sh
-```
+Report every serious checkpoint in three tiers:
 
-Evaluate old checkpoints with `ADAPTIVE_CALIBRATION_ENABLED=false`; only checkpoints trained by `run_core_l3_calibration_ablate.sh` should be evaluated with `ADAPTIVE_CALIBRATION_ENABLED=true`.
+1. raw classifier-only, no frequency prior, no text ensemble;
+2. fixed-prior calibrated with a checkpoint-specific alpha sweep;
+3. adaptive-calibrated only for checkpoints trained with adaptive calibration enabled.
 
 ## Report-Ready LaTeX Snippets
 
@@ -169,10 +182,49 @@ See `notes/current_status.tex` for the full TikZ figure. The diagram describes t
 
 ## Next Research Direction
 
-The next top-tier direction is not more post-hoc branches. It is bias-aware calibrated relation learning:
+The next top-tier direction is balanced debiasing, not more post-hoc boosting:
 
-1. finish adaptive calibration head ablations instead of relying only on fixed `FREQ_BIAS_ALPHA`;
-2. validate the sample-level bias residual against the current `mR@50≈0.1880` baseline;
-3. add tail-aware predicate prototypes based on CLIP text and visual positives if calibration improves;
-4. add one-to-many relation assignment / ambiguous-negative suppression after the calibration path is stable;
-5. full VG150/A100 scaling only after the above improves the 10k subset baseline.
+1. lock the compact L3 core and keep legacy branches disabled;
+2. train `adapt_light`, `adapt_mid`, and `prior_only` with calibration-head gradient clipping;
+3. select by raw classifier-only acceptance criteria before looking at calibrated scores;
+4. run checkpoint-specific alpha sweeps only for accepted raw candidates;
+5. add one-to-many relation assignment / ambiguous-negative suppression if over-debiasing persists;
+6. scale the winning configuration to full VG150/A100 only after subset gains are reproducible.
+
+# PURE Balanced-Debias Ablation Plan
+
+## Maintained Baseline
+
+- Raw classifier-only must be reported separately from calibrated results.
+- Current calibrated reference: `checkpoints/eval_l3_final_a0_fa225_eb200_best_mR50.pt` with `R@50≈0.6215`, `mR@50≈0.1880` under tuned fixed-prior evaluation.
+- Current raw evidence shows newer CF/SPOA/adaptive checkpoints improve long-tail mR but may trade off head recall.
+
+## Removed From Maintained Workflow
+
+- Object-language anchor scaling: negative mR ablation.
+- Relation-context scaling: negative/unstable mR ablation.
+- Bilinear mixing probes: legacy branch-ramp idea, not maintained.
+- Visual hard negatives: legacy branch-ramp idea, not maintained.
+- High-curriculum, Kaggle, and standalone calibration-refine scripts: removed to avoid protocol drift.
+
+## Roadmap-Aligned Sequence
+
+1. Keep compact L3 core as the backbone and disable legacy branches by default.
+2. Train balanced debias candidates with `scripts/run_core_l3_balanced_debias.sh`:
+   - `core_l3_balanced_adapt_light`: light adaptive prior + small residual.
+   - `core_l3_balanced_adapt_mid`: stronger adaptive prior + residual with higher regularization.
+   - `core_l3_balanced_prior_only`: adaptive prior without residual.
+3. Evaluate with `scripts/reeval_balanced_debias_matrix.sh`:
+   - alpha `0` means raw classifier-only capacity.
+   - positive alphas measure post-hoc fixed-prior compatibility.
+4. Accept a new default only if raw classifier-only reaches `R@50 >= 40.0` and `mR@50 >= 13.5`.
+5. Add one-to-many relation assignment / ambiguous-negative suppression only if the best raw candidate still over-debiases.
+6. Scale to full VG150/A100 after subset gains are reproducible across raw and calibrated tiers.
+
+## Reporting Rule
+
+Every result table must separate:
+
+- raw classifier-only model capacity;
+- fixed-prior calibrated system score;
+- adaptive-calibrated score for adaptive-trained checkpoints only.

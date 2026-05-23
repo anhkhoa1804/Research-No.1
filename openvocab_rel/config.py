@@ -122,6 +122,7 @@ class TrainConfig:
     adaptive_prior_scale: float = 1.0
     bias_residual_scale: float = 0.25
     lambda_calibration_reg: float = 0.001
+    calibration_grad_clip_norm: float = 0.0
 
     # LoRA fine-tuning.
     unfreeze_clip_lora: bool = False

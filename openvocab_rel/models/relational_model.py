@@ -738,6 +738,12 @@ class RelationalModel(nn.Module):
     def calibration_regularizer(self) -> Optional[torch.Tensor]:
         return self._last_calibration_reg
 
+    def calibration_parameters(self):
+        if hasattr(self, "calibration_gate"):
+            yield from self.calibration_gate.parameters()
+        if hasattr(self, "bias_residual_head"):
+            yield from self.bias_residual_head.parameters()
+
     @staticmethod
     def score(rel_feats: torch.Tensor, text_feats: torch.Tensor) -> torch.Tensor:
         if rel_feats.numel() == 0 or text_feats.numel() == 0:

@@ -223,6 +223,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--adaptive_prior_scale", type=float, default=getattr(TrainConfig, "adaptive_prior_scale", 1.0))
     p.add_argument("--bias_residual_scale", type=float, default=getattr(TrainConfig, "bias_residual_scale", 0.25))
     p.add_argument("--lambda_calibration_reg", type=float, default=getattr(TrainConfig, "lambda_calibration_reg", 0.001))
+    p.add_argument("--calibration_grad_clip_norm", type=float, default=getattr(TrainConfig, "calibration_grad_clip_norm", 0.0))
     p.add_argument("--emb_dim", type=int, default=TrainConfig.emb_dim)
     p.add_argument("--model_name", type=str, default=TrainConfig.model_name)
     p.add_argument("--pure_local_alpha", type=float, default=TrainConfig.pure_local_alpha)
@@ -1475,6 +1476,9 @@ def main(argv: Optional[List[str]] = None) -> None:
             if do_step:
                 optim_start = time.perf_counter()
                 scaler.unscale_(optim)
+                calib_clip_norm = float(getattr(cfg, "calibration_grad_clip_norm", 0.0))
+                if calib_clip_norm > 0.0 and hasattr(unwrap_ddp(model), "calibration_parameters"):
+                    torch.nn.utils.clip_grad_norm_(unwrap_ddp(model).calibration_parameters(), calib_clip_norm)
                 torch.nn.utils.clip_grad_norm_(model.parameters(), float(cfg.grad_clip_norm))
                 scaler.step(optim)
                 scaler.update()
