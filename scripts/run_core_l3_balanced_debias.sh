@@ -30,6 +30,7 @@ CLIP_INPUT_RES="${CLIP_INPUT_RES:-336}"
 EPOCHS="${EPOCHS:-3}"
 LR="${LR:-2e-6}"
 BALANCED_VARIANTS="${BALANCED_VARIANTS:-ultra_light adapt_light prior_only}"
+BALANCED_CLEAN_RUN="${BALANCED_CLEAN_RUN:-false}"
 
 run_balanced() {
   local name="$1"
@@ -39,6 +40,13 @@ run_balanced() {
   local residual_scale="$5"
   local reg="$6"
   local calib_clip="$7"
+  local ce_weight_power="${8:-${PREDICATE_CE_WEIGHT_POWER:-0.5}}"
+  local lambda_predicate_ce="${9:-${LAMBDA_PREDICATE_CE:-1.6}}"
+
+  if [[ "${BALANCED_CLEAN_RUN}" == "true" ]]; then
+    rm -rf "runs/${name}"
+    rm -f "checkpoints/${name}.pt" "checkpoints/${name}_best_mR50.pt" "checkpoints/${name}_best_R50.pt"
+  fi
 
   echo
   echo "== ${name}: prior=${prior_enabled}:${prior_scale} residual=${bias_enabled}:${residual_scale} reg=${reg} calib_clip=${calib_clip} =="
@@ -51,9 +59,9 @@ run_balanced() {
   PREDICATE_CE_POSITIVE_ONLY=true \
   PREDICATE_CE_LOSS=focal \
   PREDICATE_CE_GAMMA=1.5 \
-  PREDICATE_CE_WEIGHT_POWER=0.5 \
+  PREDICATE_CE_WEIGHT_POWER="${ce_weight_power}" \
   PREDICATE_CE_MAX_WEIGHT=5.0 \
-  LAMBDA_PREDICATE_CE=1.6 \
+  LAMBDA_PREDICATE_CE="${lambda_predicate_ce}" \
   LAMBDA_SPOA_ALIGNMENT=0.50 \
   LAMBDA_DENSE_GROUNDING=0.18 \
   LAMBDA_COUNTERFACTUAL=0.04 \
@@ -93,11 +101,23 @@ run_variant() {
     ultra_light)
       run_balanced core_l3_balanced_ultra_light true true 0.30 0.05 0.008 0.35
       ;;
+    ultra_light_long)
+      run_balanced core_l3_balanced_ultra_light_long true true 0.30 0.05 0.008 0.35
+      ;;
     adapt_light)
       run_balanced core_l3_balanced_adapt_light true true 0.50 0.10 0.003 0.50
       ;;
     prior_only)
       run_balanced core_l3_balanced_prior_only true false 0.35 0.00 0.006 0.35
+      ;;
+    bias_only)
+      run_balanced core_l3_balanced_bias_only false true 0.00 0.05 0.008 0.35
+      ;;
+    bias_only_seed_lr5e7)
+      run_balanced core_l3_seed_bias_only_lr5e7 false true 0.00 0.05 0.008 0.35
+      ;;
+    tail_probe_p06)
+      run_balanced core_l3_seed_tail_probe_p06 true true 0.30 0.05 0.008 0.35 0.60 1.6
       ;;
     *)
       echo "[balanced debias] unknown variant: $1" >&2

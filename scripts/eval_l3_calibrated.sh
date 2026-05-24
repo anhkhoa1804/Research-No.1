@@ -13,6 +13,7 @@ MAX_IMAGES="${MAX_IMAGES:-10000}"
 BATCH_SIZE="${BATCH_SIZE:-12}"
 NUM_WORKERS="${NUM_WORKERS:-6}"
 RUN_NAME="${RUN_NAME:-eval_l3_final_a0_fa225_eb${EVAL_BATCHES}}"
+CLEAN_EVAL_RUN="${CLEAN_EVAL_RUN:-false}"
 
 if [[ ! -f "${CKPT}" ]]; then
   echo "[PURE calibrated eval] checkpoint not found: ${CKPT}" >&2
@@ -22,6 +23,11 @@ if [[ ! -f "${CKPT}" ]]; then
   exit 2
 fi
 [[ -f "${FREQ_BIAS_PATH}" ]] || { echo "[PURE calibrated eval] frequency prior not found: ${FREQ_BIAS_PATH}" >&2; exit 2; }
+
+if [[ "${CLEAN_EVAL_RUN}" == "true" ]]; then
+  rm -rf "runs/${RUN_NAME}"
+  rm -f "checkpoints/${RUN_NAME}.pt"
+fi
 
 PURE_PHASE=eval \
 RESUME_FROM="${CKPT}" \

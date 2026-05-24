@@ -9,15 +9,17 @@ EVAL_BATCHES="${EVAL_BATCHES:-200}"
 MAX_IMAGES="${MAX_IMAGES:-10000}"
 BATCH_SIZE="${BATCH_SIZE:-12}"
 NUM_WORKERS="${NUM_WORKERS:-6}"
-ALPHAS="${ALPHAS:-0 0.75 1.25 1.50 1.75 2.25 2.75}"
+ALPHAS="${ALPHAS:-0 4.25 4.50 4.75}"
+CLEAN_REEVAL="${CLEAN_REEVAL:-true}"
 
 ckpts=()
 if [[ "$#" -gt 0 ]]; then
   ckpts=("$@")
 else
   for stem in \
+    core_l3_balanced_ultra_light \
+    core_l3_balanced_bias_only \
     core_l3_balanced_adapt_light \
-    core_l3_balanced_adapt_mid \
     core_l3_balanced_prior_only \
     core_l3_cf004_spoa050_g018_lr2e6 \
     eval_l3_final_a0_fa225_eb200; do
@@ -41,6 +43,11 @@ run_eval() {
   base="$(basename "${ckpt}" .pt)"
   alpha_tag="${alpha//./}"
   if [[ "${alpha}" == "0" || "${alpha}" == "0.0" ]]; then
+    local run_name="reeval_${base}_raw_classifier_eb${EVAL_BATCHES}"
+    if [[ "${CLEAN_REEVAL}" == "true" ]]; then
+      rm -rf "runs/${run_name}"
+      rm -f "checkpoints/${run_name}.pt"
+    fi
     PURE_PHASE=eval \
     RESUME_FROM="${ckpt}" \
     OBJECT_LANGUAGE_ANCHOR_ENABLED=false \
@@ -61,18 +68,23 @@ run_eval() {
     EPOCHS=0 \
     LR=0 \
     FREEZE_CLIP=true \
-    RUN_NAME="reeval_${base}_raw_classifier_eb${EVAL_BATCHES}" \
-    OUT_ROOT="runs/reeval_${base}_raw_classifier_eb${EVAL_BATCHES}" \
-    SAVE_PATH="checkpoints/reeval_${base}_raw_classifier_eb${EVAL_BATCHES}.pt" \
+    RUN_NAME="${run_name}" \
+    OUT_ROOT="runs/${run_name}" \
+    SAVE_PATH="checkpoints/${run_name}.pt" \
     bash scripts/run_pure_next.sh
   else
+    local run_name="reeval_${base}_fa${alpha_tag}_eb${EVAL_BATCHES}"
+    if [[ "${CLEAN_REEVAL}" == "true" ]]; then
+      rm -rf "runs/${run_name}"
+      rm -f "checkpoints/${run_name}.pt"
+    fi
     CKPT="${ckpt}" \
     FREQ_BIAS_ALPHA="${alpha}" \
     EVAL_BATCHES="${EVAL_BATCHES}" \
     MAX_IMAGES="${MAX_IMAGES}" \
     BATCH_SIZE="${BATCH_SIZE}" \
     NUM_WORKERS="${NUM_WORKERS}" \
-    RUN_NAME="reeval_${base}_fa${alpha_tag}_eb${EVAL_BATCHES}" \
+    RUN_NAME="${run_name}" \
     bash scripts/eval_l3_calibrated.sh
   fi
 }
