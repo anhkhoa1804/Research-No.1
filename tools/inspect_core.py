@@ -63,7 +63,7 @@ def inspect_core(root: Path) -> Dict[str, Any]:
                 if not valid_ids:
                     warnings.append(f"{version}/{group}/{pair_id}/{scene_key}: no entities found")
 
-                image_path = resolve_image_path(group_dir, scene)
+                image_path = resolve_image_path(group_dir, scene, pair_id=pair_id, scene_key=scene_key, group=group)
                 if image_path is None:
                     warnings.append(f"{version}/{group}/{pair_id}/{scene_key}: image not resolved")
                 width, height = get_image_size(image_path)

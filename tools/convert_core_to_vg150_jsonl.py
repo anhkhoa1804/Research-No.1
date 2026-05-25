@@ -44,7 +44,7 @@ def build_scene_row(core_root: Path, version: str, group: str, group_dir: Path, 
     entities = entities_for_scene(item, scene_key)
     if not entities:
         return None
-    image_path = resolve_image_path(group_dir, scene)
+    image_path = resolve_image_path(group_dir, scene, pair_id=pair_id, scene_key=scene_key, group=group)
     width, height = get_image_size(image_path)
 
     box_by_entity: Dict[str, List[float]] = {}

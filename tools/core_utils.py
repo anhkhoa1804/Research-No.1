@@ -99,7 +99,13 @@ def scene_image_value(scene: Dict[str, Any]) -> str:
     return ""
 
 
-def resolve_image_path(group_dir: Path, scene: Dict[str, Any]) -> Optional[Path]:
+def resolve_image_path(
+    group_dir: Path,
+    scene: Dict[str, Any],
+    pair_id: str = "",
+    scene_key: str = "",
+    group: str = "",
+) -> Optional[Path]:
     raw = scene_image_value(scene)
     candidates: List[Path] = []
     if raw:
@@ -111,6 +117,20 @@ def resolve_image_path(group_dir: Path, scene: Dict[str, Any]) -> Optional[Path]
         candidates.append(group_dir / raw_path.name)
         candidates.append(group_dir / "image" / raw_path.name)
         candidates.append(group_dir / "images" / raw_path.name)
+    suffix = ""
+    if str(scene_key).endswith("_A"):
+        suffix = "A"
+    elif str(scene_key).endswith("_B"):
+        suffix = "B"
+
+    if pair_id and suffix:
+        for ext in (".png", ".jpg", ".jpeg", ".webp"):
+            candidates.append(group_dir / "image" / f"{pair_id}_{suffix}{ext}")
+            candidates.append(group_dir / "images" / f"{pair_id}_{suffix}{ext}")
+            if group:
+                candidates.append(group_dir / "image" / f"{group}_{str(pair_id).split('_')[-1]}_{suffix}{ext}")
+                candidates.append(group_dir / "images" / f"{group}_{str(pair_id).split('_')[-1]}_{suffix}{ext}")
+
     for path in candidates:
         if path.exists() and path.is_file():
             return path
@@ -172,6 +192,8 @@ def get_image_size(path: Optional[Path]) -> Tuple[int, int]:
 
 
 def normalized_cxcywh_to_xyxy(box: Any, width: int, height: int) -> Optional[List[float]]:
+    if isinstance(box, list) and len(box) == 1 and isinstance(box[0], list):
+        box = box[0]
     if not isinstance(box, list) or len(box) != 4:
         return None
     try:
