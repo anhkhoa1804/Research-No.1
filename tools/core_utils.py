@@ -192,8 +192,18 @@ def get_image_size(path: Optional[Path]) -> Tuple[int, int]:
 
 
 def normalized_cxcywh_to_xyxy(box: Any, width: int, height: int) -> Optional[List[float]]:
-    if isinstance(box, list) and len(box) == 1 and isinstance(box[0], list):
-        box = box[0]
+    if isinstance(box, list) and box and all(isinstance(candidate, list) for candidate in box):
+        converted_candidates = [
+            normalized_cxcywh_to_xyxy(candidate, width, height)
+            for candidate in box
+        ]
+        converted_candidates = [candidate for candidate in converted_candidates if candidate is not None]
+        if not converted_candidates:
+            return None
+        return max(
+            converted_candidates,
+            key=lambda candidate: max(0.0, candidate[2] - candidate[0]) * max(0.0, candidate[3] - candidate[1]),
+        )
     if not isinstance(box, list) or len(box) != 4:
         return None
     try:
