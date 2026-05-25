@@ -138,6 +138,71 @@ python3 tools/build_vg150_frequency_prior.py \
   --smoothing 1.0
 ```
 
+
+## CORE Download, Inspect, and VG150 Merge
+
+CORE should be used in two separate roles: first as a held-out diagnostic set for VG150-only checkpoints, then as an optional robustness-training resource in ablations with a held-out CORE split. Do not train on all CORE rows and report that same CORE score as a diagnostic result.
+
+Download the Google Drive folder on a GCP VM:
+
+```bash
+CORE_OUT_DIR=datasets/core_benchmark \
+CORE_DRIVE_URL="https://drive.google.com/drive/folders/11rAVJgxZ557XPf4JHyQi7rJ7Hmw7fMHR" \
+bash scripts/download_core_gdrive.sh
+```
+
+If `gdown` is missing, install it in the user environment, not a new virtualenv:
+
+```bash
+python3 -m pip install --user -U gdown
+```
+
+Inspect the downloaded folder and write a schema/box/image report:
+
+```bash
+python3 tools/inspect_core.py \
+  --core-root datasets/core_benchmark \
+  --report runs/core_inspect/report.json
+```
+
+Convert CORE into the JSONL schema consumed by `VG150JSONLDataset`:
+
+```bash
+python3 tools/convert_core_to_vg150_jsonl.py \
+  --core-root datasets/core_benchmark \
+  --out-root datasets/core_vg150_jsonl \
+  --train-ratio 0.8 \
+  --val-ratio 0.1 \
+  --holdout-v2
+```
+
+Merge converted CORE train rows into VG150 for robustness ablations. By default validation remains VG150-only so calibrated VG150 reporting is not contaminated:
+
+```bash
+python3 tools/merge_vg150_core_jsonl.py \
+  --vg-root datasets \
+  --core-root datasets/core_vg150_jsonl \
+  --out-root datasets/vg150_core_merged \
+  --core-train-repeat 1
+```
+
+Recommended run order:
+
+1. Train/evaluate VG150-only as the primary SGG benchmark.
+2. Evaluate the VG150-only checkpoint qualitatively or with a separate CORE diagnostic script/report.
+3. Train VG150+CORE only as a robustness ablation using `DATA_ROOT=datasets/vg150_core_merged`.
+4. Keep CORE v2 and `Extreme_Compositional_OOD` as preferred held-out stress tests when possible.
+
+Run a CORE-integrated ablation after merge:
+
+```bash
+DATA_ROOT=datasets/vg150_core_merged \
+RUN_NAME=vg150_core_l3_ablation \
+OUT_ROOT=runs/vg150_core/l3_ablation \
+SAVE_PATH=checkpoints/vg150_core_l3_ablation.pt \
+bash scripts/run_pure_next.sh
+```
+
 ## Calibration Policy
 
 Adaptive prior gates and sample-level bias residuals are trained only in balanced-debias ablations. Fixed frequency priors are treated as post-hoc reporting boosters, not as evidence of raw model capacity.
@@ -191,40 +256,58 @@ The next top-tier direction is balanced debiasing, not more post-hoc boosting:
 5. add one-to-many relation assignment / ambiguous-negative suppression if over-debiasing persists;
 6. scale the winning configuration to full VG150/A100 only after subset gains are reproducible.
 
-# PURE Balanced-Debias Ablation Plan
+## Locked SGG Architecture and Full Ablation Cycle
 
-## Maintained Baseline
+The final thesis framing is **SGG-first**: retrieval is a downstream demo, while the scientific target is predicate-aware scene graph generation.
 
-- Raw classifier-only must be reported separately from calibrated results.
-- Current calibrated reference: `checkpoints/eval_l3_final_a0_fa225_eb200_best_mR50.pt` with `R@50≈0.6215`, `mR@50≈0.1880` under tuned fixed-prior evaluation.
-- Current raw evidence shows newer CF/SPOA/adaptive checkpoints improve long-tail mR but may trade off head recall.
+### Locked PURE-Core architecture
 
-## Removed From Maintained Workflow
+The maintained architecture for the next training cycle is:
 
-- Object-language anchor scaling: negative mR ablation.
-- Relation-context scaling: negative/unstable mR ablation.
-- Bilinear mixing probes: legacy branch-ramp idea, not maintained.
-- Visual hard negatives: legacy branch-ramp idea, not maintained.
-- High-curriculum, Kaggle, and standalone calibration-refine scripts: removed to avoid protocol drift.
+1. **Dense CLIP visual field** from the uncropped image.
+2. **Deformable box-conditioned routing** for object evidence.
+3. **Ordered subject--object relation embedding** with geometry-aware pair features.
+4. **Predicate scoring head** trained with the three maintained losses:
+   - `PredCE-LA`,
+   - `Counterfactual-SPOA`,
+   - `Dense Grounding`.
+5. **Evaluation-time calibration** reported separately from raw classifier capacity.
 
-## Roadmap-Aligned Sequence
+The following branches stay disabled in the default architecture and are only ablation probes: object-language anchors, relation-context transformer, bilinear mixing, and visual hard negatives.
 
-1. Keep compact L3 core as the backbone and disable legacy branches by default.
-2. Train balanced debias candidates with `scripts/run_core_l3_balanced_debias.sh`:
-   - `core_l3_balanced_adapt_light`: light adaptive prior + small residual.
-   - `core_l3_balanced_adapt_mid`: stronger adaptive prior + residual with higher regularization.
-   - `core_l3_balanced_prior_only`: adaptive prior without residual.
-3. Evaluate with `scripts/reeval_balanced_debias_matrix.sh`:
-   - alpha `0` means raw classifier-only capacity.
-   - positive alphas measure post-hoc fixed-prior compatibility.
-4. Accept a new default only if raw classifier-only reaches `R@50 >= 40.0` and `mR@50 >= 13.5`.
-5. Add one-to-many relation assignment / ambiguous-negative suppression only if the best raw candidate still over-debiases.
-6. Scale to full VG150/A100 after subset gains are reproducible across raw and calibrated tiers.
+### Full train / ablation runner
 
-## Reporting Rule
+Use the new runner for the upcoming full SGG cycle:
 
-Every result table must separate:
+```bash
+DATA_ROOT=datasets/vg150_core_merged \
+CHECKPOINT_DIR=checkpoints/sgg_full_cycle \
+RUN_ROOT=runs/sgg_full_cycle \
+GPU_PRESET=l4_24gb \
+EPOCHS=8 \
+EVAL_BATCHES=200 \
+bash scripts/run_sgg_full_ablation_cycle.sh
+```
 
-- raw classifier-only model capacity;
-- fixed-prior calibrated system score;
-- adaptive-calibrated score for adaptive-trained checkpoints only.
+`DATA_ROOT` must contain `train.jsonl`, `validation.jsonl`, and, for calibrated evaluation, `frequency_prior.json`. To include CORE, convert the current ~1k CORE images into the same VG150 JSONL schema and merge them into `train.jsonl` before launching the cycle.
+
+Useful subsets:
+
+```bash
+# Print all commands without running training.
+DRY_RUN=true RUN_GROUPS=all bash scripts/run_sgg_full_ablation_cycle.sh
+
+# Train only the locked core architecture and calibration sweep.
+RUN_GROUPS=core bash scripts/run_sgg_full_ablation_cycle.sh
+
+# Run only loss ablations.
+RUN_GROUPS=loss bash scripts/run_sgg_full_ablation_cycle.sh
+
+# Run only branch ablations.
+RUN_GROUPS=architecture bash scripts/run_sgg_full_ablation_cycle.sh
+
+# Run only calibration / bias residual ablations.
+RUN_GROUPS=calibration bash scripts/run_sgg_full_ablation_cycle.sh
+```
+
+Final reporting should select models in this order: raw classifier mR@50, calibrated R@50/mR@50 Pareto point, then CORE robustness plots from the merged CORE subset.

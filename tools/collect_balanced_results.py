@@ -23,7 +23,11 @@ def infer_kind(path: str) -> tuple[str, str]:
     for prefix in ("reeval_core_l3_balanced_", "core_l3_balanced_", "reeval_core_l3_seed_", "core_l3_seed_"):
         variant = variant.replace(prefix, "")
     variant = re.sub(r"_best_mR50.*", "", variant)
-    mode = "raw" if "raw_classifier" in name else "fa" + (re.search(r"_fa([0-9]+)_", name).group(1) if re.search(r"_fa([0-9]+)_", name) else "train")
+    if "raw_classifier" in name:
+        mode = "raw"
+    else:
+        match = re.search(r"_fa([0-9]+)_", name)
+        mode = "fa" + match.group(1) if match else "train"
     return variant, mode
 
 
@@ -34,6 +38,7 @@ def main() -> None:
     args = parser.parse_args()
 
     rows: list[tuple[float, float, float, str, str, str, str]] = []
+    seen: set[tuple[str, str, str, float, float, float]] = set()
     for pattern in args.patterns:
         for path in sorted(glob.glob(pattern)):
             for line in Path(path).read_text(encoding="utf-8").splitlines():
@@ -46,7 +51,15 @@ def main() -> None:
                 if r50 is None or mr50 is None:
                     continue
                 variant, mode = infer_kind(path)
-                rows.append((float(mr50), float(r50), float(gr50 or 0.0), variant, mode, str(row.get("epoch", "?")), path))
+                mr50_f = float(mr50)
+                r50_f = float(r50)
+                gr50_f = float(gr50 or 0.0)
+                epoch = str(row.get("epoch", "?"))
+                key = (path, variant, mode, round(mr50_f, 8), round(r50_f, 8), round(gr50_f, 8))
+                if key in seen:
+                    continue
+                seen.add(key)
+                rows.append((mr50_f, r50_f, gr50_f, variant, mode, epoch, path))
 
     print("mR@50   R@50    G@50    variant                         mode     ep   path")
     print("------  ------  ------  ------------------------------  -------  ---  ----")
