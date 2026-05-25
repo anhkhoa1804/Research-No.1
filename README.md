@@ -146,8 +146,11 @@ CORE should be used in two separate roles: first as a held-out diagnostic set fo
 Download the Google Drive folder on a GCP VM:
 
 ```bash
-CORE_OUT_DIR=datasets/core_benchmark \
-CORE_DRIVE_URL="https://drive.google.com/drive/folders/11rAVJgxZ557XPf4JHyQi7rJ7Hmw7fMHR" \
+CORE_MODE=zip \
+CORE_CLEAN=true \
+CORE_OUT_DIR=datasets/core \
+CORE_ZIP_PATH=datasets/core.zip \
+CORE_ZIP_URL="https://drive.google.com/file/d/1eWdgbrQo_XTO4Ubfy2ygYtmojATlx6jJ/view?usp=drive_link" \
 bash scripts/download_core_gdrive.sh
 ```
 
@@ -161,7 +164,7 @@ Inspect the downloaded folder and write a schema/box/image report:
 
 ```bash
 python3 tools/inspect_core.py \
-  --core-root datasets/core_benchmark \
+  --core-root datasets/core \
   --report runs/core_inspect/report.json
 ```
 
@@ -169,7 +172,7 @@ Convert CORE into the JSONL schema consumed by `VG150JSONLDataset`:
 
 ```bash
 python3 tools/convert_core_to_vg150_jsonl.py \
-  --core-root datasets/core_benchmark \
+  --core-root datasets/core \
   --out-root datasets/core_vg150_jsonl \
   --train-ratio 0.8 \
   --val-ratio 0.1 \
