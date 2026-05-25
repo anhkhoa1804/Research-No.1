@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CORE_ZIP_URL="${CORE_ZIP_URL:-https://drive.google.com/file/d/1eWdgbrQo_XTO4Ubfy2ygYtmojATlx6jJ/view?usp=drive_link}"
+CORE_ZIP_ID="${CORE_ZIP_ID:-1eWdgbrQo_XTO4Ubfy2ygYtmojATlx6jJ}"
+CORE_ZIP_URL="${CORE_ZIP_URL:-https://drive.google.com/uc?id=${CORE_ZIP_ID}}"
 CORE_FOLDER_URL="${CORE_FOLDER_URL:-https://drive.google.com/drive/folders/11rAVJgxZ557XPf4JHyQi7rJ7Hmw7fMHR}"
 CORE_OUT_DIR="${CORE_OUT_DIR:-datasets/core}"
 CORE_ZIP_PATH="${CORE_ZIP_PATH:-datasets/core.zip}"
@@ -31,7 +32,7 @@ mkdir -p "$(dirname "${CORE_ZIP_PATH}")" "${CORE_OUT_DIR}"
 if [[ "${CORE_MODE}" == "zip" ]]; then
   echo "Downloading CORE zip from: ${CORE_ZIP_URL}"
   echo "Zip path: ${CORE_ZIP_PATH}"
-  "${GDOWN_BIN[@]}" --fuzzy "${CORE_ZIP_URL}" -O "${CORE_ZIP_PATH}"
+  "${GDOWN_BIN[@]}" "${CORE_ZIP_URL}" -O "${CORE_ZIP_PATH}"
 
   echo "Extracting to: ${CORE_OUT_DIR}"
   rm -rf "${CORE_OUT_DIR}"

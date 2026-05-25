@@ -6,7 +6,10 @@ import os
 from pathlib import Path
 from typing import Any, Dict, Iterable, List, Optional, Tuple
 
-from PIL import Image
+try:
+    from PIL import Image
+except ModuleNotFoundError:
+    Image = None
 
 
 SCENE_KEYS = ("scene_A", "scene_B")
@@ -114,8 +117,52 @@ def resolve_image_path(group_dir: Path, scene: Dict[str, Any]) -> Optional[Path]
     return None
 
 
+def _image_size_from_header(path: Path) -> Optional[Tuple[int, int]]:
+    try:
+        with path.open("rb") as handle:
+            header = handle.read(32)
+            if header.startswith(b"\x89PNG\r\n\x1a\n") and len(header) >= 24:
+                width = int.from_bytes(header[16:20], "big")
+                height = int.from_bytes(header[20:24], "big")
+                if width > 0 and height > 0:
+                    return width, height
+            if header.startswith(b"\xff\xd8"):
+                handle.seek(2)
+                while True:
+                    marker_start = handle.read(1)
+                    if marker_start != b"\xff":
+                        return None
+                    marker = handle.read(1)
+                    while marker == b"\xff":
+                        marker = handle.read(1)
+                    if marker in {b"\xd8", b"\xd9"}:
+                        continue
+                    length_raw = handle.read(2)
+                    if len(length_raw) != 2:
+                        return None
+                    length = int.from_bytes(length_raw, "big")
+                    if marker in {b"\xc0", b"\xc1", b"\xc2", b"\xc3", b"\xc5", b"\xc6", b"\xc7", b"\xc9", b"\xca", b"\xcb", b"\xcd", b"\xce", b"\xcf"}:
+                        data = handle.read(5)
+                        if len(data) != 5:
+                            return None
+                        height = int.from_bytes(data[1:3], "big")
+                        width = int.from_bytes(data[3:5], "big")
+                        if width > 0 and height > 0:
+                            return width, height
+                        return None
+                    handle.seek(max(0, length - 2), 1)
+    except Exception:
+        return None
+    return None
+
+
 def get_image_size(path: Optional[Path]) -> Tuple[int, int]:
     if path is None:
+        return 336, 336
+    header_size = _image_size_from_header(path)
+    if header_size is not None:
+        return header_size
+    if Image is None:
         return 336, 336
     try:
         with Image.open(path) as image:
