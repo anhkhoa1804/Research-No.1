@@ -29,7 +29,14 @@ def inspect_core(root: Path) -> Dict[str, Any]:
     warnings: List[str] = []
     groups_by_version: Dict[str, set] = defaultdict(set)
 
-    for version, group, meta_path in iter_metadata_files(core_root):
+    metadata_files = list(iter_metadata_files(core_root))
+    if not metadata_files:
+        warnings.append(
+            f"No metadata.json files found under {core_root}. "
+            "CORE conversion requires metadata with entities, grounding boxes, and relations."
+        )
+
+    for version, group, meta_path in metadata_files:
         groups_by_version[version].add(group)
         group_dir = meta_path.parent
         try:
