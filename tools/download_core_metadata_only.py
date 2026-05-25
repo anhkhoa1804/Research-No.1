@@ -3,12 +3,12 @@ from __future__ import annotations
 import argparse
 import importlib
 import inspect
-import shutil
+import re
 import subprocess
 import sys
-import tempfile
 from pathlib import Path
-from typing import Any, Iterable, List
+from html import unescape
+from typing import Any, Iterable
 
 
 def extract_folder_id(url_or_id: str) -> str:
@@ -84,6 +84,40 @@ def item_path(item: Any) -> str:
     return item_name(item)
 
 
+
+
+def crawl_embedded_folder(folder_id: str, prefix: str = "") -> list[tuple[str, str]]:
+    import requests
+
+    url = f"https://drive.google.com/embeddedfolderview?id={folder_id}#list"
+    response = requests.get(url, timeout=60)
+    response.raise_for_status()
+    html = response.text
+
+    entries: list[tuple[str, str]] = []
+    seen_folders: set[str] = set()
+    folder_pattern = re.compile(r'href="https://drive\.google\.com/drive/folders/([A-Za-z0-9_-]+)[^"]*"[^>]*>(.*?)</a>', re.S)
+    file_pattern = re.compile(r'href="https://drive\.google\.com/file/d/([A-Za-z0-9_-]+)[^"]*"[^>]*>(.*?)</a>', re.S)
+    tag_pattern = re.compile(r"<[^>]+>")
+
+    for child_id, raw_name in folder_pattern.findall(html):
+        if child_id in seen_folders:
+            continue
+        seen_folders.add(child_id)
+        name = tag_pattern.sub("", unescape(raw_name)).strip()
+        if not name:
+            name = child_id
+        child_prefix = f"{prefix}/{name}".strip("/")
+        entries.extend(crawl_embedded_folder(child_id, child_prefix))
+
+    for file_id, raw_name in file_pattern.findall(html):
+        name = tag_pattern.sub("", unescape(raw_name)).strip()
+        if not name:
+            name = file_id
+        entries.append((f"{prefix}/{name}".strip("/"), file_id))
+
+    return entries
+
 def call_parse_google_drive_file(folder_id: str) -> Any:
     parse_module = importlib.import_module("gdown.download_folder")
     parser = getattr(parse_module, "_parse_google_drive_file", None)
@@ -118,16 +152,22 @@ def main() -> None:
 
     folder_id = extract_folder_id(args.folder_url)
     out_root = Path(args.out_root)
-    tree = call_parse_google_drive_file(folder_id)
-    files = list(iter_file_objects(tree))
-    metadata = [(rel, item) for rel, item in files if item_name(item) == "metadata.json"]
+    try:
+        tree = call_parse_google_drive_file(folder_id)
+        files = list(iter_file_objects(tree))
+        metadata = [(rel, item_id(item)) for rel, item in files if item_name(item) == "metadata.json"]
+    except Exception as exc:
+        print(f"gdown folder parser unavailable ({exc}); falling back to embeddedfolderview crawl")
+        files = crawl_embedded_folder(folder_id)
+        metadata = [(rel, file_id) for rel, file_id in files if Path(rel).name == "metadata.json"]
+
     if not metadata:
         raise SystemExit(f"No metadata.json files discovered in Drive folder {folder_id}; discovered files={len(files)}")
 
     print(f"Discovered {len(metadata)} metadata.json files")
-    for rel, item in metadata:
+    for rel, file_id in metadata:
         parts = rel.split("/")
-        if parts and parts[0] not in {"v1", "v2", "dataset"}:
+        while parts and parts[0] not in {"v1", "v2", "dataset"}:
             parts = parts[1:]
         rel = "/".join(parts)
         if rel.startswith("dataset/"):
@@ -135,9 +175,9 @@ def main() -> None:
         if not rel.endswith("metadata.json"):
             rel = f"{rel}/metadata.json"
         target = out_root / rel
-        print(f"{item_id(item)} -> {target}")
+        print(f"{file_id} -> {target}")
         if not args.dry_run:
-            download_file(item_id(item), target)
+            download_file(file_id, target)
 
 
 if __name__ == "__main__":
