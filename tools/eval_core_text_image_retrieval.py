@@ -63,6 +63,59 @@ def _clean(value: Any) -> str:
     return " ".join(str(value).strip().lower().replace("_", " ").split())
 
 
+def _first_clean(*values: Any) -> str:
+    for value in values:
+        if isinstance(value, list) and value:
+            value = value[0]
+        text = _clean(value)
+        if text and text not in GENERIC_OBJECTS and text not in GENERIC_RELATIONS:
+            return text
+    return ""
+
+
+def _endpoint_value(rel: dict[str, Any], role: str) -> Any:
+    keys = (
+        ("subject", "subject_id", "subj_id", "source", "head", "from")
+        if role == "subject"
+        else ("object", "object_id", "obj_id", "target", "tail", "to")
+    )
+    for key in keys:
+        if key in rel:
+            return rel.get(key)
+    return None
+
+
+def _endpoint_label(rel: dict[str, Any], role: str, ref_id: str | None, id_to_label: dict[str, str]) -> str:
+    if ref_id is not None and ref_id in id_to_label:
+        return id_to_label[ref_id]
+    value = _endpoint_value(rel, role)
+    if isinstance(value, dict):
+        label = _first_clean(
+            value.get("label"),
+            value.get("name"),
+            value.get("category"),
+            value.get("class"),
+            value.get("object"),
+            value.get("names"),
+        )
+        if label:
+            return label
+    prefix = "subject" if role == "subject" else "object"
+    label = _first_clean(
+        rel.get(f"{prefix}_label"),
+        rel.get(f"{prefix}_name"),
+        rel.get(f"{prefix}_category"),
+        rel.get(f"{prefix}_class"),
+    )
+    if label:
+        return label
+    if ref_id is not None:
+        ref_label = _clean(ref_id)
+        if ref_label and ref_label not in GENERIC_OBJECTS:
+            return ref_label
+    return "object"
+
+
 def _scene_text(item: dict[str, Any], scene_key: str) -> str:
     scene = item.get(scene_key, {}) if isinstance(item.get(scene_key), dict) else {}
     entities = entities_for_scene(item, scene_key)
@@ -77,8 +130,8 @@ def _scene_text(item: dict[str, Any], scene_key: str) -> str:
         predicate = _clean(relation_predicate(rel))
         if predicate in GENERIC_RELATIONS:
             continue
-        subject = id_to_label.get(str(subject_id), "object")
-        obj = id_to_label.get(str(object_id), "object")
+        subject = _endpoint_label(rel, "subject", subject_id, id_to_label)
+        obj = _endpoint_label(rel, "object", object_id, id_to_label)
         clauses.append(f"{subject} {predicate} {obj}")
     if clauses:
         return "A scene where " + "; ".join(clauses[:4]) + "."
@@ -128,10 +181,16 @@ def main() -> None:
 
     correct = 0
     total = 0
+    margin_sum = 0.0
+    pair_both_correct = 0
+    identical_text_pairs = 0
     by_group: dict[str, Counter[str]] = defaultdict(Counter)
     examples: list[dict[str, Any]] = []
 
     for pair in pairs:
+        pair_correct = 0
+        if _clean(pair["texts"].get("scene_A", "")) == _clean(pair["texts"].get("scene_B", "")):
+            identical_text_pairs += 1
         images = []
         for scene_key in SCENE_KEYS:
             with Image.open(pair["images"][scene_key]) as image:
@@ -145,11 +204,18 @@ def main() -> None:
             pred_index = int(torch.argmax(scores).item())
             is_correct = pred_index == target_index
             correct += int(is_correct)
+            pair_correct += int(is_correct)
             total += 1
+            target_score = float(scores[target_index].item())
+            distractor_score = float(scores[1 - target_index].item())
+            margin = target_score - distractor_score
+            margin_sum += margin
             by_group[pair["group"]]["correct"] += int(is_correct)
             by_group[pair["group"]]["total"] += 1
+            by_group[pair["group"]]["margin_sum"] += margin
             if len(examples) < 50:
-                examples.append({**pair, "query_scene": scene_key, "pred_scene": SCENE_KEYS[pred_index], "scores": [float(x) for x in scores.cpu()]})
+                examples.append({**pair, "query_scene": scene_key, "pred_scene": SCENE_KEYS[pred_index], "scores": [float(x) for x in scores.cpu()], "margin": margin})
+        pair_both_correct += int(pair_correct == len(SCENE_KEYS))
 
     report = {
         "core_root": str(core_root),
@@ -157,7 +223,18 @@ def main() -> None:
         "num_pairs": len(pairs),
         "total_queries": total,
         "accuracy": correct / total if total else 0.0,
-        "by_group": {group: {"accuracy": counts["correct"] / counts["total"] if counts["total"] else 0.0, **dict(counts)} for group, counts in sorted(by_group.items())},
+        "mean_margin": margin_sum / total if total else 0.0,
+        "pair_both_correct_accuracy": pair_both_correct / len(pairs) if pairs else 0.0,
+        "identical_text_pairs": identical_text_pairs,
+        "identical_text_pair_rate": identical_text_pairs / len(pairs) if pairs else 0.0,
+        "by_group": {
+            group: {
+                "accuracy": counts["correct"] / counts["total"] if counts["total"] else 0.0,
+                "mean_margin": counts["margin_sum"] / counts["total"] if counts["total"] else 0.0,
+                **dict(counts),
+            }
+            for group, counts in sorted(by_group.items())
+        },
         "examples": examples,
     }
     out_path = Path(args.out)
