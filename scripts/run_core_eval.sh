@@ -58,8 +58,19 @@ PY
 
 rm -rf "${CORE_EVAL_ROOT}"
 mkdir -p "${CORE_EVAL_ROOT}"
-ln -sfn "$(pwd)/${CORE_JSONL_ROOT}/train.jsonl" "${CORE_EVAL_ROOT}/train.jsonl"
-ln -sfn "$(pwd)/${CORE_JSONL_ROOT}/${CORE_EVAL_SPLIT}.jsonl" "${CORE_EVAL_ROOT}/validation.jsonl"
+
+train_source="${CORE_JSONL_ROOT}/train.jsonl"
+eval_source="${CORE_JSONL_ROOT}/${CORE_EVAL_SPLIT}.jsonl"
+if [[ ! -s "${eval_source}" ]]; then
+  echo "[CORE eval] eval split is empty or missing: ${eval_source}" >&2
+  exit 2
+fi
+if [[ ! -s "${train_source}" ]]; then
+  echo "[CORE eval] train split is empty; using ${CORE_EVAL_SPLIT}.jsonl as eval-only train stub" >&2
+  train_source="${eval_source}"
+fi
+ln -sfn "$(pwd)/${train_source}" "${CORE_EVAL_ROOT}/train.jsonl"
+ln -sfn "$(pwd)/${eval_source}" "${CORE_EVAL_ROOT}/validation.jsonl"
 for version_dir in "${actual_core_root}"/*; do
   if [[ -d "${version_dir}" ]]; then
     ln -sfn "$(pwd)/${version_dir}" "${CORE_EVAL_ROOT}/$(basename "${version_dir}")"
