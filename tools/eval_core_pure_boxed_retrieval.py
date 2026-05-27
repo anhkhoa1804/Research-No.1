@@ -173,7 +173,19 @@ def _find_object_index(objects: list[dict[str, Any]], entity_id_value: str, labe
 
 
 @torch.no_grad()
-def _score_candidate(cfg: TrainConfig, clip_model: Any, processor: Any, model: RelationalModel, pred_emb: torch.Tensor, pred_to_idx: dict[str, int], scene: dict[str, Any], query: dict[str, str], device: torch.device) -> float | None:
+def _score_candidate(
+    cfg: TrainConfig,
+    clip_model: Any,
+    processor: Any,
+    model: RelationalModel,
+    pred_emb: torch.Tensor,
+    pred_to_idx: dict[str, int],
+    scene: dict[str, Any],
+    query: dict[str, str],
+    device: torch.device,
+    *,
+    retrieval_score: str = "raw",
+) -> tuple[float, dict[str, float]] | None:
     s_idx = _find_object_index(scene["objects"], query["subject_id"], query["subject"])
     o_idx = _find_object_index(scene["objects"], query["object_id"], query["object"])
     if s_idx is None or o_idx is None or s_idx == o_idx:
@@ -187,10 +199,13 @@ def _score_candidate(cfg: TrainConfig, clip_model: Any, processor: Any, model: R
     tokens = vision_out.last_hidden_state[:, 1:, :]
     side = int(math.sqrt(int(tokens.shape[1])))
     feat_map = tokens.transpose(1, 2).reshape(1, int(tokens.shape[2]), side, side)
+    pair_list = [(int(s_idx), int(o_idx))]
+    if retrieval_score == "directional-margin":
+        pair_list.append((int(o_idx), int(s_idx)))
     _, rels, _, _, _, _ = model.forward_from_featmap(
         feat_map,
         obj_boxes_224=[boxes_224.to(device)],
-        pairs=[[(int(s_idx), int(o_idx))]],
+        pairs=[pair_list],
         return_swapped=False,
         return_kept=True,
         learned_prune_k_override=0,
@@ -201,7 +216,11 @@ def _score_candidate(cfg: TrainConfig, clip_model: Any, processor: Any, model: R
     pred_idx = pred_to_idx.get(query["predicate"])
     if pred_idx is None:
         return None
-    return float(logits[0, pred_idx].item())
+    raw = float(logits[0, pred_idx].item())
+    swapped = float(logits[1, pred_idx].item()) if retrieval_score == "directional-margin" and int(logits.shape[0]) > 1 else 0.0
+    if retrieval_score == "directional-margin":
+        return raw - swapped, {"raw": raw, "swapped": swapped, "directional_margin": raw - swapped}
+    return raw, {"raw": raw}
 
 
 @torch.no_grad()
@@ -216,6 +235,8 @@ def main() -> None:
     parser.add_argument("--seed", type=int, default=0)
     parser.add_argument("--query-mode", choices=("random", "both"), default="random")
     parser.add_argument("--score-mode", choices=("classifier", "text", "ensemble", "auto"), default="classifier")
+    parser.add_argument("--retrieval-score", choices=("raw", "directional-margin"), default="raw")
+    parser.add_argument("--text-target", choices=("predicate", "triplet"), default="predicate")
     parser.add_argument("--out", default="runs/core_pure_boxed_retrieval/metrics.json")
     args = parser.parse_args()
 
@@ -237,8 +258,12 @@ def main() -> None:
     pred_vocab = _predicate_vocab(str(args.vg150_root), predicates)
     pred_to_idx = {pred: idx for idx, pred in enumerate(pred_vocab)}
     pred_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in pred_vocab], device)
+    classifier_classes = int(getattr(model, "predicate_classifier_classes", 0))
+    classifier_vocab_mismatch = bool(str(args.score_mode) != "text" and classifier_classes != len(pred_vocab))
 
     total = correct = skipped = 0
+    predicate_counts: Counter[str] = Counter()
+    predicate_oov = 0
     by_group: dict[str, Counter[str]] = defaultdict(Counter)
     examples: list[dict[str, Any]] = []
     query_limit = int(args.max_pairs) * (2 if args.query_mode == "both" else 1) if int(args.max_pairs) > 0 else 0
@@ -254,10 +279,39 @@ def main() -> None:
         if args.query_mode == "random":
             queries = [random.choice(queries)]
         for query in queries:
-            scores = {scene_key: _score_candidate(cfg, clip_model, processor, model, pred_emb, pred_to_idx, scenes[scene_key], query, device) for scene_key in SCENE_KEYS}
-            if any(value is None for value in scores.values()):
+            predicate_counts[query["predicate"]] += 1
+            local_pred_emb = pred_emb
+            local_pred_to_idx = pred_to_idx
+            if args.text_target == "triplet":
+                local_pred_emb = _text_features(
+                    clip_model,
+                    processor,
+                    [f"a scene where {query['subject']} {query['predicate']} {query['object']}"],
+                    device,
+                )
+                local_pred_to_idx = {query["predicate"]: 0}
+            elif query["predicate"] not in pred_to_idx:
+                predicate_oov += 1
+            scored = {
+                scene_key: _score_candidate(
+                    cfg,
+                    clip_model,
+                    processor,
+                    model,
+                    local_pred_emb,
+                    local_pred_to_idx,
+                    scenes[scene_key],
+                    query,
+                    device,
+                    retrieval_score=str(args.retrieval_score),
+                )
+                for scene_key in SCENE_KEYS
+            }
+            if any(value is None for value in scored.values()):
                 skipped += 1
                 continue
+            scores = {scene_key: float(scored[scene_key][0]) for scene_key in SCENE_KEYS}
+            score_details = {scene_key: scored[scene_key][1] for scene_key in SCENE_KEYS}
             pred_scene = max(SCENE_KEYS, key=lambda key: float(scores[key]))
             ok = pred_scene == query["target_scene"]
             total += 1
@@ -267,7 +321,7 @@ def main() -> None:
             distractor = "scene_B" if query["target_scene"] == "scene_A" else "scene_A"
             by_group[group]["margin_sum"] += float(scores[query["target_scene"]]) - float(scores[distractor])
             if len(examples) < 50:
-                examples.append({"pair_id": pair_id, "group": group, "query": query, "scores": scores, "pred_scene": pred_scene, "descriptions": {k: scenes[k]["description"] for k in SCENE_KEYS}})
+                examples.append({"pair_id": pair_id, "group": group, "query": query, "scores": scores, "score_details": score_details, "pred_scene": pred_scene, "descriptions": {k: scenes[k]["description"] for k in SCENE_KEYS}})
             if query_limit and total >= query_limit:
                 break
 
@@ -278,7 +332,14 @@ def main() -> None:
         "skipped": skipped,
         "accuracy": correct / total if total else 0.0,
         "score_mode": str(args.score_mode),
+        "retrieval_score": str(args.retrieval_score),
+        "text_target": str(args.text_target),
         "query_mode": str(args.query_mode),
+        "classifier_classes": classifier_classes,
+        "predicate_vocab_size": len(pred_vocab),
+        "classifier_vocab_mismatch": classifier_vocab_mismatch,
+        "predicate_oov": predicate_oov,
+        "top_predicates": predicate_counts.most_common(30),
         "by_group": {
             group: {"accuracy": c["correct"] / c["total"] if c["total"] else 0.0, "mean_margin": c["margin_sum"] / c["total"] if c["total"] else 0.0, **dict(c)}
             for group, c in sorted(by_group.items())
