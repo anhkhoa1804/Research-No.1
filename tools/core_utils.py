@@ -77,7 +77,7 @@ def entity_id(entity: Dict[str, Any], fallback: int) -> str:
 
 
 def entity_label(entity: Dict[str, Any]) -> str:
-    for key in ("label", "name", "category", "class", "object", "names"):
+    for key in ("base_label", "label", "name", "category", "class", "object", "names"):
         if key in entity:
             return normalize_label(entity.get(key))
     return "object"
@@ -118,7 +118,7 @@ def grounding_box(grounded: Dict[str, Any]) -> Any:
 
 
 def scene_image_value(scene: Dict[str, Any]) -> str:
-    for key in ("image", "image_path", "filename", "file_name", "path"):
+    for key in ("image", "image_path", "file_path", "filename", "file_name", "path"):
         value = scene.get(key)
         if isinstance(value, str) and value.strip() != "":
             return value.strip()
