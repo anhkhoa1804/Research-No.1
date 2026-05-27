@@ -132,6 +132,57 @@ PREDICATE_ALIASES = {
 CORE_RELATION_GROUPS = {"Action_Role_Reversal", "Gaze_Attention", "Occlusion_Depth", "Spatial_Containment", "Extreme_Compositional_OOD"}
 CORE_NON_RELATION_GROUPS = {"Attribute_Binding"}
 
+GENERIC_OOV_MAP_TARGETS = {"and", "of", "has", "made of", "part of", "belonging to", "to", "from", "with", "relation"}
+MANUAL_OOV_PREDICATE_ALIASES = {
+    "aligned with": "along",
+    "balancing on": "standing on",
+    "draped over": "over",
+    "growing inside": "in",
+    "hiding behind": "behind",
+    "leaning against": "against",
+    "oriented towards": "looking at",
+    "partially obscured by": "behind",
+    "placed over": "over",
+    "pointed towards": "looking at",
+    "sleeping on": "laying on",
+    "obscuring": "covering",
+}
+CORE_ACTION_ONLY_HINTS = {
+    "break",
+    "breaking",
+    "shatter",
+    "shattering",
+    "crush",
+    "crushing",
+    "damage",
+    "damaging",
+    "destroy",
+    "destroying",
+    "flatten",
+    "flattening",
+    "split",
+    "splitting",
+    "strike",
+    "striking",
+    "ram",
+    "ramming",
+    "push",
+    "pushing",
+    "pull",
+    "pulling",
+    "drag",
+    "dragging",
+    "lift",
+    "lifting",
+    "chase",
+    "chasing",
+    "teach",
+    "teaching",
+    "wash",
+    "washing",
+    "knocking over",
+}
+
 
 def _clean(value: Any) -> str:
     return " ".join(str(value).strip().lower().replace("_", " ").split())
@@ -213,27 +264,80 @@ def _text_features(clip_model: Any, processor: Any, texts: list[str], device: to
     return F.normalize(feats.float(), dim=-1)
 
 
+def _is_core_action_only(predicate: str) -> bool:
+    return predicate in CORE_ACTION_ONLY_HINTS or any(f" {hint}" in f" {predicate}" for hint in CORE_ACTION_ONLY_HINTS)
+
+
+def _manual_oov_mapping(predicate: str, pred_vocab: set[str]) -> dict[str, Any] | None:
+    target = MANUAL_OOV_PREDICATE_ALIASES.get(predicate)
+    if target is None or target not in pred_vocab:
+        return None
+    return {"mapped_predicate": target, "similarity": 1.0, "mapping_source": "manual"}
+
+
 def _build_oov_predicate_map(
     clip_model: Any,
     processor: Any,
     predicates: set[str],
     pred_vocab: list[str],
     device: torch.device,
-) -> dict[str, dict[str, Any]]:
-    oov_predicates = sorted(pred for pred in predicates if pred and pred not in set(pred_vocab))
-    if not oov_predicates:
-        return {}
-    vocab_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in pred_vocab], device)
-    oov_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in oov_predicates], device)
+    *,
+    mode: str = "text",
+    block_generic: bool = False,
+    compatible_only: bool = False,
+    min_similarity: float = 0.0,
+) -> tuple[dict[str, dict[str, Any]], Counter[str]]:
+    pred_vocab_set = set(pred_vocab)
+    oov_predicates = sorted(pred for pred in predicates if pred and pred not in pred_vocab_set)
+    rejected: Counter[str] = Counter()
+    if not oov_predicates or mode == "none":
+        return {}, rejected
+
+    mapping: dict[str, dict[str, Any]] = {}
+    remaining = []
+    if mode in {"manual", "manual_then_text"}:
+        for pred in oov_predicates:
+            manual = _manual_oov_mapping(pred, pred_vocab_set)
+            if manual is None:
+                remaining.append(pred)
+            else:
+                mapping[pred] = manual
+    else:
+        remaining = oov_predicates
+
+    if mode == "manual":
+        for pred in remaining:
+            rejected["no_manual_mapping"] += 1
+        return mapping, rejected
+
+    if compatible_only:
+        compatible_remaining = []
+        for pred in remaining:
+            if _is_core_action_only(pred):
+                rejected["core_action_only"] += 1
+            else:
+                compatible_remaining.append(pred)
+        remaining = compatible_remaining
+    if not remaining:
+        return mapping, rejected
+
+    candidate_vocab = [pred for pred in pred_vocab if not (block_generic and pred in GENERIC_OOV_MAP_TARGETS)]
+    if not candidate_vocab:
+        rejected["empty_candidate_vocab"] += len(remaining)
+        return mapping, rejected
+
+    vocab_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in candidate_vocab], device)
+    oov_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in remaining], device)
     similarities = oov_emb @ vocab_emb.T
     best_scores, best_indices = similarities.max(dim=1)
-    return {
-        pred: {
-            "mapped_predicate": pred_vocab[int(best_indices[idx].item())],
-            "similarity": float(best_scores[idx].item()),
-        }
-        for idx, pred in enumerate(oov_predicates)
-    }
+    for idx, pred in enumerate(remaining):
+        target = candidate_vocab[int(best_indices[idx].item())]
+        similarity = float(best_scores[idx].item())
+        if similarity < min_similarity:
+            rejected["below_min_similarity"] += 1
+            continue
+        mapping[pred] = {"mapped_predicate": target, "similarity": similarity, "mapping_source": "text"}
+    return mapping, rejected
 
 
 def _scene_records(version: str, group: str, meta_path: Path, item: dict[str, Any], item_index: int) -> dict[str, dict[str, Any]] | None:
@@ -365,7 +469,10 @@ def main() -> None:
     parser.add_argument("--decision-rule", choices=("max", "min"), default="max")
     parser.add_argument("--predicate-vocab-mode", choices=("union", "vg150"), default="union")
     parser.add_argument("--canonicalize-predicates", choices=("aliases", "none"), default="aliases")
-    parser.add_argument("--oov-map-mode", choices=("none", "text"), default="none", help="Map predicate OOVs into the active predicate vocab with CLIP text cosine.")
+    parser.add_argument("--oov-map-mode", choices=("none", "manual", "text", "manual_then_text"), default="none", help="Map predicate OOVs into the active predicate vocab.")
+    parser.add_argument("--oov-map-block-generic", action="store_true", help="Prevent text OOV mapping into generic VG predicates such as of/has/made of/part of.")
+    parser.add_argument("--oov-map-compatible-only", action="store_true", help="Do not text-map CORE action predicates that have no reliable VG150 equivalent.")
+    parser.add_argument("--oov-map-min-similarity", type=float, default=0.0, help="Reject text OOV mappings below this CLIP cosine similarity.")
     parser.add_argument("--skip-oov", action="store_true")
     parser.add_argument("--group-filter", default="", help="Comma-separated CORE groups to include, e.g. Action_Role_Reversal,Gaze_Attention.")
     parser.add_argument("--relation-groups-only", action="store_true", help="Skip non-relation diagnostic groups such as Attribute_Binding.")
@@ -395,10 +502,16 @@ def main() -> None:
     pred_vocab = _predicate_vocab(str(args.vg150_root), predicates, mode=str(args.predicate_vocab_mode))
     pred_to_idx = {pred: idx for idx, pred in enumerate(pred_vocab)}
     pred_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in pred_vocab], device)
-    oov_predicate_map = (
-        _build_oov_predicate_map(clip_model, processor, predicates, pred_vocab, device)
-        if str(args.oov_map_mode) == "text"
-        else {}
+    oov_predicate_map, oov_reject_reasons = _build_oov_predicate_map(
+        clip_model,
+        processor,
+        predicates,
+        pred_vocab,
+        device,
+        mode=str(args.oov_map_mode),
+        block_generic=bool(args.oov_map_block_generic),
+        compatible_only=bool(args.oov_map_compatible_only),
+        min_similarity=float(args.oov_map_min_similarity),
     )
     classifier_classes = int(getattr(model, "predicate_classifier_classes", 0))
     classifier_vocab_mismatch = bool(str(args.score_mode) != "text" and classifier_classes != len(pred_vocab))
@@ -410,7 +523,9 @@ def main() -> None:
     raw_predicate_counts: Counter[str] = Counter()
     predicate_oov = 0
     mapped_oov = 0
+    unmapped_oov = 0
     mapped_oov_counts: Counter[tuple[str, str]] = Counter()
+    mapped_oov_source_counts: Counter[str] = Counter()
     by_group: dict[str, Counter[str]] = defaultdict(Counter)
     examples: list[dict[str, Any]] = []
     query_limit = int(args.max_pairs) * (2 if args.query_mode == "both" else 1) if int(args.max_pairs) > 0 else 0
@@ -451,9 +566,12 @@ def main() -> None:
                 mapping = oov_predicate_map.get(query["predicate"])
                 if mapping is not None:
                     mapped_predicate = str(mapping["mapped_predicate"])
-                    scoring_query = {**query, "predicate": mapped_predicate, "original_predicate": query["predicate"], "oov_mapping_similarity": float(mapping["similarity"])}
+                    scoring_query = {**query, "predicate": mapped_predicate, "original_predicate": query["predicate"], "oov_mapping_similarity": float(mapping["similarity"]), "oov_mapping_source": str(mapping.get("mapping_source", "text"))}
                     mapped_oov += 1
                     mapped_oov_counts[(query["predicate"], mapped_predicate)] += 1
+                    mapped_oov_source_counts[str(mapping.get("mapping_source", "text"))] += 1
+                else:
+                    unmapped_oov += 1
                 if bool(args.skip_oov) and mapping is None:
                     skipped += 1
                     skip_reasons["predicate_oov"] += 1
@@ -524,6 +642,9 @@ def main() -> None:
         "predicate_vocab_mode": str(args.predicate_vocab_mode),
         "canonicalize_predicates": str(args.canonicalize_predicates),
         "oov_map_mode": str(args.oov_map_mode),
+        "oov_map_block_generic": bool(args.oov_map_block_generic),
+        "oov_map_compatible_only": bool(args.oov_map_compatible_only),
+        "oov_map_min_similarity": float(args.oov_map_min_similarity),
         "skip_oov": bool(args.skip_oov),
         "group_filter": sorted(group_filter),
         "relation_groups_only": bool(args.relation_groups_only),
@@ -532,12 +653,17 @@ def main() -> None:
         "classifier_vocab_mismatch": classifier_vocab_mismatch,
         "predicate_oov": predicate_oov,
         "mapped_oov": mapped_oov,
+        "unmapped_oov": unmapped_oov,
+        "effective_coverage_rate": covered_queries / usable_queries if usable_queries else 0.0,
+        "oov_reject_reasons": dict(oov_reject_reasons),
+        "oov_mapping_sources": dict(mapped_oov_source_counts),
         "top_oov_mappings": [
             {
                 "predicate": source,
                 "mapped_predicate": target,
                 "count": count,
                 "similarity": float(oov_predicate_map.get(source, {}).get("similarity", 0.0)),
+                "mapping_source": str(oov_predicate_map.get(source, {}).get("mapping_source", "")),
             }
             for (source, target), count in mapped_oov_counts.most_common(30)
         ],
