@@ -37,6 +37,28 @@ GENERIC_OBJECTS = {"", "object", "objects", "thing", "entity", "unknown", "none"
 GENERIC_RELATIONS = {"", "relation", "relationships", "unknown", "none", "background", "__background__", "no relation", "no interaction"}
 
 
+
+
+def _feature_tensor(output: Any, *, kind: str) -> torch.Tensor:
+    if isinstance(output, torch.Tensor):
+        return output
+    for attr in (f"{kind}_embeds", "pooler_output"):
+        value = getattr(output, attr, None)
+        if isinstance(value, torch.Tensor):
+            return value
+    if isinstance(output, (tuple, list)) and output and isinstance(output[0], torch.Tensor):
+        return output[0]
+    if isinstance(output, dict):
+        for key in (f"{kind}_embeds", "pooler_output", "last_hidden_state"):
+            value = output.get(key)
+            if isinstance(value, torch.Tensor):
+                return value[:, 0] if value.ndim == 3 else value
+    last_hidden = getattr(output, "last_hidden_state", None)
+    if isinstance(last_hidden, torch.Tensor):
+        return last_hidden[:, 0]
+    raise TypeError(f"Unsupported CLIP {kind} output type: {type(output)}")
+
+
 def _clean(value: Any) -> str:
     return " ".join(str(value).strip().lower().replace("_", " ").split())
 
@@ -115,10 +137,10 @@ def main() -> None:
             with Image.open(pair["images"][scene_key]) as image:
                 images.append(image.convert("RGB"))
         image_inputs = processor(images=images, return_tensors="pt").to(device)
-        image_features = F.normalize(model.get_image_features(**image_inputs), dim=-1)
+        image_features = F.normalize(_feature_tensor(model.get_image_features(**image_inputs), kind="image"), dim=-1)
         for target_index, scene_key in enumerate(SCENE_KEYS):
             text_inputs = processor(text=[pair["texts"][scene_key]], return_tensors="pt", padding=True, truncation=True).to(device)
-            text_features = F.normalize(model.get_text_features(**text_inputs), dim=-1)
+            text_features = F.normalize(_feature_tensor(model.get_text_features(**text_inputs), kind="text"), dim=-1)
             scores = (text_features @ image_features.T).squeeze(0)
             pred_index = int(torch.argmax(scores).item())
             is_correct = pred_index == target_index
