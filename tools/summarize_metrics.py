@@ -54,6 +54,17 @@ def main() -> None:
                             compact[mode] = {"R@50": predcls.get("R@50"), "mR@50": predcls.get("mR@50")}
                 if compact:
                     print("  score_modes:", compact)
+            obj_diag = _get(row, ["val_sgg", "object_diag"], {}) or {}
+            if isinstance(obj_diag, dict) and obj_diag:
+                print(
+                    "  object_diag: top1_acc={:.4f} topk_acc={:.4f} endpoint_topk={:.4f}".format(
+                        float(obj_diag.get("clip_top1_object_acc", 0.0) or 0.0),
+                        float(obj_diag.get("clip_topk_object_acc", 0.0) or 0.0),
+                        float(obj_diag.get("triplet_endpoint_topk_coverage", 0.0) or 0.0),
+                    )
+                )
+                print("  obj_gt_top:", [(x.get("label"), x.get("count")) for x in (obj_diag.get("gt_top", []) or [])[:5] if isinstance(x, dict)])
+                print("  obj_pred_top1:", [(x.get("label"), x.get("count")) for x in (obj_diag.get("pred_top1", []) or [])[:5] if isinstance(x, dict)])
             print("  gt_top:", [(x.get("label"), x.get("count")) for x in gt_top[:5] if isinstance(x, dict)])
             print("  pred_top:", [(x.get("label"), x.get("count")) for x in pred_top[:5] if isinstance(x, dict)])
 

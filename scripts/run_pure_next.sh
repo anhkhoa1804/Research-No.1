@@ -99,6 +99,11 @@ FREQ_BIAS_ALPHA=${FREQ_BIAS_ALPHA:-1.0}
 FREQ_BIAS_PATH=${FREQ_BIAS_PATH:-${DATA_ROOT}/frequency_prior.json}
 EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER=${EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER:-true}
 EVAL_SGG_CLIP_OBJ_TOPK=${EVAL_SGG_CLIP_OBJ_TOPK:-5}
+EVAL_SGG_SGCLS_USE_OBJ_SCORES=${EVAL_SGG_SGCLS_USE_OBJ_SCORES:-false}
+EVAL_SGG_SGCLS_ORACLE_LABELS=${EVAL_SGG_SGCLS_ORACLE_LABELS:-false}
+EVAL_SGG_USE_GT_PAIRS=${EVAL_SGG_USE_GT_PAIRS:-true}
+EVAL_SGG_GROUNDING_DINO_ENABLED=${EVAL_SGG_GROUNDING_DINO_ENABLED:-false}
+EVAL_SGG_REPORT_NOGRAPH=${EVAL_SGG_REPORT_NOGRAPH:-false}
 TRAIN_OBJECTIVE=${TRAIN_OBJECTIVE:-full}
 PREDICATE_CE_POSITIVE_ONLY=${PREDICATE_CE_POSITIVE_ONLY:-false}
 LAMBDA_PREDICATE_CE=${LAMBDA_PREDICATE_CE:-1.2}
@@ -234,7 +239,7 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --eval_only "${EVAL_ONLY}" \
   --eval_batches "${EVAL_BATCHES}" \
   --eval_on_train_split "${EVAL_ON_TRAIN_SPLIT}" \
-  --eval_sgg_use_gt_pairs true \
+  --eval_sgg_use_gt_pairs "${EVAL_SGG_USE_GT_PAIRS}" \
   --eval_sgg_predicate_score_mode "${EVAL_SCORE_MODE}" \
   --eval_sgg_predicate_ensemble_alpha "${EVAL_ENSEMBLE_ALPHA}" \
   --eval_sgg_classifier_temperature "${EVAL_CLASSIFIER_TEMPERATURE}" \
@@ -242,8 +247,10 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --eval_sgg_compare_score_modes "${EVAL_COMPARE_SCORE_MODES}" \
   --eval_sgg_use_clip_obj_classifier "${EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER}" \
   --eval_sgg_clip_obj_topk "${EVAL_SGG_CLIP_OBJ_TOPK}" \
-  --eval_sgg_grounding_dino_enabled false \
-  --eval_sgg_report_nograph false \
+  --eval_sgg_sgcls_use_obj_scores "${EVAL_SGG_SGCLS_USE_OBJ_SCORES}" \
+  --eval_sgg_sgcls_oracle_labels "${EVAL_SGG_SGCLS_ORACLE_LABELS}" \
+  --eval_sgg_grounding_dino_enabled "${EVAL_SGG_GROUNDING_DINO_ENABLED}" \
+  --eval_sgg_report_nograph "${EVAL_SGG_REPORT_NOGRAPH}" \
   --freq_bias_enabled "${FREQ_BIAS_ENABLED}" \
   --freq_bias_path "${FREQ_BIAS_PATH}" \
   --freq_bias_alpha "${FREQ_BIAS_ALPHA}" \

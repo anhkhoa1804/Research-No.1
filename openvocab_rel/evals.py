@@ -1132,6 +1132,42 @@ def eval_sgg_standard(
         "gt_counts": {},
         "pred_counts": {},
     }
+    object_diag: Dict[str, Any] = {
+        "num_images": 0,
+        "num_objects": 0,
+        "top1_hits": 0,
+        "topk_hits": 0,
+        "num_gt_triplets": 0,
+        "triplet_endpoint_topk_hits": 0,
+        "gt_top": {},
+        "pred_top1": {},
+    }
+
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
 
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
@@ -1242,7 +1278,11 @@ def eval_sgg_standard(
                 pred_triplets_ng = _make_triplet_predictions_nogc(ex, pair_list, rel_probs, gt_labels, gt_obj_scores, pred_vocab, device)
                 _process_task("predcls_nogc", pred_triplets_ng)
 
-            if bool(getattr(cfg, "eval_sgg_use_clip_obj_classifier", True)):
+            if bool(getattr(cfg, "eval_sgg_sgcls_oracle_labels", False)):
+                pred_obj_labels, pred_obj_scores = gt_labels, gt_obj_scores
+                obj_label_cands = [[label] for label in pred_obj_labels]
+                obj_score_cands = [pred_obj_scores[i : i + 1] for i in range(int(pred_obj_scores.numel()))]
+            elif bool(getattr(cfg, "eval_sgg_use_clip_obj_classifier", True)):
                 obj_label_cands, obj_score_cands = _predict_object_label_candidates_from_clip(cfg, clip_model, processor, ex, obj_text_feats, obj_vocab, device)
                 pred_obj_labels = [labels[0] if len(labels) > 0 else "object" for labels in obj_label_cands]
                 pred_obj_scores = torch.stack([scores[0] if int(scores.numel()) > 0 else torch.tensor(1.0, device=device) for scores in obj_score_cands]) if len(obj_score_cands) > 0 else torch.empty((0,), device=device)
@@ -1250,6 +1290,11 @@ def eval_sgg_standard(
                 pred_obj_labels, pred_obj_scores = gt_labels, gt_obj_scores
                 obj_label_cands = [[label] for label in pred_obj_labels]
                 obj_score_cands = [pred_obj_scores[i : i + 1] for i in range(int(pred_obj_scores.numel()))]
+
+            _update_object_diag(gt_labels, obj_label_cands, gt["pred_labels"], gt["subj_labels"], gt["obj_labels"])
+            if not bool(getattr(cfg, "eval_sgg_sgcls_use_obj_scores", False)):
+                obj_score_cands = [torch.ones((len(labels),), device=device, dtype=torch.float32) for labels in obj_label_cands]
+                pred_obj_scores = torch.ones((len(pred_obj_labels),), device=device, dtype=torch.float32)
 
             if len(obj_label_cands) == len(gt_labels):
                 sgcls_triplets = _make_triplet_predictions_obj_candidates(ex, pair_list, pair_base_scores, pair_pred_idx, pair_pred_scores, obj_label_cands, obj_score_cands, device)
@@ -1313,7 +1358,8 @@ def eval_sgg_standard(
                 "sgcls": "gt_boxes+pred_labels",
                 "sgdet": "zero_shot_detector_boxes+detector_labels",
             },
-            "object_classifier": "clip_top1" if bool(getattr(cfg, "eval_sgg_use_clip_obj_classifier", True)) else "gt",
+            "object_classifier": ("gt_oracle" if bool(getattr(cfg, "eval_sgg_sgcls_oracle_labels", False)) else (f"clip_top{int(getattr(cfg, 'eval_sgg_clip_obj_topk', 5))}" if bool(getattr(cfg, "eval_sgg_use_clip_obj_classifier", True)) else "gt")),
+            "sgcls_use_obj_scores": bool(getattr(cfg, "eval_sgg_sgcls_use_obj_scores", False)),
             "object_language_anchor_enabled": bool(getattr(cfg, "object_language_anchor_enabled", False)),
             "object_language_anchor_source": str(getattr(cfg, "object_language_anchor_source", "auto")),
             "object_language_anchor_eval_source": "clip_pred" if bool(getattr(cfg, "eval_sgg_use_clip_obj_classifier", True)) else "gt",
@@ -1369,6 +1415,23 @@ def eval_sgg_standard(
         predicate_diag,
         int(getattr(cfg, "eval_sgg_predicate_diag_topk", 8)),
     )
+    num_objects = max(1, int(object_diag.get("num_objects", 0)))
+    num_gt_triplets = max(1, int(object_diag.get("num_gt_triplets", 0)))
+    def _top_counts(counts: Dict[str, int]) -> List[Dict[str, Any]]:
+        return [
+            {"label": key, "count": int(value)}
+            for key, value in sorted(counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0])))[: int(getattr(cfg, "eval_sgg_predicate_diag_topk", 8))]
+        ]
+    outm["object_diag"] = {
+        "num_images": int(object_diag.get("num_images", 0)),
+        "num_objects": int(object_diag.get("num_objects", 0)),
+        "clip_top1_object_acc": float(object_diag.get("top1_hits", 0)) / float(num_objects),
+        "clip_topk_object_acc": float(object_diag.get("topk_hits", 0)) / float(num_objects),
+        "num_gt_triplets": int(object_diag.get("num_gt_triplets", 0)),
+        "triplet_endpoint_topk_coverage": float(object_diag.get("triplet_endpoint_topk_hits", 0)) / float(num_gt_triplets),
+        "gt_top": _top_counts(object_diag.get("gt_top", {})),
+        "pred_top1": _top_counts(object_diag.get("pred_top1", {})),
+    }
     return outm
 
 class _EvalTextCache:
@@ -1724,6 +1787,32 @@ def eval_query_grounding(
     _, pred_emb = encode_predicate_vocab(clip_model, processor, pred_vocab, device, prompt_fn=pred_prompt_roles, direction="s2o")
     pred_to_idx = {p: i for i, p in enumerate(pred_vocab)}
 
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
+
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
             break
@@ -1944,6 +2033,32 @@ def eval_prompt_robustness(
     }
     text_cache = _EvalTextCache(clip_model, processor, device)
 
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
+
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
             break
@@ -2069,6 +2184,32 @@ def eval_prune_reliability(
     kept_sum = 0
     cand_sum = 0
 
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
+
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
             break
@@ -2156,6 +2297,32 @@ def eval_global_predicate_classification(
 
     b_top1 = {"head": 0, "mid": 0, "tail": 0}
     b_n = {"head": 0, "mid": 0, "tail": 0}
+
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
 
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
@@ -2251,6 +2418,32 @@ def eval_swap_consistency(
 
     swap_cos = []
 
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
+
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
             break
@@ -2320,6 +2513,32 @@ def eval_query_grounding_split(
 
     met_train = _accum()
     met_held = _accum()
+
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
 
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
@@ -2438,6 +2657,32 @@ def eval_object_leakage_diagnostic(
     flip_top1 = 0
     n = 0
 
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
+
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
             break
@@ -2545,6 +2790,32 @@ def eval_latency_throughput(
     n_img = 0
     n_pairs = 0
 
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
+
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
             break
@@ -2607,6 +2878,32 @@ def eval_prune_tradeoff(
     kept_k_sum = {k: 0 for k in ks}
     n_img = 0
     cand_sum = 0
+
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
 
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):
@@ -2691,6 +2988,32 @@ def eval_geometry_hard_negative_stress(
     r1 = 0
     r5 = 0
     n = 0
+
+    def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
+        object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
+        n_obj = min(len(gt_labels_i), len(cand_labels_i))
+        object_diag["num_objects"] = int(object_diag.get("num_objects", 0)) + int(n_obj)
+        for idx in range(n_obj):
+            gt_label = _normalize_vg_label(gt_labels_i[idx], label_aliases)
+            cands = [_normalize_vg_label(x, label_aliases) for x in cand_labels_i[idx]]
+            if gt_label:
+                object_diag["gt_top"][gt_label] = int(object_diag["gt_top"].get(gt_label, 0)) + 1
+            if cands:
+                object_diag["pred_top1"][cands[0]] = int(object_diag["pred_top1"].get(cands[0], 0)) + 1
+            if cands and cands[0] == gt_label:
+                object_diag["top1_hits"] = int(object_diag.get("top1_hits", 0)) + 1
+            if gt_label in set(cands):
+                object_diag["topk_hits"] = int(object_diag.get("topk_hits", 0)) + 1
+        n_trip = min(len(gt_pred_labels_i), len(gt_subj_i), len(gt_obj_i))
+        object_diag["num_gt_triplets"] = int(object_diag.get("num_gt_triplets", 0)) + int(n_trip)
+        for gt_subj, gt_obj in zip(gt_subj_i[:n_trip], gt_obj_i[:n_trip]):
+            subj_label = _normalize_vg_label(gt_subj, label_aliases)
+            obj_label = _normalize_vg_label(gt_obj, label_aliases)
+            subj_ok = any(subj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            obj_ok = any(obj_label in {_normalize_vg_label(x, label_aliases) for x in cands} for cands in cand_labels_i)
+            if subj_ok and obj_ok:
+                object_diag["triplet_endpoint_topk_hits"] = int(object_diag.get("triplet_endpoint_topk_hits", 0)) + 1
+
 
     for bi, batch in enumerate(loader):
         if bi >= int(max_batches):

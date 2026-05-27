@@ -261,6 +261,8 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--eval_sgg_use_gt_pairs", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_use_gt_pairs)
     p.add_argument("--eval_sgg_use_clip_obj_classifier", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_use_clip_obj_classifier)
     p.add_argument("--eval_sgg_clip_obj_topk", type=int, default=getattr(TrainConfig, "eval_sgg_clip_obj_topk", 5))
+    p.add_argument("--eval_sgg_sgcls_use_obj_scores", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "eval_sgg_sgcls_use_obj_scores", False))
+    p.add_argument("--eval_sgg_sgcls_oracle_labels", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "eval_sgg_sgcls_oracle_labels", False))
     p.add_argument("--eval_sgg_clip_obj_cache_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_clip_obj_cache_enabled)
     p.add_argument("--eval_sgg_clip_obj_cache_dir", type=str, default=TrainConfig.eval_sgg_clip_obj_cache_dir)
     p.add_argument("--eval_sgg_report_nograph", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_report_nograph)
