@@ -213,6 +213,29 @@ def _text_features(clip_model: Any, processor: Any, texts: list[str], device: to
     return F.normalize(feats.float(), dim=-1)
 
 
+def _build_oov_predicate_map(
+    clip_model: Any,
+    processor: Any,
+    predicates: set[str],
+    pred_vocab: list[str],
+    device: torch.device,
+) -> dict[str, dict[str, Any]]:
+    oov_predicates = sorted(pred for pred in predicates if pred and pred not in set(pred_vocab))
+    if not oov_predicates:
+        return {}
+    vocab_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in pred_vocab], device)
+    oov_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in oov_predicates], device)
+    similarities = oov_emb @ vocab_emb.T
+    best_scores, best_indices = similarities.max(dim=1)
+    return {
+        pred: {
+            "mapped_predicate": pred_vocab[int(best_indices[idx].item())],
+            "similarity": float(best_scores[idx].item()),
+        }
+        for idx, pred in enumerate(oov_predicates)
+    }
+
+
 def _scene_records(version: str, group: str, meta_path: Path, item: dict[str, Any], item_index: int) -> dict[str, dict[str, Any]] | None:
     pair_id = str(item.get("pair_id", item.get("id", f"idx_{item_index}")))
     item.setdefault("group", group)
@@ -342,6 +365,7 @@ def main() -> None:
     parser.add_argument("--decision-rule", choices=("max", "min"), default="max")
     parser.add_argument("--predicate-vocab-mode", choices=("union", "vg150"), default="union")
     parser.add_argument("--canonicalize-predicates", choices=("aliases", "none"), default="aliases")
+    parser.add_argument("--oov-map-mode", choices=("none", "text"), default="none", help="Map predicate OOVs into the active predicate vocab with CLIP text cosine.")
     parser.add_argument("--skip-oov", action="store_true")
     parser.add_argument("--group-filter", default="", help="Comma-separated CORE groups to include, e.g. Action_Role_Reversal,Gaze_Attention.")
     parser.add_argument("--relation-groups-only", action="store_true", help="Skip non-relation diagnostic groups such as Attribute_Binding.")
@@ -371,6 +395,11 @@ def main() -> None:
     pred_vocab = _predicate_vocab(str(args.vg150_root), predicates, mode=str(args.predicate_vocab_mode))
     pred_to_idx = {pred: idx for idx, pred in enumerate(pred_vocab)}
     pred_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in pred_vocab], device)
+    oov_predicate_map = (
+        _build_oov_predicate_map(clip_model, processor, predicates, pred_vocab, device)
+        if str(args.oov_map_mode) == "text"
+        else {}
+    )
     classifier_classes = int(getattr(model, "predicate_classifier_classes", 0))
     classifier_vocab_mismatch = bool(str(args.score_mode) != "text" and classifier_classes != len(pred_vocab))
 
@@ -380,6 +409,8 @@ def main() -> None:
     predicate_counts: Counter[str] = Counter()
     raw_predicate_counts: Counter[str] = Counter()
     predicate_oov = 0
+    mapped_oov = 0
+    mapped_oov_counts: Counter[tuple[str, str]] = Counter()
     by_group: dict[str, Counter[str]] = defaultdict(Counter)
     examples: list[dict[str, Any]] = []
     query_limit = int(args.max_pairs) * (2 if args.query_mode == "both" else 1) if int(args.max_pairs) > 0 else 0
@@ -404,6 +435,7 @@ def main() -> None:
             usable_queries += 1
             predicate_counts[query["predicate"]] += 1
             raw_predicate_counts[query.get("raw_predicate", query["predicate"])] += 1
+            scoring_query = query
             local_pred_emb = pred_emb
             local_pred_to_idx = pred_to_idx
             if args.text_target == "triplet":
@@ -416,11 +448,17 @@ def main() -> None:
                 local_pred_to_idx = {query["predicate"]: 0}
             elif query["predicate"] not in pred_to_idx:
                 predicate_oov += 1
-                if bool(args.skip_oov):
+                mapping = oov_predicate_map.get(query["predicate"])
+                if mapping is not None:
+                    mapped_predicate = str(mapping["mapped_predicate"])
+                    scoring_query = {**query, "predicate": mapped_predicate, "original_predicate": query["predicate"], "oov_mapping_similarity": float(mapping["similarity"])}
+                    mapped_oov += 1
+                    mapped_oov_counts[(query["predicate"], mapped_predicate)] += 1
+                if bool(args.skip_oov) and mapping is None:
                     skipped += 1
                     skip_reasons["predicate_oov"] += 1
                     continue
-            if query["predicate"] in pred_to_idx or args.text_target == "triplet":
+            if scoring_query["predicate"] in pred_to_idx or args.text_target == "triplet":
                 covered_queries += 1
             scored = {
                 scene_key: _score_candidate(
@@ -431,7 +469,7 @@ def main() -> None:
                     local_pred_emb,
                     local_pred_to_idx,
                     scenes[scene_key],
-                    query,
+                    scoring_query,
                     device,
                     retrieval_score=str(args.retrieval_score),
                 )
@@ -461,7 +499,7 @@ def main() -> None:
             distractor = "scene_B" if query["target_scene"] == "scene_A" else "scene_A"
             by_group[group]["margin_sum"] += float(scores[query["target_scene"]]) - float(scores[distractor])
             if len(examples) < 50:
-                examples.append({"pair_id": pair_id, "group": group, "query": query, "scores": scores, "score_details": score_details, "pred_scene": pred_scene, "decision_rule": str(args.decision_rule), "descriptions": {k: scenes[k]["description"] for k in SCENE_KEYS}})
+                examples.append({"pair_id": pair_id, "group": group, "query": scoring_query, "scores": scores, "score_details": score_details, "pred_scene": pred_scene, "decision_rule": str(args.decision_rule), "descriptions": {k: scenes[k]["description"] for k in SCENE_KEYS}})
             if query_limit and total >= query_limit:
                 break
 
@@ -485,6 +523,7 @@ def main() -> None:
         "decision_rule": str(args.decision_rule),
         "predicate_vocab_mode": str(args.predicate_vocab_mode),
         "canonicalize_predicates": str(args.canonicalize_predicates),
+        "oov_map_mode": str(args.oov_map_mode),
         "skip_oov": bool(args.skip_oov),
         "group_filter": sorted(group_filter),
         "relation_groups_only": bool(args.relation_groups_only),
@@ -492,6 +531,16 @@ def main() -> None:
         "predicate_vocab_size": len(pred_vocab),
         "classifier_vocab_mismatch": classifier_vocab_mismatch,
         "predicate_oov": predicate_oov,
+        "mapped_oov": mapped_oov,
+        "top_oov_mappings": [
+            {
+                "predicate": source,
+                "mapped_predicate": target,
+                "count": count,
+                "similarity": float(oov_predicate_map.get(source, {}).get("similarity", 0.0)),
+            }
+            for (source, target), count in mapped_oov_counts.most_common(30)
+        ],
         "top_predicates": predicate_counts.most_common(30),
         "top_raw_predicates": raw_predicate_counts.most_common(30),
         "by_group": {
