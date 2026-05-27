@@ -32,13 +32,25 @@ def main() -> None:
             gt_top = _get(row, ["val_sgg", "predicate_diag", "gt_top"], []) or []
             score_modes = _get(row, ["val_sgg", "score_modes"], {}) or _get(row, ["val_sgg", "score_mode_metrics"], {}) or {}
             best = _get(row, ["best_so_far"], {}) or {}
+            predcls = _get(row, ["val_sgg", "predcls"], {}) or {}
+            sgcls = _get(row, ["val_sgg", "sgcls"], {}) or {}
+            sgdet = _get(row, ["val_sgg", "sgdet"], {}) or {}
             print(
-                "epoch={epoch} loss={loss:.4f} predcls_R50={r50:.4f} predcls_mR50={mr50:.4f} "
+                "epoch={epoch} loss={loss:.4f} "
+                "predcls_R50={r50:.4f} predcls_R100={r100:.4f} predcls_mR50={mr50:.4f} predcls_mR100={mr100:.4f} "
+                "sgcls_R50={sr50:.4f} sgcls_mR50={smr50:.4f} "
+                "sgdet_R50={dr50:.4f} sgdet_mR50={dmr50:.4f} "
                 "ground_R50={gr50:.4f} pos={pos} cand={cand}".format(
                     epoch=row.get("epoch", "?"),
                     loss=float(_get(row, ["train", "avg_loss"], 0.0) or 0.0),
-                    r50=float(_get(row, ["val_sgg", "predcls", "R@50"], 0.0) or 0.0),
-                    mr50=float(_get(row, ["val_sgg", "predcls", "mR@50"], 0.0) or 0.0),
+                    r50=float(predcls.get("R@50", 0.0) or 0.0),
+                    r100=float(predcls.get("R@100", 0.0) or 0.0),
+                    mr50=float(predcls.get("mR@50", 0.0) or 0.0),
+                    mr100=float(predcls.get("mR@100", 0.0) or 0.0),
+                    sr50=float(sgcls.get("R@50", 0.0) or 0.0),
+                    smr50=float(sgcls.get("mR@50", 0.0) or 0.0),
+                    dr50=float(sgdet.get("R@50", 0.0) or 0.0),
+                    dmr50=float(sgdet.get("mR@50", 0.0) or 0.0),
                     gr50=float(_get(row, ["val_grounding", "R@50"], 0.0) or 0.0),
                     pos=int(_get(row, ["train", "positive_pairs"], 0) or 0),
                     cand=int(_get(row, ["train", "candidate_pairs"], 0) or 0),
