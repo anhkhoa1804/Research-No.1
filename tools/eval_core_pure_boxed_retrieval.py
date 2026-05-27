@@ -94,13 +94,14 @@ def _load_checkpoint(path: Path, device: torch.device, clip_name: str | None) ->
     return cfg, clip_model, processor, model
 
 
-def _predicate_vocab(vg150_root: str, extra_predicates: set[str]) -> list[str]:
+def _predicate_vocab(vg150_root: str, extra_predicates: set[str], *, mode: str = "union") -> list[str]:
     vocab = [_clean(x) for x in scan_vg150_predicate_vocab(vg150_root)]
     seen = set(vocab)
-    for pred in sorted(extra_predicates):
-        if pred and pred not in seen:
-            vocab.append(pred)
-            seen.add(pred)
+    if mode == "union":
+        for pred in sorted(extra_predicates):
+            if pred and pred not in seen:
+                vocab.append(pred)
+                seen.add(pred)
     if "relation" not in seen:
         vocab.append("relation")
     return vocab
@@ -237,6 +238,8 @@ def main() -> None:
     parser.add_argument("--score-mode", choices=("classifier", "text", "ensemble", "auto"), default="classifier")
     parser.add_argument("--retrieval-score", choices=("raw", "directional-margin"), default="raw")
     parser.add_argument("--text-target", choices=("predicate", "triplet"), default="predicate")
+    parser.add_argument("--decision-rule", choices=("max", "min"), default="max")
+    parser.add_argument("--predicate-vocab-mode", choices=("union", "vg150"), default="union")
     parser.add_argument("--out", default="runs/core_pure_boxed_retrieval/metrics.json")
     args = parser.parse_args()
 
@@ -255,13 +258,13 @@ def main() -> None:
             for query in _relation_queries(item_with_group):
                 predicates.add(query["predicate"])
             raw_items.append((version, group, meta_path, item_index, item_with_group))
-    pred_vocab = _predicate_vocab(str(args.vg150_root), predicates)
+    pred_vocab = _predicate_vocab(str(args.vg150_root), predicates, mode=str(args.predicate_vocab_mode))
     pred_to_idx = {pred: idx for idx, pred in enumerate(pred_vocab)}
     pred_emb = _text_features(clip_model, processor, [pred_prompt_roles(p, direction="s2o") for p in pred_vocab], device)
     classifier_classes = int(getattr(model, "predicate_classifier_classes", 0))
     classifier_vocab_mismatch = bool(str(args.score_mode) != "text" and classifier_classes != len(pred_vocab))
 
-    total = correct = skipped = 0
+    total = correct = skipped = inverted_correct = ties = 0
     predicate_counts: Counter[str] = Counter()
     predicate_oov = 0
     by_group: dict[str, Counter[str]] = defaultdict(Counter)
@@ -312,16 +315,25 @@ def main() -> None:
                 continue
             scores = {scene_key: float(scored[scene_key][0]) for scene_key in SCENE_KEYS}
             score_details = {scene_key: scored[scene_key][1] for scene_key in SCENE_KEYS}
-            pred_scene = max(SCENE_KEYS, key=lambda key: float(scores[key]))
+            if float(scores["scene_A"]) == float(scores["scene_B"]):
+                ties += 1
+            pred_scene = (
+                max(SCENE_KEYS, key=lambda key: float(scores[key]))
+                if args.decision_rule == "max"
+                else min(SCENE_KEYS, key=lambda key: float(scores[key]))
+            )
+            inverted_pred_scene = min(SCENE_KEYS, key=lambda key: float(scores[key])) if args.decision_rule == "max" else max(SCENE_KEYS, key=lambda key: float(scores[key]))
             ok = pred_scene == query["target_scene"]
+            inverted_ok = inverted_pred_scene == query["target_scene"]
             total += 1
             correct += int(ok)
+            inverted_correct += int(inverted_ok)
             by_group[group]["total"] += 1
             by_group[group]["correct"] += int(ok)
             distractor = "scene_B" if query["target_scene"] == "scene_A" else "scene_A"
             by_group[group]["margin_sum"] += float(scores[query["target_scene"]]) - float(scores[distractor])
             if len(examples) < 50:
-                examples.append({"pair_id": pair_id, "group": group, "query": query, "scores": scores, "score_details": score_details, "pred_scene": pred_scene, "descriptions": {k: scenes[k]["description"] for k in SCENE_KEYS}})
+                examples.append({"pair_id": pair_id, "group": group, "query": query, "scores": scores, "score_details": score_details, "pred_scene": pred_scene, "decision_rule": str(args.decision_rule), "descriptions": {k: scenes[k]["description"] for k in SCENE_KEYS}})
             if query_limit and total >= query_limit:
                 break
 
@@ -331,10 +343,14 @@ def main() -> None:
         "num_queries": total,
         "skipped": skipped,
         "accuracy": correct / total if total else 0.0,
+        "inverted_accuracy": inverted_correct / total if total else 0.0,
+        "ties": ties,
         "score_mode": str(args.score_mode),
         "retrieval_score": str(args.retrieval_score),
         "text_target": str(args.text_target),
         "query_mode": str(args.query_mode),
+        "decision_rule": str(args.decision_rule),
+        "predicate_vocab_mode": str(args.predicate_vocab_mode),
         "classifier_classes": classifier_classes,
         "predicate_vocab_size": len(pred_vocab),
         "classifier_vocab_mismatch": classifier_vocab_mismatch,
