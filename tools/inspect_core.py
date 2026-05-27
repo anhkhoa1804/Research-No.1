@@ -15,6 +15,8 @@ from core_utils import (
     get_image_size,
     iter_metadata_files,
     load_metadata,
+    grounding_box,
+    grounding_entity_id,
     normalized_cxcywh_to_xyxy,
     relation_endpoints,
     relations_for_scene,
@@ -51,6 +53,7 @@ def inspect_core(root: Path) -> Dict[str, Any]:
 
         for item_index, item in enumerate(items):
             pair_id = str(item.get("pair_id", item.get("id", f"idx_{item_index}")))
+            item.setdefault("group", group)
             if group != "Extreme_Compositional_OOD" and "shared_entities" not in item:
                 warnings.append(f"{version}/{group}/{pair_id}: non-extreme item lacks shared_entities")
             for scene_key in SCENE_KEYS:
@@ -78,10 +81,10 @@ def inspect_core(root: Path) -> Dict[str, Any]:
                     if not isinstance(grounded, dict):
                         errors.append(f"{version}/{group}/{pair_id}/{scene_key}: grounding[{idx}] is not object")
                         continue
-                    ref = grounded.get("entity_id", grounded.get("id", grounded.get("entity")))
+                    ref = grounding_entity_id(grounded)
                     if ref is not None and valid_ids and str(ref) not in valid_ids:
                         errors.append(f"{version}/{group}/{pair_id}/{scene_key}: unknown grounding entity {ref}")
-                    box = grounded.get("box", grounded.get("bbox"))
+                    box = grounding_box(grounded)
                     if normalized_cxcywh_to_xyxy(box, width, height) is None:
                         errors.append(f"{version}/{group}/{pair_id}/{scene_key}: invalid box {box}")
                     counters["all"]["boxes"] += 1

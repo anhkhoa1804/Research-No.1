@@ -15,6 +15,8 @@ from core_utils import (
     get_image_size,
     iter_metadata_files,
     load_metadata,
+    grounding_box,
+    grounding_entity_id,
     normalized_cxcywh_to_xyxy,
     relation_endpoints,
     relation_predicate,
@@ -53,10 +55,10 @@ def build_scene_row(core_root: Path, version: str, group: str, group_dir: Path, 
         for grounded in grounding:
             if not isinstance(grounded, dict):
                 continue
-            raw_id = grounded.get("entity_id", grounded.get("id", grounded.get("entity")))
+            raw_id = grounding_entity_id(grounded)
             if raw_id is None:
                 continue
-            converted = normalized_cxcywh_to_xyxy(grounded.get("box", grounded.get("bbox")), width, height)
+            converted = normalized_cxcywh_to_xyxy(grounding_box(grounded), width, height)
             if converted is not None:
                 box_by_entity[str(raw_id)] = converted
 
@@ -128,6 +130,7 @@ def convert_core(args: argparse.Namespace) -> Dict[str, Any]:
         items = load_metadata(meta_path)
         for item_index, item in enumerate(items):
             pair_id = str(item.get("pair_id", item.get("id", f"idx_{item_index}")))
+            item.setdefault("group", group)
             split = split_for_item(version, group, pair_id, args.train_ratio, args.val_ratio, args.holdout_v2)
             for scene_key in SCENE_KEYS:
                 row = build_scene_row(core_root, version, group, meta_path.parent, item, scene_key, item_index)

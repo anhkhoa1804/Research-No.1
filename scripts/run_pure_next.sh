@@ -98,6 +98,7 @@ FREQ_BIAS_ENABLED=${FREQ_BIAS_ENABLED:-${DEFAULT_FREQ_BIAS_ENABLED}}
 FREQ_BIAS_ALPHA=${FREQ_BIAS_ALPHA:-1.0}
 FREQ_BIAS_PATH=${FREQ_BIAS_PATH:-${DATA_ROOT}/frequency_prior.json}
 EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER=${EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER:-true}
+EVAL_SGG_CLIP_OBJ_TOPK=${EVAL_SGG_CLIP_OBJ_TOPK:-5}
 TRAIN_OBJECTIVE=${TRAIN_OBJECTIVE:-full}
 PREDICATE_CE_POSITIVE_ONLY=${PREDICATE_CE_POSITIVE_ONLY:-false}
 LAMBDA_PREDICATE_CE=${LAMBDA_PREDICATE_CE:-1.2}
@@ -240,6 +241,7 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --eval_sgg_text_temperature "${EVAL_TEXT_TEMPERATURE}" \
   --eval_sgg_compare_score_modes "${EVAL_COMPARE_SCORE_MODES}" \
   --eval_sgg_use_clip_obj_classifier "${EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER}" \
+  --eval_sgg_clip_obj_topk "${EVAL_SGG_CLIP_OBJ_TOPK}" \
   --eval_sgg_grounding_dino_enabled false \
   --eval_sgg_report_nograph false \
   --freq_bias_enabled "${FREQ_BIAS_ENABLED}" \

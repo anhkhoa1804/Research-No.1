@@ -85,10 +85,36 @@ def entity_label(entity: Dict[str, Any]) -> str:
 
 def entities_for_scene(item: Dict[str, Any], scene_key: str) -> List[Dict[str, Any]]:
     scene = item.get(scene_key, {}) if isinstance(item.get(scene_key, {}), dict) else {}
-    for source in (item.get("shared_entities"), item.get("entities"), scene.get("entities"), scene.get("objects")):
+    group_name = str(item.get("group", item.get("core_group", ""))).strip()
+    pair_id = str(item.get("pair_id", item.get("id", ""))).strip()
+    scene_sources = (scene.get("entities"), scene.get("objects"))
+    shared_sources = (item.get("shared_entities"), item.get("entities"))
+    prefer_scene = group_name == "Extreme_Compositional_OOD" or "Extreme_OOD" in pair_id
+    sources = scene_sources + shared_sources if prefer_scene else shared_sources + scene_sources
+    for source in sources:
         if isinstance(source, list):
-            return [x for x in source if isinstance(x, dict)]
+            rows = [x for x in source if isinstance(x, dict)]
+            if rows:
+                return rows
     return []
+
+
+def grounding_entity_id(grounded: Dict[str, Any]) -> Optional[str]:
+    for key in ("entity_id", "entity", "target_entity_id", "target_id", "object_id", "obj_id"):
+        value = grounded.get(key)
+        if value is not None and str(value).strip() != "":
+            return str(value).strip()
+    value = grounded.get("id")
+    if value is not None and str(value).strip().startswith("e"):
+        return str(value).strip()
+    return None
+
+
+def grounding_box(grounded: Dict[str, Any]) -> Any:
+    for key in ("box", "bbox", "bounding_box", "bbox_2d", "grounding_box"):
+        if key in grounded:
+            return grounded.get(key)
+    return None
 
 
 def scene_image_value(scene: Dict[str, Any]) -> str:
@@ -227,29 +253,39 @@ def normalized_cxcywh_to_xyxy(box: Any, width: int, height: int) -> Optional[Lis
 
 
 def relation_predicate(rel: Dict[str, Any]) -> str:
-    for key in ("predicate", "pred", "relation", "label", "name"):
+    for key in ("predicate", "pred", "relation", "Relation", "label", "name"):
         value = rel.get(key)
         if value is not None and str(value).strip() != "":
             return normalize_label(value, fallback="relation")
     return "relation"
 
 
+def relation_ref_id(value: Any) -> Optional[str]:
+    if isinstance(value, dict):
+        for key in ("id", "entity_id", "object_id", "obj_id", "name"):
+            inner = value.get(key)
+            if inner is not None and str(inner).strip() != "":
+                return str(inner).strip()
+        return None
+    if value is None or str(value).strip() == "":
+        return None
+    return str(value).strip()
+
+
 def relation_endpoints(rel: Dict[str, Any]) -> Tuple[Optional[str], Optional[str]]:
-    subject = rel.get("subject_id", rel.get("subj_id", rel.get("subject", rel.get("source"))))
-    obj = rel.get("object_id", rel.get("obj_id", rel.get("object", rel.get("target"))))
-    subject_id = None if subject is None else str(subject).strip()
-    object_id = None if obj is None else str(obj).strip()
-    return subject_id, object_id
+    subject = rel.get("subject_id", rel.get("subj_id", rel.get("subject", rel.get("source", rel.get("head", rel.get("from"))))))
+    obj = rel.get("object_id", rel.get("obj_id", rel.get("object", rel.get("target", rel.get("tail", rel.get("to"))))))
+    return relation_ref_id(subject), relation_ref_id(obj)
 
 
 def relations_for_scene(scene: Dict[str, Any]) -> List[Dict[str, Any]]:
-    for key in ("relationships", "relations", "edges", "triplets"):
+    for key in ("relationships", "relations", "Relations", "edges", "triplets", "knowledge_graph_relations"):
         value = scene.get(key)
         if isinstance(value, list):
             return [x for x in value if isinstance(x, dict)]
     graph = scene.get("knowledge_graph", scene.get("graph"))
     if isinstance(graph, dict):
-        for key in ("relationships", "relations", "edges", "triplets"):
+        for key in ("relationships", "relations", "Relations", "edges", "triplets", "knowledge_graph_relations"):
             value = graph.get(key)
             if isinstance(value, list):
                 return [x for x in value if isinstance(x, dict)]

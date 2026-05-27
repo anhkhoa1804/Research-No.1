@@ -128,6 +128,27 @@ python3 tools/check_vg150_diagnostics.py \
   --require_no_validation_issues
 ```
 
+## CORE Fine-tune and Ablation
+
+CORE metadata is parsed with version/group-specific entity handling: groups 1--5 use root-level `shared_entities`, while `Extreme_Compositional_OOD` uses scene-level `entities`. Grounding boxes are expected as normalized `[cx, cy, w, h]` and converted to pixel `xyxy` boxes during JSONL conversion.
+
+Prepare CORE JSONL, merge it with VG150, and run light fine-tune ablations:
+
+```bash
+CORE_ROOT=datasets/core_benchmark \
+BASE_CKPT=checkpoints/core_l3_balanced_adapt_light_best_mR50.pt \
+CORE_TRAIN_REPEAT=3 \
+HOLDOUT_V2=true \
+CORE_VARIANTS="core_ft_light core_ft_tail" \
+bash scripts/run_core_finetune_ablation.sh
+```
+
+Prepare the merged dataset only, without training:
+
+```bash
+RUN_CORE_TRAIN=false bash scripts/run_core_finetune_ablation.sh
+```
+
 Build the frequency prior:
 
 ```bash

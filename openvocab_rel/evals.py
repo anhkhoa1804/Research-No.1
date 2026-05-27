@@ -291,6 +291,48 @@ def _predict_object_labels_from_clip(
 
 
 
+
+
+@torch.no_grad()
+def _predict_object_label_candidates_from_clip(
+    cfg: TrainConfig,
+    clip_model: nn.Module,
+    processor: Any,
+    ex: Dict[str, Any],
+    obj_text_feats: torch.Tensor,
+    obj_vocab: List[str],
+    device: torch.device,
+) -> Tuple[List[List[str]], List[torch.Tensor]]:
+    boxes = ex.get("obj_boxes", None)
+    if not isinstance(boxes, torch.Tensor) or int(boxes.shape[0]) == 0:
+        return [], []
+
+    topk = max(1, int(getattr(cfg, "eval_sgg_clip_obj_topk", 5) or 1))
+    topk = min(topk, max(1, len(obj_vocab)))
+    if topk <= 1:
+        labels, scores = _predict_object_labels_from_clip(cfg, clip_model, processor, ex, obj_text_feats, obj_vocab, device)
+        return [[label] for label in labels], [scores[i : i + 1] for i in range(int(scores.numel()))]
+
+    crops = _crop_objects_from_example(ex)
+    if len(crops) != int(boxes.shape[0]):
+        gt_labels = [str(x).strip().lower() for x in ex.get("obj_labels", [])[: int(boxes.shape[0])]]
+        return [[label] for label in gt_labels], [torch.ones((1,), device=device) for _ in gt_labels]
+
+    image_feats = _clip_image_features_from_pil(clip_model, processor, crops, device)
+    cm = unwrap_ddp(clip_model)
+    logit_scale = cm.logit_scale.exp().item() if hasattr(cm, "logit_scale") else 100.0
+    logits = (image_feats @ F.normalize(obj_text_feats.float(), dim=-1).t()) * logit_scale
+    probs = logits.softmax(dim=-1)
+    scores, idx = probs.topk(k=topk, dim=-1)
+
+    all_labels: List[List[str]] = []
+    all_scores: List[torch.Tensor] = []
+    for row_scores, row_idx in zip(scores, idx):
+        all_labels.append([str(obj_vocab[int(i)]).strip().lower() for i in row_idx.detach().cpu().tolist()])
+        all_scores.append(row_scores.detach().to(device=device))
+    return all_labels, all_scores
+
+
 def _normalize_vg_label(label: str, aliases: Optional[Dict[str, str]] = None) -> str:
     text = " ".join(str(label).strip().lower().replace("_", " ").split())
     if aliases is not None:
@@ -555,6 +597,72 @@ def _make_triplet_predictions(
         if int(object_scores.numel()) > 0:
             triplet_score *= float(object_scores[s_idx].item()) * float(object_scores[o_idx].item())
         scores.append(triplet_score)
+
+    if len(scores) == 0:
+        return {
+            "subj_labels": [],
+            "pred_labels": [],
+            "obj_labels": [],
+            "subj_boxes": torch.empty((0, 4), dtype=torch.float32, device=device),
+            "obj_boxes": torch.empty((0, 4), dtype=torch.float32, device=device),
+            "scores": torch.empty((0,), dtype=torch.float32, device=device),
+        }
+
+    return {
+        "subj_labels": subj_labels,
+        "pred_labels": pred_labels,
+        "obj_labels": obj_labels,
+        "subj_boxes": torch.stack(subj_boxes, dim=0).to(device=device, dtype=torch.float32),
+        "obj_boxes": torch.stack(obj_boxes, dim=0).to(device=device, dtype=torch.float32),
+        "scores": torch.tensor(scores, dtype=torch.float32, device=device),
+    }
+
+
+def _make_triplet_predictions_obj_candidates(
+    ex: Dict[str, Any],
+    pair_list: List[Tuple[int, int]],
+    pair_scores: torch.Tensor,
+    pair_pred_idx: torch.Tensor,
+    pair_pred_scores: torch.Tensor,
+    object_label_candidates: List[List[str]],
+    object_score_candidates: List[torch.Tensor],
+    device: torch.device,
+) -> Dict[str, Any]:
+    boxes = ex.get("obj_boxes", torch.empty((0, 4), dtype=torch.float32)).to(device)
+    subj_labels: List[str] = []
+    pred_labels: List[str] = []
+    obj_labels: List[str] = []
+    subj_boxes: List[torch.Tensor] = []
+    obj_boxes: List[torch.Tensor] = []
+    scores: List[float] = []
+    pred_vocab = ex.get("_pred_vocab", [])
+
+    for idx, pair in enumerate(pair_list):
+        s_idx, o_idx = int(pair[0]), int(pair[1])
+        if s_idx >= len(object_label_candidates) or o_idx >= len(object_label_candidates):
+            continue
+        if s_idx >= int(boxes.shape[0]) or o_idx >= int(boxes.shape[0]):
+            continue
+        pred_id = int(pair_pred_idx[idx].item())
+        if not (0 <= pred_id < len(pred_vocab)):
+            continue
+        subj_cands = object_label_candidates[s_idx]
+        obj_cands = object_label_candidates[o_idx]
+        subj_scores = object_score_candidates[s_idx].to(device=device) if s_idx < len(object_score_candidates) else torch.ones((len(subj_cands),), device=device)
+        obj_scores = object_score_candidates[o_idx].to(device=device) if o_idx < len(object_score_candidates) else torch.ones((len(obj_cands),), device=device)
+        for si, subj_label in enumerate(subj_cands):
+            for oi, obj_label in enumerate(obj_cands):
+                subj_labels.append(str(subj_label).strip().lower())
+                pred_labels.append(str(pred_vocab[pred_id]).strip().lower())
+                obj_labels.append(str(obj_label).strip().lower())
+                subj_boxes.append(boxes[s_idx])
+                obj_boxes.append(boxes[o_idx])
+                triplet_score = float(pair_scores[idx].item()) * float(pair_pred_scores[idx].item())
+                if si < int(subj_scores.numel()):
+                    triplet_score *= float(subj_scores[si].item())
+                if oi < int(obj_scores.numel()):
+                    triplet_score *= float(obj_scores[oi].item())
+                scores.append(triplet_score)
 
     if len(scores) == 0:
         return {
@@ -1135,12 +1243,16 @@ def eval_sgg_standard(
                 _process_task("predcls_nogc", pred_triplets_ng)
 
             if bool(getattr(cfg, "eval_sgg_use_clip_obj_classifier", True)):
-                pred_obj_labels, pred_obj_scores = _predict_object_labels_from_clip(cfg, clip_model, processor, ex, obj_text_feats, obj_vocab, device)
+                obj_label_cands, obj_score_cands = _predict_object_label_candidates_from_clip(cfg, clip_model, processor, ex, obj_text_feats, obj_vocab, device)
+                pred_obj_labels = [labels[0] if len(labels) > 0 else "object" for labels in obj_label_cands]
+                pred_obj_scores = torch.stack([scores[0] if int(scores.numel()) > 0 else torch.tensor(1.0, device=device) for scores in obj_score_cands]) if len(obj_score_cands) > 0 else torch.empty((0,), device=device)
             else:
                 pred_obj_labels, pred_obj_scores = gt_labels, gt_obj_scores
+                obj_label_cands = [[label] for label in pred_obj_labels]
+                obj_score_cands = [pred_obj_scores[i : i + 1] for i in range(int(pred_obj_scores.numel()))]
 
-            if len(pred_obj_labels) == len(gt_labels):
-                sgcls_triplets = _make_triplet_predictions(ex, pair_list, pair_base_scores, pair_pred_idx, pair_pred_scores, pred_obj_labels, pred_obj_scores, device)
+            if len(obj_label_cands) == len(gt_labels):
+                sgcls_triplets = _make_triplet_predictions_obj_candidates(ex, pair_list, pair_base_scores, pair_pred_idx, pair_pred_scores, obj_label_cands, obj_score_cands, device)
                 _process_task("sgcls", sgcls_triplets)
 
                 if bool(getattr(cfg, "eval_sgg_report_nograph", True)):
