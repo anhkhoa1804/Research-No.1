@@ -62,7 +62,13 @@ def _load_vg150_object_vocab(vg150_root: str) -> List[str]:
     label_to_idx, _ = _load_vg150_vocab(vg150_root)
     if len(label_to_idx) == 0:
         return ["object"]
-    return [name for name, _ in sorted(label_to_idx.items(), key=lambda kv: int(kv[1]))]
+    generic_labels = {"", "__background__", "background", "bg", "object", "objects", "thing", "entity"}
+    vocab = [
+        str(name).strip().lower()
+        for name, _ in sorted(label_to_idx.items(), key=lambda kv: int(kv[1]))
+        if str(name).strip().lower() not in generic_labels
+    ]
+    return vocab if len(vocab) > 0 else ["object"]
 
 
 def _object_prompt(label: str) -> str:
@@ -73,13 +79,42 @@ def _object_prompt(label: str) -> str:
     return f"a photo of {article} {name}"
 
 
+def _object_prompts(label: str) -> List[str]:
+    name = str(label).strip().lower()
+    if name == "":
+        name = "object"
+    article = "an" if name[:1] in {"a", "e", "i", "o", "u"} else "a"
+    return [
+        f"a photo of {article} {name}",
+        f"a cropped photo of {article} {name}",
+        f"a close-up photo of {article} {name}",
+        f"the {name} in the image",
+    ]
+
+
 @torch.no_grad()
 def _encode_object_vocab(
     clip_model: nn.Module,
     processor: Any,
     obj_vocab: List[str],
     device: torch.device,
+    prompt_ensemble: bool = True,
 ) -> Tuple[List[str], torch.Tensor]:
+    if bool(prompt_ensemble):
+        texts: List[str] = []
+        counts: List[int] = []
+        for name in obj_vocab:
+            prompts = _object_prompts(name)
+            texts.extend(prompts)
+            counts.append(len(prompts))
+        prompt_feats = clip_text_features(clip_model, processor, texts, device)
+        feats: List[torch.Tensor] = []
+        offset = 0
+        for count in counts:
+            chunk = prompt_feats[offset : offset + count]
+            feats.append(F.normalize(chunk.mean(dim=0), dim=-1))
+            offset += count
+        return obj_vocab, torch.stack(feats, dim=0) if len(feats) > 0 else prompt_feats
     texts = [_object_prompt(name) for name in obj_vocab]
     feats = clip_text_features(clip_model, processor, texts, device)
     return obj_vocab, feats
@@ -164,7 +199,7 @@ def _clip_image_features_from_pil(
     return torch.cat(outs, dim=0)
 
 
-def _crop_objects_from_example(ex: Dict[str, Any]) -> List[Image.Image]:
+def _crop_objects_from_example(ex: Dict[str, Any], padding: float = 0.0) -> List[Image.Image]:
     image = ex.get("image", None)
     boxes = ex.get("obj_boxes", None)
     if not isinstance(image, Image.Image) or not isinstance(boxes, torch.Tensor) or int(boxes.shape[0]) == 0:
@@ -172,8 +207,17 @@ def _crop_objects_from_example(ex: Dict[str, Any]) -> List[Image.Image]:
 
     width, height = image.size
     crops: List[Image.Image] = []
+    pad = max(0.0, float(padding or 0.0))
     for box in boxes.tolist():
-        x1, y1, x2, y2 = [int(round(float(v))) for v in box]
+        x1f, y1f, x2f, y2f = [float(v) for v in box]
+        if pad > 0.0:
+            bw = max(1.0, x2f - x1f)
+            bh = max(1.0, y2f - y1f)
+            x1f -= bw * pad
+            y1f -= bh * pad
+            x2f += bw * pad
+            y2f += bh * pad
+        x1, y1, x2, y2 = [int(round(v)) for v in (x1f, y1f, x2f, y2f)]
         x1 = max(0, min(width - 1, x1))
         y1 = max(0, min(height - 1, y1))
         x2 = max(x1 + 1, min(width, x2))
@@ -202,6 +246,9 @@ def _clip_obj_cache_key(cfg: TrainConfig, ex: Dict[str, Any], obj_vocab: List[st
     payload = {
         "image_id": image_id,
         "clip_name": str(getattr(cfg, "clip_name", "openai/clip-vit-large-patch14-336")),
+        "classifier_version": "vg150_no_generic_prompt_ensemble_v2",
+        "prompt_ensemble": bool(getattr(cfg, "eval_sgg_clip_obj_prompt_ensemble", True)),
+        "crop_padding": float(getattr(cfg, "eval_sgg_clip_obj_crop_padding", 0.10) or 0.0),
         "obj_vocab": [str(x).strip().lower() for x in obj_vocab],
         "boxes": boxes_payload,
     }
@@ -271,7 +318,7 @@ def _predict_object_labels_from_clip(
         labels, scores = cached
         return labels, scores.to(device=device)
 
-    crops = _crop_objects_from_example(ex)
+    crops = _crop_objects_from_example(ex, padding=float(getattr(cfg, "eval_sgg_clip_obj_crop_padding", 0.10) or 0.0))
     if len(crops) != int(boxes.shape[0]):
         gt_labels = [str(x).strip().lower() for x in ex.get("obj_labels", [])[: int(boxes.shape[0])]]
         return gt_labels, torch.ones((len(gt_labels),), device=device)
@@ -313,7 +360,7 @@ def _predict_object_label_candidates_from_clip(
         labels, scores = _predict_object_labels_from_clip(cfg, clip_model, processor, ex, obj_text_feats, obj_vocab, device)
         return [[label] for label in labels], [scores[i : i + 1] for i in range(int(scores.numel()))]
 
-    crops = _crop_objects_from_example(ex)
+    crops = _crop_objects_from_example(ex, padding=float(getattr(cfg, "eval_sgg_clip_obj_crop_padding", 0.10) or 0.0))
     if len(crops) != int(boxes.shape[0]):
         gt_labels = [str(x).strip().lower() for x in ex.get("obj_labels", [])[: int(boxes.shape[0])]]
         return [[label] for label in gt_labels], [torch.ones((1,), device=device) for _ in gt_labels]
@@ -1095,7 +1142,13 @@ def eval_sgg_standard(
         if no_text == "":
             no_text = "no relation or interaction between the objects"
         no_interaction_emb = clip_text_features(clip_model, processor, [no_text], device)
-    _, obj_text_feats = _encode_object_vocab(clip_model, processor, obj_vocab, device)
+    _, obj_text_feats = _encode_object_vocab(
+        clip_model,
+        processor,
+        obj_vocab,
+        device,
+        prompt_ensemble=bool(getattr(cfg, "eval_sgg_clip_obj_prompt_ensemble", True)),
+    )
     label_aliases = _build_vg_aliases(obj_vocab, pred_vocab) if bool(getattr(cfg, "eval_sgg_use_vg_aliases", True)) else None
     debug_budget = {
         "remaining": int(getattr(cfg, "eval_sgg_debug_triplets_max_samples", 5))

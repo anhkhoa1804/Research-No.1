@@ -169,6 +169,8 @@ class TrainConfig:
     eval_sgg_use_gt_pairs: bool = False
     eval_sgg_use_clip_obj_classifier: bool = True
     eval_sgg_clip_obj_topk: int = 5
+    eval_sgg_clip_obj_prompt_ensemble: bool = True
+    eval_sgg_clip_obj_crop_padding: float = 0.10
     eval_sgg_sgcls_use_obj_scores: bool = False
     eval_sgg_sgcls_oracle_labels: bool = False
     eval_sgg_clip_obj_cache_enabled: bool = True

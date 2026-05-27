@@ -99,6 +99,8 @@ FREQ_BIAS_ALPHA=${FREQ_BIAS_ALPHA:-1.0}
 FREQ_BIAS_PATH=${FREQ_BIAS_PATH:-${DATA_ROOT}/frequency_prior.json}
 EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER=${EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER:-true}
 EVAL_SGG_CLIP_OBJ_TOPK=${EVAL_SGG_CLIP_OBJ_TOPK:-5}
+EVAL_SGG_CLIP_OBJ_PROMPT_ENSEMBLE=${EVAL_SGG_CLIP_OBJ_PROMPT_ENSEMBLE:-true}
+EVAL_SGG_CLIP_OBJ_CROP_PADDING=${EVAL_SGG_CLIP_OBJ_CROP_PADDING:-0.10}
 EVAL_SGG_SGCLS_USE_OBJ_SCORES=${EVAL_SGG_SGCLS_USE_OBJ_SCORES:-false}
 EVAL_SGG_SGCLS_ORACLE_LABELS=${EVAL_SGG_SGCLS_ORACLE_LABELS:-false}
 EVAL_SGG_USE_GT_PAIRS=${EVAL_SGG_USE_GT_PAIRS:-true}
@@ -247,6 +249,8 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --eval_sgg_compare_score_modes "${EVAL_COMPARE_SCORE_MODES}" \
   --eval_sgg_use_clip_obj_classifier "${EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER}" \
   --eval_sgg_clip_obj_topk "${EVAL_SGG_CLIP_OBJ_TOPK}" \
+  --eval_sgg_clip_obj_prompt_ensemble "${EVAL_SGG_CLIP_OBJ_PROMPT_ENSEMBLE}" \
+  --eval_sgg_clip_obj_crop_padding "${EVAL_SGG_CLIP_OBJ_CROP_PADDING}" \
   --eval_sgg_sgcls_use_obj_scores "${EVAL_SGG_SGCLS_USE_OBJ_SCORES}" \
   --eval_sgg_sgcls_oracle_labels "${EVAL_SGG_SGCLS_ORACLE_LABELS}" \
   --eval_sgg_grounding_dino_enabled "${EVAL_SGG_GROUNDING_DINO_ENABLED}" \
