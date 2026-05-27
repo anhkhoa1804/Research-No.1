@@ -59,16 +59,42 @@ def _extract_gt_pairs(ex: Dict[str, Any]) -> List[Tuple[int, int]]:
 def _load_vg150_object_vocab(vg150_root: str) -> List[str]:
     from .datasets.vg150_loader import _load_vg150_vocab  # type: ignore[attr-defined]
 
-    label_to_idx, _ = _load_vg150_vocab(vg150_root)
-    if len(label_to_idx) == 0:
-        return ["object"]
     generic_labels = {"", "__background__", "background", "bg", "object", "objects", "thing", "entity"}
-    vocab = [
-        str(name).strip().lower()
-        for name, _ in sorted(label_to_idx.items(), key=lambda kv: int(kv[1]))
-        if str(name).strip().lower() not in generic_labels
-    ]
-    return vocab if len(vocab) > 0 else ["object"]
+    label_to_idx, _ = _load_vg150_vocab(vg150_root)
+    if len(label_to_idx) > 0:
+        vocab = [
+            str(name).strip().lower()
+            for name, _ in sorted(label_to_idx.items(), key=lambda kv: int(kv[1]))
+            if str(name).strip().lower() not in generic_labels
+        ]
+        if len(vocab) > 0:
+            return vocab
+
+    counts: Dict[str, int] = {}
+    for split_name in ("train.jsonl", "validation.jsonl"):
+        path = os.path.join(str(vg150_root), split_name)
+        if not os.path.exists(path):
+            continue
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        row = json.loads(line)
+                    except Exception:
+                        continue
+                    labels = row.get("obj_labels", row.get("object_labels", []))
+                    if not isinstance(labels, list):
+                        continue
+                    for label in labels:
+                        name = str(label).strip().lower()
+                        if name in generic_labels:
+                            continue
+                        counts[name] = counts.get(name, 0) + 1
+        except Exception:
+            continue
+    if len(counts) > 0:
+        return [name for name, _ in sorted(counts.items(), key=lambda kv: (-int(kv[1]), kv[0]))]
+    return ["object"]
 
 
 def _object_prompt(label: str) -> str:
