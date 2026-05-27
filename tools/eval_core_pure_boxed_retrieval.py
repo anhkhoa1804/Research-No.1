@@ -47,9 +47,109 @@ from core_utils import (
 GENERIC_OBJECTS = {"", "object", "objects", "thing", "entity", "unknown", "none", "background", "__background__"}
 GENERIC_RELATIONS = {"", "relation", "relationships", "unknown", "none", "background", "__background__", "no relation", "no interaction"}
 
+PREDICATE_ALIASES = {
+    "above": "above",
+    "across": "across",
+    "against": "against",
+    "along": "along",
+    "attached": "attached to",
+    "attached to": "attached to",
+    "behind": "behind",
+    "belonging to": "belonging to",
+    "between": "between",
+    "carrying": "carrying",
+    "carries": "carrying",
+    "covering": "covering",
+    "covers": "covering",
+    "covered in": "covered in",
+    "eating": "eating",
+    "eats": "eating",
+    "facing": "looking at",
+    "turned towards": "looking at",
+    "pointed at": "looking at",
+    "pointing towards": "looking at",
+    "angled towards": "looking at",
+    "aimed at": "looking at",
+    "tilted towards": "looking at",
+    "directed at": "looking at",
+    "staring at": "looking at",
+    "watching": "watching",
+    "watches": "watching",
+    "observes": "looking at",
+    "studies": "looking at",
+    "scrutinizes": "looking at",
+    "tracks": "looking at",
+    "monitors": "looking at",
+    "inspects": "looking at",
+    "gazing at": "looking at",
+    "looking at": "looking at",
+    "from": "from",
+    "hanging from": "hanging from",
+    "has": "has",
+    "holding": "holding",
+    "holds": "holding",
+    "in": "in",
+    "inside": "in",
+    "inside of": "in",
+    "in front of": "in front of",
+    "front of": "in front of",
+    "leaning towards": "near",
+    "near": "near",
+    "sits near": "near",
+    "next to": "next to",
+    "beside": "next to",
+    "adjacent to": "next to",
+    "of": "of",
+    "on": "on",
+    "resting on": "on",
+    "rests on": "on",
+    "placed on": "on",
+    "balances on": "on",
+    "sitting on": "sitting on",
+    "standing on": "standing on",
+    "lying on": "lying on",
+    "laying on": "laying on",
+    "on back of": "on back of",
+    "over": "over",
+    "overlaps": "over",
+    "parked on": "parked on",
+    "parked next to": "next to",
+    "part of": "part of",
+    "playing": "playing",
+    "riding": "riding",
+    "rides": "riding",
+    "to": "to",
+    "under": "under",
+    "placed under": "under",
+    "beneath": "under",
+    "using": "using",
+    "wearing": "wearing",
+    "wears": "wears",
+    "with": "with",
+    "wrapped around": "wrapped around",
+}
+
+CORE_RELATION_GROUPS = {"Action_Role_Reversal", "Gaze_Attention", "Occlusion_Depth", "Spatial_Containment", "Extreme_Compositional_OOD"}
+CORE_NON_RELATION_GROUPS = {"Attribute_Binding"}
+
 
 def _clean(value: Any) -> str:
     return " ".join(str(value).strip().lower().replace("_", " ").split())
+
+
+def _canonical_predicate(value: Any, *, mode: str = "aliases") -> str:
+    pred = _clean(value)
+    if mode in {"none", "raw"}:
+        return pred
+    if pred in PREDICATE_ALIASES:
+        return PREDICATE_ALIASES[pred]
+    if pred.endswith("ing") and pred[:-3] in PREDICATE_ALIASES:
+        return PREDICATE_ALIASES[pred[:-3]]
+    if pred.endswith("ed") and pred[:-2] in PREDICATE_ALIASES:
+        return PREDICATE_ALIASES[pred[:-2]]
+    if pred.endswith("s") and pred[:-1] in PREDICATE_ALIASES:
+        return PREDICATE_ALIASES[pred[:-1]]
+    return pred
 
 
 def _feature_tensor(output: Any, *, kind: str) -> torch.Tensor:
@@ -145,7 +245,7 @@ def _scene_records(version: str, group: str, meta_path: Path, item: dict[str, An
     return records
 
 
-def _relation_queries(item: dict[str, Any]) -> list[dict[str, str]]:
+def _relation_queries(item: dict[str, Any], *, canonicalize: str = "aliases") -> list[dict[str, str]]:
     queries = []
     entities = entities_for_scene(item, "scene_A")
     labels = {entity_id(entity, idx): _clean(entity_label(entity)) for idx, entity in enumerate(entities)}
@@ -153,13 +253,14 @@ def _relation_queries(item: dict[str, Any]) -> list[dict[str, str]]:
         scene = item.get(scene_key, {}) if isinstance(item.get(scene_key), dict) else {}
         for rel in relations_for_scene(scene):
             sid, oid = relation_endpoints(rel)
-            pred = _clean(relation_predicate(rel))
+            raw_pred = _clean(relation_predicate(rel))
+            pred = _canonical_predicate(raw_pred, mode=canonicalize)
             if not sid or not oid or pred in GENERIC_RELATIONS:
                 continue
             subj, obj = labels.get(sid, _clean(sid)), labels.get(oid, _clean(oid))
             if subj in GENERIC_OBJECTS or obj in GENERIC_OBJECTS:
                 continue
-            queries.append({"target_scene": scene_key, "subject_id": sid, "object_id": oid, "subject": subj, "object": obj, "predicate": pred})
+            queries.append({"target_scene": scene_key, "subject_id": sid, "object_id": oid, "subject": subj, "object": obj, "predicate": pred, "raw_predicate": raw_pred})
     return queries
 
 
@@ -240,6 +341,10 @@ def main() -> None:
     parser.add_argument("--text-target", choices=("predicate", "triplet"), default="predicate")
     parser.add_argument("--decision-rule", choices=("max", "min"), default="max")
     parser.add_argument("--predicate-vocab-mode", choices=("union", "vg150"), default="union")
+    parser.add_argument("--canonicalize-predicates", choices=("aliases", "none"), default="aliases")
+    parser.add_argument("--skip-oov", action="store_true")
+    parser.add_argument("--group-filter", default="", help="Comma-separated CORE groups to include, e.g. Action_Role_Reversal,Gaze_Attention.")
+    parser.add_argument("--relation-groups-only", action="store_true", help="Skip non-relation diagnostic groups such as Attribute_Binding.")
     parser.add_argument("--out", default="runs/core_pure_boxed_retrieval/metrics.json")
     args = parser.parse_args()
 
@@ -248,14 +353,19 @@ def main() -> None:
     cfg, clip_model, processor, model = _load_checkpoint(Path(args.checkpoint), device, args.clip_name or None)
     cfg.eval_sgg_predicate_score_mode = str(args.score_mode)
     cfg.eval_sgg_use_predicate_classifier = str(args.score_mode) != "text"
+    group_filter = {g.strip() for g in str(args.group_filter).split(",") if g.strip()}
 
     core_root = discover_core_root(Path(args.core_root))
     raw_items: list[tuple[str, str, Path, int, dict[str, Any]]] = []
     predicates: set[str] = set()
     for version, group, meta_path in iter_metadata_files(core_root):
+        if group_filter and group not in group_filter:
+            continue
+        if bool(args.relation_groups_only) and group in CORE_NON_RELATION_GROUPS:
+            continue
         for item_index, item in enumerate(load_metadata(meta_path)):
             item_with_group = {**item, "group": group}
-            for query in _relation_queries(item_with_group):
+            for query in _relation_queries(item_with_group, canonicalize=str(args.canonicalize_predicates)):
                 predicates.add(query["predicate"])
             raw_items.append((version, group, meta_path, item_index, item_with_group))
     pred_vocab = _predicate_vocab(str(args.vg150_root), predicates, mode=str(args.predicate_vocab_mode))
@@ -265,7 +375,10 @@ def main() -> None:
     classifier_vocab_mismatch = bool(str(args.score_mode) != "text" and classifier_classes != len(pred_vocab))
 
     total = correct = skipped = inverted_correct = ties = 0
+    candidate_queries = usable_queries = covered_queries = 0
+    skip_reasons: Counter[str] = Counter()
     predicate_counts: Counter[str] = Counter()
+    raw_predicate_counts: Counter[str] = Counter()
     predicate_oov = 0
     by_group: dict[str, Counter[str]] = defaultdict(Counter)
     examples: list[dict[str, Any]] = []
@@ -275,14 +388,22 @@ def main() -> None:
             break
         pair_id = str(item.get("pair_id", item.get("id", f"idx_{item_index}")))
         scenes = _scene_records(version, group, meta_path, item, item_index)
-        queries = _relation_queries(item)
-        if scenes is None or not queries:
+        queries = _relation_queries(item, canonicalize=str(args.canonicalize_predicates))
+        candidate_queries += len(queries)
+        if scenes is None:
             skipped += 1
+            skip_reasons["missing_scene_records"] += 1
+            continue
+        if not queries:
+            skipped += 1
+            skip_reasons["missing_queries"] += 1
             continue
         if args.query_mode == "random":
             queries = [random.choice(queries)]
         for query in queries:
+            usable_queries += 1
             predicate_counts[query["predicate"]] += 1
+            raw_predicate_counts[query.get("raw_predicate", query["predicate"])] += 1
             local_pred_emb = pred_emb
             local_pred_to_idx = pred_to_idx
             if args.text_target == "triplet":
@@ -295,6 +416,12 @@ def main() -> None:
                 local_pred_to_idx = {query["predicate"]: 0}
             elif query["predicate"] not in pred_to_idx:
                 predicate_oov += 1
+                if bool(args.skip_oov):
+                    skipped += 1
+                    skip_reasons["predicate_oov"] += 1
+                    continue
+            if query["predicate"] in pred_to_idx or args.text_target == "triplet":
+                covered_queries += 1
             scored = {
                 scene_key: _score_candidate(
                     cfg,
@@ -312,6 +439,7 @@ def main() -> None:
             }
             if any(value is None for value in scored.values()):
                 skipped += 1
+                skip_reasons["unscorable_candidate"] += 1
                 continue
             scores = {scene_key: float(scored[scene_key][0]) for scene_key in SCENE_KEYS}
             score_details = {scene_key: scored[scene_key][1] for scene_key in SCENE_KEYS}
@@ -341,7 +469,12 @@ def main() -> None:
         "core_root": str(core_root),
         "checkpoint": str(args.checkpoint),
         "num_queries": total,
+        "candidate_queries": candidate_queries,
+        "usable_queries": usable_queries,
+        "covered_queries": covered_queries,
+        "coverage_rate": covered_queries / usable_queries if usable_queries else 0.0,
         "skipped": skipped,
+        "skip_reasons": dict(skip_reasons),
         "accuracy": correct / total if total else 0.0,
         "inverted_accuracy": inverted_correct / total if total else 0.0,
         "ties": ties,
@@ -351,11 +484,16 @@ def main() -> None:
         "query_mode": str(args.query_mode),
         "decision_rule": str(args.decision_rule),
         "predicate_vocab_mode": str(args.predicate_vocab_mode),
+        "canonicalize_predicates": str(args.canonicalize_predicates),
+        "skip_oov": bool(args.skip_oov),
+        "group_filter": sorted(group_filter),
+        "relation_groups_only": bool(args.relation_groups_only),
         "classifier_classes": classifier_classes,
         "predicate_vocab_size": len(pred_vocab),
         "classifier_vocab_mismatch": classifier_vocab_mismatch,
         "predicate_oov": predicate_oov,
         "top_predicates": predicate_counts.most_common(30),
+        "top_raw_predicates": raw_predicate_counts.most_common(30),
         "by_group": {
             group: {"accuracy": c["correct"] / c["total"] if c["total"] else 0.0, "mean_margin": c["margin_sum"] / c["total"] if c["total"] else 0.0, **dict(c)}
             for group, c in sorted(by_group.items())
