@@ -6,6 +6,14 @@ from collections import Counter
 from pathlib import Path
 from typing import Any, Dict, List
 
+
+GENERIC_OBJECT_LABELS = {"", "object", "objects", "thing", "entity", "unknown", "none", "background", "__background__"}
+GENERIC_RELATION_LABELS = {"", "relation", "relationships", "unknown", "none", "background", "__background__", "no relation", "no interaction"}
+
+
+def _clean_label(value: Any) -> str:
+    return " ".join(str(value).strip().lower().replace("_", " ").split())
+
 from core_utils import (
     SCENE_KEYS,
     discover_core_root,
@@ -38,7 +46,7 @@ def split_for_item(version: str, group: str, pair_id: str, train_ratio: float, v
     return "test"
 
 
-def build_scene_row(core_root: Path, version: str, group: str, group_dir: Path, item: Dict[str, Any], scene_key: str, item_index: int) -> Dict[str, Any] | None:
+def build_scene_row(core_root: Path, version: str, group: str, group_dir: Path, item: Dict[str, Any], scene_key: str, item_index: int, drop_generic_objects: bool = False, drop_generic_relations: bool = False) -> Dict[str, Any] | None:
     scene = item.get(scene_key)
     if not isinstance(scene, dict):
         return None
@@ -70,8 +78,11 @@ def build_scene_row(core_root: Path, version: str, group: str, group_dir: Path, 
         box = box_by_entity.get(eid)
         if box is None:
             continue
+        label = _clean_label(entity_label(entity))
+        if drop_generic_objects and label in GENERIC_OBJECT_LABELS:
+            continue
         old_to_new[eid] = len(kept_objects)
-        kept_objects.append({"object_id": len(kept_objects), "names": [entity_label(entity)], "core_entity_id": eid})
+        kept_objects.append({"object_id": len(kept_objects), "names": [label], "core_entity_id": eid})
         kept_boxes.append(box)
 
     if len(kept_objects) < 2:
@@ -86,10 +97,13 @@ def build_scene_row(core_root: Path, version: str, group: str, group_dir: Path, 
         object_idx = old_to_new[str(object_id)]
         if subject_idx == object_idx:
             continue
+        predicate = _clean_label(relation_predicate(rel))
+        if drop_generic_relations and predicate in GENERIC_RELATION_LABELS:
+            continue
         relationships.append({
             "subject_id": subject_idx,
             "object_id": object_idx,
-            "predicate": relation_predicate(rel),
+            "predicate": predicate,
             "core_relation": rel,
         })
 
@@ -133,7 +147,17 @@ def convert_core(args: argparse.Namespace) -> Dict[str, Any]:
             item.setdefault("group", group)
             split = split_for_item(version, group, pair_id, args.train_ratio, args.val_ratio, args.holdout_v2)
             for scene_key in SCENE_KEYS:
-                row = build_scene_row(core_root, version, group, meta_path.parent, item, scene_key, item_index)
+                row = build_scene_row(
+                    core_root,
+                    version,
+                    group,
+                    meta_path.parent,
+                    item,
+                    scene_key,
+                    item_index,
+                    drop_generic_objects=bool(args.drop_generic_objects),
+                    drop_generic_relations=bool(args.drop_generic_relations),
+                )
                 if row is None:
                     skipped[f"{version}/{group}"] += 1
                     continue
@@ -150,6 +174,8 @@ def convert_core(args: argparse.Namespace) -> Dict[str, Any]:
         "rows": {split: len(rows) for split, rows in splits.items()},
         "skipped": dict(skipped),
         "top_predicates": predicates.most_common(50),
+        "drop_generic_objects": bool(args.drop_generic_objects),
+        "drop_generic_relations": bool(args.drop_generic_relations),
     }
     out_root.mkdir(parents=True, exist_ok=True)
     (out_root / "core_conversion_report.json").write_text(json.dumps(report, indent=2, ensure_ascii=False), encoding="utf-8")
@@ -163,6 +189,8 @@ def main() -> None:
     parser.add_argument("--train-ratio", type=float, default=0.8)
     parser.add_argument("--val-ratio", type=float, default=0.1)
     parser.add_argument("--holdout-v2", action="store_true", help="Force all v2 rows into test.jsonl.")
+    parser.add_argument("--drop-generic-objects", action="store_true", help="Drop placeholder object labels such as 'object'.")
+    parser.add_argument("--drop-generic-relations", action="store_true", help="Drop placeholder relation labels such as 'relation'.")
     args = parser.parse_args()
     print(json.dumps(convert_core(args), indent=2, ensure_ascii=False))
 

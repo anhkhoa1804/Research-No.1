@@ -8,10 +8,29 @@ export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:T
 CKPT="${CKPT:-checkpoints/core_l3_balanced_adapt_light_best_mR50.pt}"
 ALPHA="${FREQ_BIAS_ALPHA:-3.75}"
 EVAL_BATCHES="${EVAL_BATCHES:-40}"
-BATCH_SIZE="${BATCH_SIZE:-8}"
+BATCH_SIZE="${BATCH_SIZE:-24}"
 NUM_WORKERS="${NUM_WORKERS:-4}"
 MAX_IMAGES="${MAX_IMAGES:-0}"
-TOPK="${EVAL_SGG_CLIP_OBJ_TOPK:-10}"
+TOPK="${EVAL_SGG_CLIP_OBJ_TOPK:-20}"
+DATA_ROOT="${DATA_ROOT:-datasets}"
+REBUILD_CLEAN_VOCAB="${REBUILD_CLEAN_VOCAB:-true}"
+
+if [[ ! -x "${PYTHON}" ]]; then
+  echo "[SGCls diagnose] python not executable: ${PYTHON}" >&2
+  exit 2
+fi
+if [[ ! -f "${CKPT}" ]]; then
+  echo "[SGCls diagnose] checkpoint not found: ${CKPT}" >&2
+  exit 2
+fi
+
+if [[ "${REBUILD_CLEAN_VOCAB}" == "true" ]]; then
+  "${PYTHON}" tools/build_vg150_clean_vocab.py \
+    --data-root "${DATA_ROOT}" \
+    --out "${DATA_ROOT}/vocabulary/objects.json" \
+    --splits "${VG150_VOCAB_SPLITS:-train,validation}" \
+    --max-objects "${VG150_MAX_OBJECTS:-150}"
+fi
 
 run_eval() {
   local run_name="$1"
@@ -25,6 +44,7 @@ run_eval() {
   echo
   echo "== diagnose ${run_name} oracle=${oracle} clip=${use_clip} obj_scores=${use_scores} gt_pairs=${use_gt_pairs} dino=${use_dino} =="
   PURE_PHASE=eval \
+  DATA_ROOT="${DATA_ROOT}" \
   RESUME_FROM="${CKPT}" \
   STAGE=3 \
   GPU_PRESET=l4_24gb \
@@ -45,6 +65,8 @@ run_eval() {
   EVAL_SGG_USE_GT_PAIRS="${use_gt_pairs}" \
   EVAL_SGG_USE_CLIP_OBJ_CLASSIFIER="${use_clip}" \
   EVAL_SGG_CLIP_OBJ_TOPK="${TOPK}" \
+  EVAL_SGG_CLIP_OBJ_PROMPT_ENSEMBLE="${EVAL_SGG_CLIP_OBJ_PROMPT_ENSEMBLE:-true}" \
+  EVAL_SGG_CLIP_OBJ_CROP_PADDING="${EVAL_SGG_CLIP_OBJ_CROP_PADDING:-0.15}" \
   EVAL_SGG_SGCLS_USE_OBJ_SCORES="${use_scores}" \
   EVAL_SGG_SGCLS_ORACLE_LABELS="${oracle}" \
   EVAL_SGG_GROUNDING_DINO_ENABLED="${use_dino}" \

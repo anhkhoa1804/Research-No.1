@@ -72,7 +72,7 @@ def main() -> None:
     vocab_dir.mkdir(parents=True, exist_ok=True)
 
     generic_objects = {"", "__background__", "background", "bg", "object", "objects", "thing", "entity"}
-    generic_preds = {"", "__background__", "background", "bg", "no relation", "no interaction"}
+    generic_preds = {"", "__background__", "background", "bg", "relation", "no relation", "no interaction"}
     object_aliases = {
         "people": "person",
         "persons": "person",
@@ -112,8 +112,6 @@ def main() -> None:
 
     objects = [name for name, _ in object_counts.most_common(max(1, int(args.max_objects)))]
     predicates = [name for name, _ in pred_counts.most_common()]
-    if "relation" not in predicates:
-        predicates.append("relation")
 
     (vocab_dir / "objects.json").write_text(json.dumps(objects, indent=2, ensure_ascii=False), encoding="utf-8")
     (vocab_dir / "predicates.json").write_text(json.dumps(predicates, indent=2, ensure_ascii=False), encoding="utf-8")

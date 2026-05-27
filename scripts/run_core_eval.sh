@@ -34,6 +34,9 @@ if [[ "${RUN_CORE_CONVERT}" == "true" ]]; then
   if [[ "${HOLDOUT_V2}" == "true" ]]; then
     convert_args+=(--holdout-v2)
   fi
+  if [[ "${CORE_EVAL_STRICT:-true}" == "true" ]]; then
+    convert_args+=(--drop-generic-objects --drop-generic-relations)
+  fi
   "${PYTHON}" tools/convert_core_to_vg150_jsonl.py "${convert_args[@]}"
 fi
 
@@ -64,6 +67,65 @@ for version_dir in "${actual_core_root}"/*; do
 done
 
 "${PYTHON}" tools/build_core_eval_vocab.py --jsonl-root "${CORE_JSONL_ROOT}" --out-root "${CORE_EVAL_ROOT}" --max-objects "${CORE_MAX_OBJECTS:-300}"
+
+"${PYTHON}" - <<'PY' "${CORE_JSONL_ROOT}" "${CORE_EVAL_ROOT}" "${CORE_EVAL_SPLIT}" "${CORE_EVAL_STRICT:-true}"
+import json
+import sys
+from collections import Counter
+from pathlib import Path
+
+jsonl_root = Path(sys.argv[1])
+eval_root = Path(sys.argv[2])
+split = sys.argv[3]
+strict = sys.argv[4].lower() == "true"
+generic_objects = {"", "__background__", "background", "bg", "object", "objects", "thing", "entity", "unknown", "none"}
+generic_preds = {"", "__background__", "background", "bg", "relation", "relationships", "no relation", "no interaction", "unknown", "none"}
+
+def clean(value):
+    return " ".join(str(value).strip().lower().replace("_", " ").split())
+
+def iter_rows(path):
+    if not path.exists():
+        raise SystemExit(f"[CORE eval] missing split file: {path}")
+    with path.open(encoding="utf-8") as handle:
+        for line in handle:
+            line = line.strip()
+            if line:
+                yield json.loads(line)
+
+rows = list(iter_rows(jsonl_root / f"{split}.jsonl"))
+if not rows:
+    raise SystemExit(f"[CORE eval] converted split is empty: {jsonl_root / f'{split}.jsonl'}")
+
+objects = Counter()
+preds = Counter()
+for row in rows:
+    for obj in row.get("objects", []):
+        if isinstance(obj, dict):
+            names = obj.get("names", [])
+            if isinstance(names, str):
+                name = names
+            elif names:
+                name = names[0]
+            else:
+                name = ""
+            objects[clean(name)] += 1
+    for rel in row.get("relationships", []):
+        if isinstance(rel, dict):
+            preds[clean(rel.get("predicate", ""))] += 1
+
+bad_objects = objects & Counter({x: 10**9 for x in generic_objects})
+bad_preds = preds & Counter({x: 10**9 for x in generic_preds})
+if strict and (bad_objects or bad_preds):
+    raise SystemExit(f"[CORE eval] generic labels remain after strict conversion: objects={bad_objects.most_common()} predicates={bad_preds.most_common()}")
+
+vocab_report = eval_root / "vocabulary" / "core_eval_vocab_report.json"
+if vocab_report.exists():
+    report = json.loads(vocab_report.read_text(encoding="utf-8"))
+    if strict and int(report.get("num_predicates", 0)) <= 0:
+        raise SystemExit("[CORE eval] predicate vocab is empty after strict filtering")
+print(f"[CORE eval] guard ok rows={len(rows)} top_objects={objects.most_common(5)} top_predicates={preds.most_common(5)}")
+PY
 
 echo "[CORE eval] split=${CORE_EVAL_SPLIT} ckpt=${CKPT} eval_root=${CORE_EVAL_ROOT} actual_core_root=${actual_core_root}"
 
