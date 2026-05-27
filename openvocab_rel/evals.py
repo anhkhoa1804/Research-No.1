@@ -83,6 +83,19 @@ def _load_vg150_object_vocab(vg150_root: str) -> List[str]:
                     except Exception:
                         continue
                     labels = row.get("obj_labels", row.get("object_labels", []))
+                    if not isinstance(labels, list) or len(labels) == 0:
+                        objects = row.get("objects", [])
+                        labels = []
+                        if isinstance(objects, list):
+                            for obj in objects:
+                                if isinstance(obj, dict):
+                                    names = obj.get("names", obj.get("name", []))
+                                    if isinstance(names, list) and len(names) > 0:
+                                        labels.append(names[0])
+                                    elif isinstance(names, str):
+                                        labels.append(names)
+                                elif isinstance(obj, str):
+                                    labels.append(obj)
                     if not isinstance(labels, list):
                         continue
                     for label in labels:
