@@ -35,6 +35,7 @@ from core_utils import (
 
 GENERIC_OBJECTS = {"", "object", "objects", "thing", "entity", "unknown", "none", "background", "__background__"}
 GENERIC_RELATIONS = {"", "relation", "relationships", "unknown", "none", "background", "__background__", "no relation", "no interaction"}
+TEXT_MODES = ("relation", "description", "prompt", "hybrid")
 
 
 
@@ -91,6 +92,7 @@ def _endpoint_label(rel: dict[str, Any], role: str, ref_id: str | None, id_to_la
     value = _endpoint_value(rel, role)
     if isinstance(value, dict):
         label = _first_clean(
+            value.get("base_label"),
             value.get("label"),
             value.get("name"),
             value.get("category"),
@@ -116,8 +118,25 @@ def _endpoint_label(rel: dict[str, Any], role: str, ref_id: str | None, id_to_la
     return "object"
 
 
-def _scene_text(item: dict[str, Any], scene_key: str) -> str:
+def _format_sentence(text: str) -> str:
+    text = text.strip()
+    if not text:
+        return ""
+    text = text[0].upper() + text[1:]
+    return text if text.endswith(".") else text + "."
+
+
+def _scene_text(item: dict[str, Any], scene_key: str, *, mode: str = "relation") -> str:
     scene = item.get(scene_key, {}) if isinstance(item.get(scene_key), dict) else {}
+    description = _first_clean(scene.get("description"), scene.get("caption"))
+    generation_meta = scene.get("generation_meta", {}) if isinstance(scene.get("generation_meta"), dict) else {}
+    prompt = _first_clean(generation_meta.get("visual_prompt"), generation_meta.get("prompt"))
+
+    if mode == "description" and description:
+        return _format_sentence(description)
+    if mode == "prompt" and prompt:
+        return _format_sentence(prompt)
+
     entities = entities_for_scene(item, scene_key)
     id_to_label = {
         entity_id(entity, idx): _clean(entity_label(entity))
@@ -133,13 +152,25 @@ def _scene_text(item: dict[str, Any], scene_key: str) -> str:
         subject = _endpoint_label(rel, "subject", subject_id, id_to_label)
         obj = _endpoint_label(rel, "object", object_id, id_to_label)
         clauses.append(f"{subject} {predicate} {obj}")
+
+    if mode == "hybrid":
+        parts = []
+        if description:
+            parts.append(description)
+        if clauses:
+            parts.append("relations: " + "; ".join(clauses[:4]))
+        if prompt:
+            parts.append("visual prompt: " + prompt)
+        if parts:
+            return _format_sentence(". ".join(part.strip().rstrip(".") for part in parts))
+
     if clauses:
         return "A scene where " + "; ".join(clauses[:4]) + "."
     labels = list(dict.fromkeys(label for label in id_to_label.values() if label not in GENERIC_OBJECTS))
     return "A scene containing " + ", ".join(labels[:8]) + "." if labels else "A scene."
 
 
-def _iter_pairs(core_root: Path) -> list[dict[str, Any]]:
+def _iter_pairs(core_root: Path, *, text_mode: str = "relation") -> list[dict[str, Any]]:
     rows: list[dict[str, Any]] = []
     for version, group, meta_path in iter_metadata_files(core_root):
         for item_index, item in enumerate(load_metadata(meta_path)):
@@ -155,7 +186,7 @@ def _iter_pairs(core_root: Path) -> list[dict[str, Any]]:
                 "version": version,
                 "group": group,
                 "pair_id": pair_id,
-                "texts": {scene_key: _scene_text(item, scene_key) for scene_key in SCENE_KEYS},
+                "texts": {scene_key: _scene_text(item, scene_key, mode=text_mode) for scene_key in SCENE_KEYS},
                 "images": {scene_key: str(image_paths[scene_key]) for scene_key in SCENE_KEYS},
             })
     return rows
@@ -168,11 +199,12 @@ def main() -> None:
     parser.add_argument("--clip-name", default="openai/clip-vit-base-patch32")
     parser.add_argument("--device", default="cuda" if torch.cuda.is_available() else "cpu")
     parser.add_argument("--max-pairs", type=int, default=0)
+    parser.add_argument("--text-mode", choices=TEXT_MODES, default="relation")
     parser.add_argument("--out", default="runs/core_text_image_retrieval/metrics.json")
     args = parser.parse_args()
 
     core_root = discover_core_root(Path(args.core_root))
-    pairs = _iter_pairs(core_root)
+    pairs = _iter_pairs(core_root, text_mode=str(args.text_mode))
     if int(args.max_pairs) > 0:
         pairs = pairs[: int(args.max_pairs)]
     device = torch.device(args.device)
@@ -220,6 +252,7 @@ def main() -> None:
     report = {
         "core_root": str(core_root),
         "clip_name": args.clip_name,
+        "text_mode": str(args.text_mode),
         "num_pairs": len(pairs),
         "total_queries": total,
         "accuracy": correct / total if total else 0.0,

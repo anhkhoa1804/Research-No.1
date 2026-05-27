@@ -52,6 +52,24 @@ def _clean(value: Any) -> str:
     return " ".join(str(value).strip().lower().replace("_", " ").split())
 
 
+def _feature_tensor(output: Any, *, kind: str) -> torch.Tensor:
+    if isinstance(output, torch.Tensor):
+        return output
+    for attr in (f"{kind}_embeds", "pooler_output", "last_hidden_state"):
+        value = getattr(output, attr, None)
+        if isinstance(value, torch.Tensor):
+            return value[:, 0] if value.ndim == 3 else value
+    if isinstance(output, (tuple, list)) and output and isinstance(output[0], torch.Tensor):
+        value = output[0]
+        return value[:, 0] if value.ndim == 3 else value
+    if isinstance(output, dict):
+        for key in (f"{kind}_embeds", "pooler_output", "last_hidden_state"):
+            value = output.get(key)
+            if isinstance(value, torch.Tensor):
+                return value[:, 0] if value.ndim == 3 else value
+    raise TypeError(f"Unsupported CLIP {kind} output type: {type(output)}")
+
+
 def _load_checkpoint(path: Path, device: torch.device, clip_name: str | None) -> tuple[TrainConfig, Any, Any, RelationalModel]:
     ckpt = torch.load(path, map_location="cpu")
     cfg = TrainConfig()
@@ -90,7 +108,7 @@ def _predicate_vocab(vg150_root: str, extra_predicates: set[str]) -> list[str]:
 
 def _text_features(clip_model: Any, processor: Any, texts: list[str], device: torch.device) -> torch.Tensor:
     inputs = processor(text=texts, return_tensors="pt", padding=True, truncation=True).to(device)
-    feats = clip_model.get_text_features(**inputs)
+    feats = _feature_tensor(clip_model.get_text_features(**inputs), kind="text")
     return F.normalize(feats.float(), dim=-1)
 
 
