@@ -228,6 +228,8 @@ class ProgressiveRelationalDecoder(nn.Module):
         
         self.use_geom_bias = getattr(cfg, "use_geom_bias", True)
         self.vector_fusion_gate = bool(getattr(cfg, "vector_fusion_gate", True))
+        self.explicit_spoa_enabled = bool(getattr(cfg, "explicit_spoa_enabled", True))
+        self.spoa_aux_scale = float(max(0.0, getattr(cfg, "spoa_aux_scale", 1.0)))
         self.fusion_gate_temperature = float(max(0.2, getattr(cfg, "fusion_gate_temperature", 0.7)))
         self.fusion_gate = nn.Sequential(
             nn.Linear(self.dim * 3, self.dim),
@@ -253,6 +255,41 @@ class ProgressiveRelationalDecoder(nn.Module):
             nn.Linear(self.dim, self.dim),
             nn.GELU(),
             nn.Linear(self.dim, self.dim),
+        )
+        self.subject_role_embedding = nn.Parameter(torch.zeros(1, self.dim))
+        self.object_role_embedding = nn.Parameter(torch.zeros(1, self.dim))
+        self.predicate_query = nn.Parameter(torch.zeros(1, self.dim))
+        self.subject_branch = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, self.dim),
+            nn.GELU(),
+            nn.Dropout(float(max(0.0, getattr(cfg, "spoa_role_dropout", 0.05)))),
+            nn.Linear(self.dim, self.dim),
+        )
+        self.object_branch = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, self.dim),
+            nn.GELU(),
+            nn.Dropout(float(max(0.0, getattr(cfg, "spoa_role_dropout", 0.05)))),
+            nn.Linear(self.dim, self.dim),
+        )
+        self.aux_branch = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, self.dim),
+            nn.GELU(),
+            nn.Linear(self.dim, self.dim),
+        )
+        self.predicate_branch = nn.Sequential(
+            nn.LayerNorm(self.dim * 3),
+            nn.Linear(self.dim * 3, self.dim),
+            nn.GELU(),
+            nn.Linear(self.dim, self.dim),
+        )
+        self.spoa_fusion = nn.Sequential(
+            nn.LayerNorm(self.dim * 4),
+            nn.Linear(self.dim * 4, self.dim * 2),
+            nn.GELU(),
+            nn.Linear(self.dim * 2, self.dim),
         )
         
         self.edge_layers = nn.ModuleList(
@@ -403,7 +440,24 @@ class ProgressiveRelationalDecoder(nn.Module):
                 self.last_gate_val = self.geom_alpha.detach().mean()
                 self.last_gate_reg = torch.tensor(0.0, device=geom_feat_proj.device)
             
-            rel_feat = self.rel_seed(fused_feat)
+            if self.explicit_spoa_enabled:
+                sub_role = self.subject_branch(sub_feat) + self.subject_role_embedding.to(dtype=sub_feat.dtype)
+                obj_role = self.object_branch(obj_feat) + self.object_role_embedding.to(dtype=obj_feat.dtype)
+                aux_role = self.aux_branch(geom_feat_proj) * self.spoa_aux_scale
+                pred_role = self.predicate_query.to(device=sub_feat.device, dtype=sub_feat.dtype).expand_as(sub_role)
+                pred_role = pred_role + self.predicate_branch(torch.cat([sub_role, obj_role, aux_role], dim=-1))
+                spoa_state = torch.cat(
+                    [
+                        F.normalize(sub_role, dim=-1, eps=1e-6),
+                        F.normalize(pred_role, dim=-1, eps=1e-6),
+                        F.normalize(obj_role, dim=-1, eps=1e-6),
+                        F.normalize(aux_role, dim=-1, eps=1e-6),
+                    ],
+                    dim=-1,
+                )
+                rel_feat = self.rel_seed(fused_feat) + self.spoa_fusion(spoa_state)
+            else:
+                rel_feat = self.rel_seed(fused_feat)
             edge_gate = torch.zeros((rel_feat.shape[0],), device=rel_feat.device, dtype=rel_feat.dtype)
         else:
             if int(geom_feat_raw.shape[-1]) < 12:
@@ -429,7 +483,24 @@ class ProgressiveRelationalDecoder(nn.Module):
             self.last_gate_val = gate.mean().detach()
 
             fused_feat = gate * (sub_norm + obj_norm) + (1.0 - gate) * geom_norm
-            rel_feat = self.rel_seed(fused_feat)
+            if self.explicit_spoa_enabled:
+                sub_role = self.subject_branch(sub_feat) + self.subject_role_embedding.to(dtype=sub_feat.dtype)
+                obj_role = self.object_branch(obj_feat) + self.object_role_embedding.to(dtype=obj_feat.dtype)
+                aux_role = self.aux_branch(geom_feat_proj) * self.spoa_aux_scale
+                pred_role = self.predicate_query.to(device=sub_feat.device, dtype=sub_feat.dtype).expand_as(sub_role)
+                pred_role = pred_role + self.predicate_branch(torch.cat([sub_role, obj_role, aux_role], dim=-1))
+                spoa_state = torch.cat(
+                    [
+                        F.normalize(sub_role, dim=-1, eps=1e-6),
+                        F.normalize(pred_role, dim=-1, eps=1e-6),
+                        F.normalize(obj_role, dim=-1, eps=1e-6),
+                        F.normalize(aux_role, dim=-1, eps=1e-6),
+                    ],
+                    dim=-1,
+                )
+                rel_feat = self.rel_seed(fused_feat) + self.spoa_fusion(spoa_state)
+            else:
+                rel_feat = self.rel_seed(fused_feat)
             edge_gate = torch.zeros((rel_feat.shape[0],), device=rel_feat.device, dtype=rel_feat.dtype)
 
         for edge_layer in self.edge_layers:
@@ -462,7 +533,14 @@ class RelationalModel(nn.Module):
         self.adaptive_prior_enabled = bool(getattr(cfg, "adaptive_prior_enabled", True))
         self.bias_residual_enabled = bool(getattr(cfg, "bias_residual_enabled", True))
         self.adaptive_prior_scale = float(getattr(cfg, "adaptive_prior_scale", 1.0))
+        self.adaptive_prior_gate_min = float(getattr(cfg, "adaptive_prior_gate_min", 0.0))
+        self.adaptive_prior_gate_max = float(getattr(cfg, "adaptive_prior_gate_max", 1.0))
+        if self.adaptive_prior_gate_max < self.adaptive_prior_gate_min:
+            self.adaptive_prior_gate_min, self.adaptive_prior_gate_max = self.adaptive_prior_gate_max, self.adaptive_prior_gate_min
         self.bias_residual_scale = float(getattr(cfg, "bias_residual_scale", 0.25))
+        self.text_conditioned_projection_enabled = bool(getattr(cfg, "text_conditioned_projection_enabled", False))
+        self.text_conditioned_projection_residual = float(getattr(cfg, "text_conditioned_projection_residual", 0.35))
+        self.relationness_enabled = bool(getattr(cfg, "relationness_enabled", False))
         self._last_calibration_reg: Optional[torch.Tensor] = None
         self.object_language_anchor_enabled = bool(getattr(cfg, "object_language_anchor_enabled", False))
         self.object_language_anchor_source = str(getattr(cfg, "object_language_anchor_source", "auto"))
@@ -496,6 +574,18 @@ class RelationalModel(nn.Module):
             nn.GELU(),
             nn.Dropout(0.1),
             nn.Linear(self.dim, self.predicate_classifier_classes),
+        )
+        self.text_space_projection = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, self.dim),
+            nn.GELU(),
+            nn.Linear(self.dim, self.dim),
+        )
+        self.relationness_head = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, max(32, self.dim // 4)),
+            nn.GELU(),
+            nn.Linear(max(32, self.dim // 4), 1),
         )
         self.calibration_gate = nn.Sequential(
             nn.LayerNorm(self.dim),
@@ -708,6 +798,25 @@ class RelationalModel(nn.Module):
         _, rels, _ = self._forward_impl(feat_map=feat_map, obj_boxes=obj_boxes, pairs=pairs)
         return rels
 
+    def text_relation_features(self, rel_feats: torch.Tensor) -> torch.Tensor:
+        if rel_feats.numel() == 0:
+            return rel_feats
+        projected = self.text_space_projection(rel_feats)
+        if not self.text_conditioned_projection_enabled:
+            return rel_feats
+        return rel_feats + (self.text_conditioned_projection_residual * projected)
+
+    def text_predicate_logits(self, rel_feats: torch.Tensor, text_feats: torch.Tensor) -> torch.Tensor:
+        return self.score(self.text_relation_features(rel_feats), text_feats)
+
+    def relationness_logits(self, rel_feats: torch.Tensor) -> torch.Tensor:
+        if rel_feats.numel() == 0:
+            return torch.zeros((rel_feats.shape[0],), device=rel_feats.device, dtype=rel_feats.dtype)
+        return self.relationness_head(rel_feats).squeeze(-1)
+
+    def relationness_scores(self, rel_feats: torch.Tensor) -> torch.Tensor:
+        return torch.sigmoid(self.relationness_logits(rel_feats).float())
+
     def predicate_logits(self, rel_feats: torch.Tensor) -> torch.Tensor:
         return self.predicate_classifier(rel_feats)
 
@@ -728,9 +837,11 @@ class RelationalModel(nn.Module):
         if self.adaptive_prior_enabled and pred_log_prior is not None and int(pred_log_prior.numel()) == int(logits.shape[-1]):
             prior = pred_log_prior.to(device=logits.device, dtype=logits.dtype).view(1, -1)
             prior = prior - prior.mean(dim=-1, keepdim=True)
-            gate = torch.sigmoid(self.calibration_gate(rel_feats).float())
+            gate_raw = torch.sigmoid(self.calibration_gate(rel_feats).float())
+            gate = self.adaptive_prior_gate_min + (self.adaptive_prior_gate_max - self.adaptive_prior_gate_min) * gate_raw
             logits = logits + (self.adaptive_prior_scale * gate * prior)
-            reg_terms.append((gate - 0.5).pow(2).mean())
+            gate_mid = 0.5 * (self.adaptive_prior_gate_min + self.adaptive_prior_gate_max)
+            reg_terms.append((gate - gate_mid).pow(2).mean())
         if len(reg_terms) > 0:
             self._last_calibration_reg = torch.stack([t.float() for t in reg_terms]).mean()
         return logits

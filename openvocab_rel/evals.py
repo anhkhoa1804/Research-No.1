@@ -671,6 +671,10 @@ def _make_triplet_predictions(
             continue
         if s_idx >= int(boxes.shape[0]) or o_idx >= int(boxes.shape[0]):
             continue
+        if idx >= int(pair_pred_idx.numel()) or idx >= int(pair_pred_scores.numel()) or idx >= int(pair_scores.numel()):
+            continue
+        if idx >= int(pair_pred_idx.numel()) or idx >= int(pair_pred_scores.numel()) or idx >= int(pair_scores.numel()):
+            continue
         pred_id = int(pair_pred_idx[idx].item())
         if not (0 <= pred_id < len(pred_vocab)):
             continue
@@ -681,7 +685,9 @@ def _make_triplet_predictions(
         obj_boxes.append(boxes[o_idx])
         triplet_score = float(pair_scores[idx].item()) * float(pair_pred_scores[idx].item())
         if int(object_scores.numel()) > 0:
-            triplet_score *= float(object_scores[s_idx].item()) * float(object_scores[o_idx].item())
+            obj_power = float(ex.get("_object_score_power", 1.0))
+            triplet_score *= float(object_scores[s_idx].item()) ** obj_power
+            triplet_score *= float(object_scores[o_idx].item()) ** obj_power
         scores.append(triplet_score)
 
     if len(scores) == 0:
@@ -744,10 +750,11 @@ def _make_triplet_predictions_obj_candidates(
                 subj_boxes.append(boxes[s_idx])
                 obj_boxes.append(boxes[o_idx])
                 triplet_score = float(pair_scores[idx].item()) * float(pair_pred_scores[idx].item())
+                obj_power = float(ex.get("_object_score_power", 1.0))
                 if si < int(subj_scores.numel()):
-                    triplet_score *= float(subj_scores[si].item())
+                    triplet_score *= float(subj_scores[si].item()) ** obj_power
                 if oi < int(obj_scores.numel()):
-                    triplet_score *= float(obj_scores[oi].item())
+                    triplet_score *= float(obj_scores[oi].item()) ** obj_power
                 scores.append(triplet_score)
 
     if len(scores) == 0:
@@ -1095,7 +1102,10 @@ def _relation_predicate_logits(
     pred_emb: torch.Tensor,
     pred_log_prior: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
-    text_logits = out.score(rel_feat, pred_emb).float()
+    if hasattr(out, "text_predicate_logits"):
+        text_logits = out.text_predicate_logits(rel_feat, pred_emb).float()
+    else:
+        text_logits = out.score(rel_feat, pred_emb).float()
     mode = str(getattr(cfg, "eval_sgg_predicate_score_mode", "ensemble")).strip().lower()
     use_classifier = bool(getattr(cfg, "eval_sgg_use_predicate_classifier", False)) and hasattr(out, "predicate_logits")
     if not use_classifier or mode in {"text", "cosine", "clip"}:
@@ -1325,20 +1335,36 @@ def eval_sgg_standard(
                     zs_gt_counts[p] += 1
 
             gt_labels = [str(x).strip().lower() for x in ex.get("obj_labels", [])]
+            ex["_object_score_power"] = float(getattr(cfg, "eval_sgg_object_score_power", 1.0)) if bool(getattr(cfg, "eval_sgg_use_object_uncertainty", True)) else 0.0
             gt_obj_scores = torch.ones((len(gt_labels),), dtype=torch.float32, device=device)
 
             rel_logits = _relation_predicate_logits(cfg, out, rel_feat, pred_emb, pred_log_prior)
             rel_logits = _apply_frequency_bias(cfg, rel_logits, freq_bias, pair_list, gt_labels, device)
             rel_probs = _mask_background_logits(rel_logits, pred_vocab).softmax(dim=-1)
+            relationness_scores = torch.ones((int(rel_feat.shape[0]),), dtype=torch.float32, device=device)
+            if bool(getattr(cfg, "eval_sgg_use_relationness", False)) and hasattr(out, "relationness_scores"):
+                relationness_scores = out.relationness_scores(rel_feat).to(device=device, dtype=torch.float32)
+                rel_threshold = float(getattr(cfg, "eval_sgg_relationness_threshold", 0.0))
+                if rel_threshold > 0.0:
+                    relationness_scores = torch.where(relationness_scores >= rel_threshold, relationness_scores, torch.zeros_like(relationness_scores))
             if no_interaction_emb is not None:
-                no_logits = out.score(rel_feat, no_interaction_emb).float()
+                no_logits = out.text_predicate_logits(rel_feat, no_interaction_emb).float() if hasattr(out, "text_predicate_logits") else out.score(rel_feat, no_interaction_emb).float()
                 all_logits = torch.cat([rel_logits, no_logits], dim=-1)
                 no_prob = all_logits.softmax(dim=-1)[:, -1].clamp(0.0, 1.0)
                 interaction_prior = (1.0 - no_prob).to(dtype=torch.float32)
                 rel_probs = _mask_background_predicates(rel_probs * interaction_prior.unsqueeze(1), pred_vocab)
             pair_pred_scores, pair_pred_idx = rel_probs.max(dim=-1)
             _update_predicate_diag(predicate_diag, pred_vocab, gt["pred_labels"], pair_pred_idx)
-            pair_base_scores = torch.ones_like(pair_pred_scores)
+            rel_weight = float(getattr(cfg, "eval_sgg_relationness_weight", 1.0)) if bool(getattr(cfg, "eval_sgg_use_relationness", False)) else 0.0
+            pair_base_scores = relationness_scores.clamp(0.0, 1.0).pow(max(0.0, rel_weight)) if rel_weight > 0.0 else torch.ones_like(pair_pred_scores)
+            prune_k_eval = int(getattr(cfg, "eval_sgg_relationness_prune_k", 0))
+            if prune_k_eval > 0 and int(pair_base_scores.numel()) > prune_k_eval:
+                keep_rel = torch.topk(pair_base_scores, k=prune_k_eval, largest=True).indices
+                pair_list = [pair_list[int(i)] for i in keep_rel.detach().cpu().tolist()]
+                rel_probs = rel_probs.index_select(0, keep_rel)
+                pair_pred_scores = pair_pred_scores.index_select(0, keep_rel)
+                pair_pred_idx = pair_pred_idx.index_select(0, keep_rel)
+                pair_base_scores = pair_base_scores.index_select(0, keep_rel)
 
             def _process_task(task_name: str, triplets: Dict[str, Any]):
                 triplets = _normalize_triplet_labels(triplets, label_aliases)
@@ -1404,25 +1430,49 @@ def eval_sgg_standard(
                 det_ex = _make_detected_example(ex, det_boxes, det_labels, int(cfg.clip_input_res))
                 
                 if det_ex is not None and len(det_ex["pairs"]) > 0:
-                    _regs_d, rels_d, _sw_d, _as_d, _ga_d, _ki_d = _forward_eval_batch(cfg, model, clip_model, processor, [det_ex], device, return_swapped=False, learned_prune_k_override=0)
+                    _regs_d, rels_d, _sw_d, _as_d, _ga_d, _ki_d = _forward_eval_batch(cfg, model, clip_model, processor, [det_ex], device, return_swapped=False, learned_prune_k_override=int(getattr(cfg, "eval_sgg_detector_prune_k", 256)))
                     if len(rels_d) > 0:
                         rel_feat_d = rels_d[0]
+                        det_pairs = det_ex["pairs"]
+                        if len(_ki_d) > 0 and _ki_d[0] is not None:
+                            keep_d = _ki_d[0].detach().cpu().long().tolist() if isinstance(_ki_d[0], torch.Tensor) else list(_ki_d[0])
+                            det_pairs = [det_ex["pairs"][int(i)] for i in keep_d if 0 <= int(i) < len(det_ex["pairs"])]
                         rel_logits_d = _relation_predicate_logits(cfg, out, rel_feat_d, pred_emb, pred_log_prior)
-                        rel_logits_d = _apply_frequency_bias(cfg, rel_logits_d, freq_bias, det_ex["pairs"], det_labels, device)
+                        rel_logits_d = _apply_frequency_bias(cfg, rel_logits_d, freq_bias, det_pairs, det_labels, device)
                         rel_probs_d = _mask_background_logits(rel_logits_d, pred_vocab).softmax(dim=-1)
+                        relationness_scores_d = torch.ones((int(rel_feat_d.shape[0]),), dtype=torch.float32, device=device)
+                        if bool(getattr(cfg, "eval_sgg_use_relationness", False)) and hasattr(out, "relationness_scores"):
+                            relationness_scores_d = out.relationness_scores(rel_feat_d).to(device=device, dtype=torch.float32)
                         if no_interaction_emb is not None:
-                            no_logits_d = out.score(rel_feat_d, no_interaction_emb).float()
+                            no_logits_d = out.text_predicate_logits(rel_feat_d, no_interaction_emb).float() if hasattr(out, "text_predicate_logits") else out.score(rel_feat_d, no_interaction_emb).float()
                             all_logits_d = torch.cat([rel_logits_d, no_logits_d], dim=-1)
                             no_prob_d = all_logits_d.softmax(dim=-1)[:, -1].clamp(0.0, 1.0)
                             interaction_prior_d = (1.0 - no_prob_d).to(dtype=torch.float32)
                             rel_probs_d = _mask_background_predicates(rel_probs_d * interaction_prior_d.unsqueeze(1), pred_vocab)
                         pair_pred_scores_d, pair_pred_idx_d = rel_probs_d.max(dim=-1)
+                        rel_weight_d = float(getattr(cfg, "eval_sgg_relationness_weight", 1.0)) if bool(getattr(cfg, "eval_sgg_use_relationness", False)) else 0.0
+                        pair_base_scores_d = relationness_scores_d.clamp(0.0, 1.0).pow(max(0.0, rel_weight_d)) if rel_weight_d > 0.0 else torch.ones_like(pair_pred_scores_d)
+                        rel_threshold_d = float(getattr(cfg, "eval_sgg_relationness_threshold", 0.0))
+                        if rel_threshold_d > 0.0 and bool(getattr(cfg, "eval_sgg_use_relationness", False)):
+                            pair_base_scores_d = torch.where(relationness_scores_d >= rel_threshold_d, pair_base_scores_d, torch.zeros_like(pair_base_scores_d))
+                        prune_k_d = int(getattr(cfg, "eval_sgg_relationness_prune_k", 0))
+                        if prune_k_d > 0 and int(pair_base_scores_d.numel()) > prune_k_d:
+                            keep_rel_d = torch.topk(pair_base_scores_d, k=prune_k_d, largest=True).indices
+                            det_pairs = [det_pairs[int(i)] for i in keep_rel_d.detach().cpu().tolist()]
+                            rel_probs_d = rel_probs_d.index_select(0, keep_rel_d)
+                            pair_pred_scores_d = pair_pred_scores_d.index_select(0, keep_rel_d)
+                            pair_pred_idx_d = pair_pred_idx_d.index_select(0, keep_rel_d)
+                            pair_base_scores_d = pair_base_scores_d.index_select(0, keep_rel_d)
+                        if bool(getattr(cfg, "eval_sgg_use_object_uncertainty", True)):
+                            det_ex["_object_score_power"] = float(getattr(cfg, "eval_sgg_object_score_power", 1.0))
+                        else:
+                            det_ex["_object_score_power"] = 0.0
                         
-                        sgdet_triplets = _make_triplet_predictions(det_ex, det_ex["pairs"], torch.ones_like(pair_pred_scores_d), pair_pred_idx_d, pair_pred_scores_d, det_labels, det_scores.to(device=device, dtype=torch.float32), device)
+                        sgdet_triplets = _make_triplet_predictions(det_ex, det_pairs, pair_base_scores_d, pair_pred_idx_d, pair_pred_scores_d, det_labels, det_scores.to(device=device, dtype=torch.float32), device)
                         _process_task("sgdet", sgdet_triplets)
 
                         if bool(getattr(cfg, "eval_sgg_report_nograph", True)):
-                            sgdet_triplets_ng = _make_triplet_predictions_nogc(det_ex, det_ex["pairs"], rel_probs_d, det_labels, det_scores.to(device=device, dtype=torch.float32), pred_vocab, device)
+                            sgdet_triplets_ng = _make_triplet_predictions_nogc(det_ex, det_pairs, rel_probs_d, det_labels, det_scores.to(device=device, dtype=torch.float32), pred_vocab, device)
                             _process_task("sgdet_nogc", sgdet_triplets_ng)
 
     def _compute_global_mr(hit_dict: Dict[str, int], counts: Dict[str, int]) -> float:
@@ -1452,6 +1502,14 @@ def eval_sgg_standard(
             },
             "object_classifier": ("gt_oracle" if bool(getattr(cfg, "eval_sgg_sgcls_oracle_labels", False)) else (f"clip_top{int(getattr(cfg, 'eval_sgg_clip_obj_topk', 5))}" if bool(getattr(cfg, "eval_sgg_use_clip_obj_classifier", True)) else "gt")),
             "sgcls_use_obj_scores": bool(getattr(cfg, "eval_sgg_sgcls_use_obj_scores", False)),
+            "text_conditioned_projection_enabled": bool(getattr(cfg, "text_conditioned_projection_enabled", False)),
+            "relationness_enabled": bool(getattr(cfg, "eval_sgg_use_relationness", False)),
+            "relationness_weight": float(getattr(cfg, "eval_sgg_relationness_weight", 1.0)),
+            "relationness_threshold": float(getattr(cfg, "eval_sgg_relationness_threshold", 0.0)),
+            "relationness_prune_k": int(getattr(cfg, "eval_sgg_relationness_prune_k", 0)),
+            "detector_prune_k": int(getattr(cfg, "eval_sgg_detector_prune_k", 0)),
+            "object_uncertainty_enabled": bool(getattr(cfg, "eval_sgg_use_object_uncertainty", True)),
+            "object_score_power": float(getattr(cfg, "eval_sgg_object_score_power", 1.0)),
             "object_language_anchor_enabled": bool(getattr(cfg, "object_language_anchor_enabled", False)),
             "object_language_anchor_source": str(getattr(cfg, "object_language_anchor_source", "auto")),
             "object_language_anchor_eval_source": "clip_pred" if bool(getattr(cfg, "eval_sgg_use_clip_obj_classifier", True)) else "gt",

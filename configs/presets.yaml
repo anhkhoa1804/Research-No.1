@@ -89,3 +89,88 @@ presets:
     amp_dtype: bf16
     fp8_enabled: false
     deformable_routing_enabled: true
+
+  pure_phase1_calibrated_spoa:
+    description: "Phase 1 preset: bounded learnable calibration with explicit SPOA enabled"
+    explicit_spoa_enabled: true
+    adaptive_calibration_enabled: true
+    adaptive_prior_enabled: true
+    bias_residual_enabled: true
+    adaptive_prior_gate_min: 0.05
+    adaptive_prior_gate_max: 0.65
+    lambda_calibration_reg: 0.001
+    lambda_calibration_kl: 0.02
+    lambda_calibration_rank: 0.05
+    calibration_rank_margin: 0.20
+    predicate_label_relaxation_enabled: false
+
+  pure_phase2_spoa_relaxed:
+    description: "Phase 2 preset: explicit multi-branch SPOA plus soft ambiguous-negative relaxation"
+    explicit_spoa_enabled: true
+    spoa_role_dropout: 0.05
+    spoa_aux_scale: 1.0
+    adaptive_calibration_enabled: true
+    adaptive_prior_enabled: true
+    bias_residual_enabled: true
+    adaptive_prior_gate_min: 0.05
+    adaptive_prior_gate_max: 0.75
+    lambda_calibration_reg: 0.001
+    lambda_calibration_kl: 0.03
+    lambda_calibration_rank: 0.08
+    calibration_rank_margin: 0.25
+    predicate_label_relaxation_enabled: true
+    predicate_label_relaxation_epsilon: 0.08
+    predicate_label_relaxation_threshold: 0.72
+    predicate_label_relaxation_topk: 4
+    lambda_counterfactual: 0.05
+    predicate_counterfactual_enabled: true
+
+  l4_24gb_phase34:
+    description: "L4 24GB Phase 3/4 preset: text-conditioned predicates plus relationness-pruned SGDet eval"
+    gpu_preset: l4_24gb
+    stage: 3
+    clip_input_res: 448
+    batch_size: 12
+    gradient_checkpointing: true
+    explicit_spoa_enabled: true
+    adaptive_calibration_enabled: true
+    predicate_label_relaxation_enabled: true
+    text_conditioned_projection_enabled: true
+    text_conditioned_projection_residual: 0.35
+    lambda_text_predicate_ce: 0.4
+    relationness_enabled: true
+    lambda_relationness: 0.15
+    eval_sgg_predicate_score_mode: ensemble
+    eval_sgg_predicate_ensemble_alpha: 0.45
+    eval_sgg_use_relationness: true
+    eval_sgg_relationness_weight: 0.75
+    eval_sgg_relationness_prune_k: 96
+    eval_sgg_detector_prune_k: 128
+    eval_sgg_use_object_uncertainty: true
+    eval_sgg_object_score_power: 1.0
+
+  a100_40gb_phase34:
+    description: "A100 40GB Phase 3/4 preset: higher-throughput text-conditioned + relationness SGDet path"
+    gpu_preset: a100_40gb
+    stage: 3
+    clip_input_res: 448
+    batch_size: 16
+    gradient_checkpointing: true
+    loader_prefetch_factor: 3
+    rel_queue_size: 16384
+    explicit_spoa_enabled: true
+    adaptive_calibration_enabled: true
+    predicate_label_relaxation_enabled: true
+    text_conditioned_projection_enabled: true
+    text_conditioned_projection_residual: 0.35
+    lambda_text_predicate_ce: 0.5
+    relationness_enabled: true
+    lambda_relationness: 0.18
+    eval_sgg_predicate_score_mode: ensemble
+    eval_sgg_predicate_ensemble_alpha: 0.45
+    eval_sgg_use_relationness: true
+    eval_sgg_relationness_weight: 0.80
+    eval_sgg_relationness_prune_k: 128
+    eval_sgg_detector_prune_k: 192
+    eval_sgg_use_object_uncertainty: true
+    eval_sgg_object_score_power: 1.0

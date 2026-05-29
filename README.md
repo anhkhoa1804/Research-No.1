@@ -45,26 +45,13 @@ openvocab_rel/prompts.py                  text prompt helpers
 openvocab_rel/text_cache.py               text embedding cache utilities
 configs/presets.yaml                      GPU/runtime presets
 scripts/run_pure_next.sh                  low-level configurable train/eval entrypoint
-scripts/run_core_recovery_l4.sh           L4-oriented L1 -> L3 recovery runner
-scripts/run_core_l3_l4_sweep.sh           optional CF/SPOA/grounding sweep
-scripts/run_core_l3_balanced_debias.sh    balanced adaptive-prior/bias-residual ablation
-scripts/reeval_balanced_debias_matrix.sh  raw + fixed-prior alpha evaluation matrix
-scripts/eval_l3_calibrated.sh             single-checkpoint calibrated evaluation
-scripts/run_core_eval.sh                  CORE evaluation helper
-scripts/run_core_finetune_ablation.sh     CORE fine-tune / robustness ablation runner
-scripts/diagnose_sgcls_sgdet.sh           SGCls/SGDet diagnostic runner
-scripts/cleanup_balanced_artifacts.sh     cleanup helper for balanced-debias artifacts
+scripts/train_l4_phase34.sh               current L4 Phase 3/4 training runner
+scripts/eval_l4_phase34.sh                current L4 Phase 3/4 checkpoint evaluation runner
 tools/prepare_vg150_subset.py             HF -> local VG150 JSONL/images
 tools/check_vg150_diagnostics.py          dataset diagnostics guard
 tools/build_vg150_frequency_prior.py      subject-object predicate prior builder
 tools/build_vg150_clean_vocab.py          clean VG150 object/predicate vocab builder
-tools/build_core_eval_vocab.py            CORE evaluation vocab builder
-tools/inspect_core.py                     CORE schema/image/box inspection
-tools/convert_core_to_vg150_jsonl.py      CORE -> VG150 JSONL conversion
-tools/merge_vg150_core_jsonl.py           VG150 + CORE training merge
-tools/eval_core_text_image_retrieval.py   CORE text-image retrieval evaluation
 tools/summarize_metrics.py                compact metric summary across runs
-tools/collect_balanced_results.py         balanced-debias result collection
 notes/current_status.tex                  compact technical status note
 notes/paper1_pure.tex                     PURE paper draft
 notes/paper2_core.tex                     CORE paper draft
@@ -174,153 +161,47 @@ python3 tools/build_vg150_frequency_prior.py \
 
 ## Training and Evaluation
 
-### Core L1 -> L3 recovery
+The maintained L4 workflow targets the current Phase 3/4 configuration.
+
+Train with default L4 settings:
 
 ```bash
-bash scripts/run_core_recovery_l4.sh
+bash scripts/train_l4_phase34.sh
 ```
 
-Resume only L3 from an existing L1 checkpoint:
+Resume from a checkpoint:
 
 ```bash
-RUN_L1=false \
-RUN_L3=true \
-L3_RESUME_FROM=checkpoints/l1_spoa_ground_recovery_l4_best_mR50.pt \
-bash scripts/run_core_recovery_l4.sh
+RESUME_FROM=checkpoints/previous.pt RUN_NAME=pure_l4_phase34_resume bash scripts/train_l4_phase34.sh
 ```
 
-### Single calibrated evaluation
+Run a small pipeline smoke test:
 
 ```bash
-bash scripts/eval_l3_calibrated.sh
+EPOCHS=1 SAMPLES_PER_EPOCH=1000 EVAL_BATCHES=20 MAX_IMAGES=1000 bash scripts/train_l4_phase34.sh
 ```
 
-Override checkpoint or fixed-prior strength:
+Evaluate a checkpoint:
 
 ```bash
-CKPT=checkpoints/eval_l3_final_a0_fa225_eb200_best_mR50.pt \
-FREQ_BIAS_ALPHA=2.25 \
-EVAL_BATCHES=200 \
-bash scripts/eval_l3_calibrated.sh
+CKPT=checkpoints/pure_l4_phase34.pt EVAL_BATCHES=500 bash scripts/eval_l4_phase34.sh
 ```
 
-### Balanced debias ablation
-
-Train maintained balanced-debias candidates after a stable core checkpoint exists:
-
-```bash
-BASE_CKPT=checkpoints/core_l3_cf004_spoa050_g018_lr2e6_best_mR50.pt \
-EPOCHS=3 \
-SAMPLES_PER_EPOCH=12000 \
-EVAL_BATCHES=200 \
-bash scripts/run_core_l3_balanced_debias.sh
-```
-
-Evaluate raw capacity and checkpoint-specific calibration curves:
-
-```bash
-ALPHAS="0 0.75 1.25 1.50 1.75 2.25 2.75" \
-EVAL_BATCHES=200 \
-bash scripts/reeval_balanced_debias_matrix.sh
-```
-
-Suggested acceptance criteria for a new default checkpoint:
-
-- raw classifier-only: strong mR@50 without collapsing R@50;
-- calibrated: improves the R@50/mR@50 Pareto point;
-- histogram: no collapse into only head predicates or only tail predicates;
-- CORE: improved robustness or clearer diagnostic behavior without contaminating held-out evaluation.
+Use `scripts/run_pure_next.sh` only when you need the lower-level configurable entrypoint.
 
 ## CORE Benchmark Workflow
 
-CORE should be used in two separate roles:
+CORE-specific conversion, merge, evaluation, and ablation helpers have been archived from the active workspace. The maintained code path is VG150 Phase 3/4 training/evaluation through the L4 scripts above.
 
-1. **Held-out diagnostic benchmark** for VG150-only checkpoints.
-2. **Optional robustness-training resource** in ablations with a held-out CORE split.
-
-Do not train on all CORE rows and report that same CORE score as a held-out diagnostic result.
-
-### Download CORE
-
-Download the Google Drive zip on a GCP VM or local machine. If `gdown` is missing, install it in the user environment, not a new virtual environment:
-
-```bash
-python3 -m pip install --user -U gdown
-mkdir -p datasets/core
-gdown --fuzzy "https://drive.google.com/file/d/1eWdgbrQo_XTO4Ubfy2ygYtmojATlx6jJ/view?usp=drive_link" -O datasets/core.zip
-unzip -q datasets/core.zip -d datasets/core
-```
-
-### Inspect CORE
-
-```bash
-python3 tools/inspect_core.py \
-  --core-root datasets/core \
-  --report runs/core_inspect/report.json
-```
-
-### Convert CORE to VG150 JSONL
-
-```bash
-python3 tools/convert_core_to_vg150_jsonl.py \
-  --core-root datasets/core \
-  --out-root datasets/core_vg150_jsonl \
-  --train-ratio 0.8 \
-  --val-ratio 0.1 \
-  --holdout-v2
-```
-
-CORE metadata uses version/group-specific entity handling: groups 1--5 use root-level `shared_entities`, while `Extreme_Compositional_OOD` uses scene-level `entities`. Grounding boxes are expected as normalized `[cx, cy, w, h]` and converted to pixel `xyxy` boxes during JSONL conversion.
-
-### Merge VG150 + CORE for robustness ablations
-
-By default, validation remains VG150-only so calibrated VG150 reporting is not contaminated:
-
-```bash
-python3 tools/merge_vg150_core_jsonl.py \
-  --vg-root datasets \
-  --core-root datasets/core_vg150_jsonl \
-  --out-root datasets/vg150_core_merged \
-  --core-train-repeat 1
-```
-
-Run a CORE-integrated ablation after merge:
-
-```bash
-DATA_ROOT=datasets/vg150_core_merged \
-RUN_NAME=vg150_core_l3_ablation \
-OUT_ROOT=runs/vg150_core/l3_ablation \
-SAVE_PATH=checkpoints/vg150_core_l3_ablation.pt \
-bash scripts/run_pure_next.sh
-```
-
-### CORE status used in the presentation
-
-| CORE metric | Value | Interpretation |
-| --- | ---: | --- |
-| Inspected scenes | 2886 | 1443 pairs, 5772 boxes, 3806 relations |
-| Strict converted rows | 188 | Many rows skipped by invalid boxes/endpoints |
-| Strict vocab | 266 objects / 136 predicates | No generic object/relation labels |
-| CORE PredCls R@50 | 1.06% | Low due to free-form predicate mismatch |
-| CORE PredCls mR@50 | 1.47% | Diagnostic only, not SOTA comparison |
-| Object oracle accuracy | 100.0% | Object labels are not the failure point |
-| CORE retrieval | TBD | Rerun after CLIP output patch |
+Historical CORE numbers in older notes should be treated as diagnostic context only, not as an active reproducibility path in this checkout.
 
 ## SGCls / SGDet Diagnostics
 
-Current SGCls diagnostic indicates that predicate scoring remains healthy when labels are controlled, but object vocabulary prediction can collapse.
+SGCls / SGDet diagnostics are available through the maintained evaluation script. PredCls remains the main reported setting unless a clean SGCls/SGDet rerun is produced.
 
-Presentation status:
-
-| Setting | R@50 | mR@50 | Conclusion |
-| --- | ---: | ---: | --- |
-| PredCls full eval `fa375` | 67.09 | **22.64** | Main relation result |
-| PredCls full eval `fa45` | **67.20** | 22.38 | Best aggregate recall |
-| SGCls oracle labels | missing | missing | Rerun folder removed; rerun needed |
-| SGCls CLIP top10 | 67.04 | 22.56 | Relation scores OK |
-| Object classifier top1 | 0.05% | -- | Predicted `object` 12,893 times |
-
-Policy: final SGCls should use a clean 150-class vocabulary and top-20 rerun before it is used as a defense claim.
+```bash
+CKPT=checkpoints/pure_l4_phase34.pt EVAL_SGDET=true EVAL_BATCHES=100 bash scripts/eval_l4_phase34.sh
+```
 
 ## Presentation and Notes
 
@@ -384,3 +265,12 @@ PURE ultra-light raw e2 & 35.22 & 20.35 & best raw mR@50 \\
 - Use `requirements.txt` for dependency reference.
 - When reporting numbers, include protocol, score mode, checkpoint, alpha/calibration setting, and evaluation batch count.
 - Prefer concise notes in `notes/current_status.tex` and defense-ready slides in `notes/presentation/main.tex`.
+## PURE Phase 1/2 Upgrades
+
+The maintained PURE path now includes the first two roadmap upgrades:
+
+- **Phase 1 — constrained learnable calibration:** enable `--adaptive_calibration_enabled true` to train bounded pair-conditioned prior gates and bias residuals. Optional `--lambda_calibration_kl` preserves the raw predicate distribution, while `--lambda_calibration_rank` adds a differentiable positive-vs-hard-negative margin surrogate.
+- **Phase 2 — explicit SPOA and relaxed labels:** `--explicit_spoa_enabled true` separates subject, predicate, object, and auxiliary geometry branches with role-asymmetric subject/object projections. `--predicate_label_relaxation_enabled true` applies CLIP-lattice soft targets for semantically ambiguous predicate negatives instead of hard-masking them.
+
+Stage presets in `openvocab_rel/config.py` now turn on Phase 1 for Stage 1 and Phase 1+2 for Stage 2. YAML presets `pure_phase1_calibrated_spoa` and `pure_phase2_spoa_relaxed` document the standalone knobs.
+Stage presets in `openvocab_rel/config.py` now turn on Phase 1 for Stage 1 and Phase 1+2 for Stage 2. Stage 3 adds Phase 3/4 hooks: text-conditioned predicate scoring, relationness supervision, relationness-pruned SGDet evaluation, and object-uncertainty-aware triplet scoring. YAML presets `pure_phase1_calibrated_spoa`, `pure_phase2_spoa_relaxed`, `l4_24gb_phase34`, and `a100_40gb_phase34` document the standalone knobs for the two target GPUs.

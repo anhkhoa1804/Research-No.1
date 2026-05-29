@@ -111,16 +111,72 @@ def _build_predicate_ce_weights(cfg: TrainConfig, pred_vocab: List[str], pred_fr
     return weights.detach()
 
 
-def _predicate_ce_loss(logits: torch.Tensor, targets: torch.Tensor, weights: torch.Tensor, cfg: TrainConfig) -> torch.Tensor:
+def _predicate_ce_loss(
+    logits: torch.Tensor,
+    targets: torch.Tensor,
+    weights: torch.Tensor,
+    cfg: TrainConfig,
+    pred_sim_matrix: Optional[torch.Tensor] = None,
+) -> torch.Tensor:
     mode = str(getattr(cfg, "predicate_ce_loss", "weighted_ce")).strip().lower()
     if logits.numel() == 0 or targets.numel() == 0:
         return logits.sum() * 0.0
+    logits = logits.float()
+    targets = targets.long()
     use_weights = weights if mode in {"weighted_ce", "focal"} and int(weights.numel()) == int(logits.shape[-1]) else None
-    ce = F.cross_entropy(logits.float(), targets.long(), weight=use_weights, reduction="none")
+    if bool(getattr(cfg, "predicate_label_relaxation_enabled", False)) and pred_sim_matrix is not None:
+        eps = float(getattr(cfg, "predicate_label_relaxation_epsilon", 0.08))
+        if eps > 0.0 and pred_sim_matrix.numel() > 0 and int(pred_sim_matrix.shape[0]) == int(logits.shape[-1]):
+            sim_rows = pred_sim_matrix.to(device=logits.device, dtype=logits.dtype).index_select(0, targets).clamp_min(0.0)
+            sim_rows.scatter_(1, targets.view(-1, 1), 0.0)
+            threshold = float(getattr(cfg, "predicate_label_relaxation_threshold", 0.72))
+            relax_mask = sim_rows >= threshold
+            topk = int(getattr(cfg, "predicate_label_relaxation_topk", 4))
+            if topk > 0 and int(sim_rows.shape[1]) > 1:
+                k = min(topk, int(sim_rows.shape[1]) - 1)
+                top_idx = torch.topk(sim_rows, k=k, dim=1).indices
+                top_mask = torch.zeros_like(relax_mask)
+                top_mask.scatter_(1, top_idx, True)
+                relax_mask = relax_mask | top_mask
+            sim_rows = sim_rows.masked_fill(~relax_mask, 0.0)
+            relax_mass = sim_rows.sum(dim=1, keepdim=True)
+            row_eps = torch.where(relax_mass > 1.0e-6, torch.full_like(relax_mass, eps), torch.zeros_like(relax_mass))
+            sim_rows = sim_rows / relax_mass.clamp_min(1.0e-6)
+            target_dist = sim_rows * row_eps
+            target_dist.scatter_add_(1, targets.view(-1, 1), 1.0 - row_eps)
+            logp = F.log_softmax(logits, dim=-1)
+            loss = -(target_dist * logp)
+            if use_weights is not None:
+                loss = loss * use_weights.to(device=logits.device, dtype=logits.dtype).view(1, -1)
+            ce = loss.sum(dim=-1)
+            if mode == "focal":
+                pt = torch.exp(-F.cross_entropy(logits, targets, reduction="none")).clamp(0.0, 1.0)
+                ce = torch.pow(1.0 - pt, float(getattr(cfg, "predicate_ce_gamma", 1.5))) * ce
+            return ce.mean()
+    ce = F.cross_entropy(logits, targets, weight=use_weights, reduction="none")
     if mode == "focal":
         pt = torch.exp(-ce).clamp(0.0, 1.0)
         ce = torch.pow(1.0 - pt, float(getattr(cfg, "predicate_ce_gamma", 1.5))) * ce
     return ce.mean()
+
+
+def _calibration_kl_loss(raw_logits: torch.Tensor, calibrated_logits: torch.Tensor) -> torch.Tensor:
+    if raw_logits.numel() == 0 or calibrated_logits.numel() == 0:
+        return raw_logits.sum() * 0.0
+    raw_logp = F.log_softmax(raw_logits.float().detach(), dim=-1)
+    cal_logp = F.log_softmax(calibrated_logits.float(), dim=-1)
+    return F.kl_div(cal_logp, raw_logp.exp(), reduction="batchmean")
+
+
+def _predicate_margin_rank_loss(logits: torch.Tensor, targets: torch.Tensor, margin: float) -> torch.Tensor:
+    if logits.numel() == 0 or targets.numel() == 0 or int(logits.shape[-1]) <= 1:
+        return logits.sum() * 0.0
+    targets = targets.long()
+    pos = logits.gather(1, targets.view(-1, 1)).squeeze(1)
+    neg_logits = logits.clone()
+    neg_logits.scatter_(1, targets.view(-1, 1), -10000.0)
+    hardest_neg = neg_logits.max(dim=1).values
+    return F.relu(float(margin) - pos + hardest_neg).mean()
 
 def build_argparser() -> argparse.ArgumentParser:
     p = argparse.ArgumentParser("openvocab-rel SPOA one-stage (3-stage training: --stage 1|2|3)")
@@ -194,7 +250,17 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--predicate_ce_weight_power", type=float, default=TrainConfig.predicate_ce_weight_power)
     p.add_argument("--predicate_ce_max_weight", type=float, default=TrainConfig.predicate_ce_max_weight)
     p.add_argument("--predicate_ce_positive_only", type=_str2bool, nargs="?", const=True, default=TrainConfig.predicate_ce_positive_only)
+    p.add_argument("--predicate_label_relaxation_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "predicate_label_relaxation_enabled", False))
+    p.add_argument("--predicate_label_relaxation_epsilon", type=float, default=getattr(TrainConfig, "predicate_label_relaxation_epsilon", 0.08))
+    p.add_argument("--predicate_label_relaxation_threshold", type=float, default=getattr(TrainConfig, "predicate_label_relaxation_threshold", 0.72))
+    p.add_argument("--predicate_label_relaxation_topk", type=int, default=getattr(TrainConfig, "predicate_label_relaxation_topk", 4))
     p.add_argument("--predicate_sampler_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.predicate_sampler_enabled)
+    p.add_argument("--text_conditioned_projection_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "text_conditioned_projection_enabled", False))
+    p.add_argument("--text_conditioned_projection_residual", type=float, default=getattr(TrainConfig, "text_conditioned_projection_residual", 0.35))
+    p.add_argument("--lambda_text_predicate_ce", type=float, default=getattr(TrainConfig, "lambda_text_predicate_ce", 0.0))
+    p.add_argument("--relationness_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "relationness_enabled", False))
+    p.add_argument("--relationness_threshold", type=float, default=getattr(TrainConfig, "relationness_threshold", 0.0))
+    p.add_argument("--lambda_relationness", type=float, default=getattr(TrainConfig, "lambda_relationness", 0.0))
     p.add_argument("--predicate_sampler_power", type=float, default=TrainConfig.predicate_sampler_power)
     p.add_argument("--predicate_sampler_max_weight", type=float, default=TrainConfig.predicate_sampler_max_weight)
     p.add_argument("--temp", type=float, default=TrainConfig.temp)
@@ -221,8 +287,13 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--adaptive_prior_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "adaptive_prior_enabled", True))
     p.add_argument("--bias_residual_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "bias_residual_enabled", True))
     p.add_argument("--adaptive_prior_scale", type=float, default=getattr(TrainConfig, "adaptive_prior_scale", 1.0))
+    p.add_argument("--adaptive_prior_gate_min", type=float, default=getattr(TrainConfig, "adaptive_prior_gate_min", 0.0))
+    p.add_argument("--adaptive_prior_gate_max", type=float, default=getattr(TrainConfig, "adaptive_prior_gate_max", 1.0))
     p.add_argument("--bias_residual_scale", type=float, default=getattr(TrainConfig, "bias_residual_scale", 0.25))
     p.add_argument("--lambda_calibration_reg", type=float, default=getattr(TrainConfig, "lambda_calibration_reg", 0.001))
+    p.add_argument("--lambda_calibration_kl", type=float, default=getattr(TrainConfig, "lambda_calibration_kl", 0.0))
+    p.add_argument("--lambda_calibration_rank", type=float, default=getattr(TrainConfig, "lambda_calibration_rank", 0.0))
+    p.add_argument("--calibration_rank_margin", type=float, default=getattr(TrainConfig, "calibration_rank_margin", 0.25))
     p.add_argument("--calibration_grad_clip_norm", type=float, default=getattr(TrainConfig, "calibration_grad_clip_norm", 0.0))
     p.add_argument("--emb_dim", type=int, default=TrainConfig.emb_dim)
     p.add_argument("--model_name", type=str, default=TrainConfig.model_name)
@@ -237,6 +308,9 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--bilinear_low_rank", type=_str2bool, nargs="?", const=True, default=TrainConfig.bilinear_low_rank)
     p.add_argument("--bilinear_rank", type=int, default=TrainConfig.bilinear_rank)
     p.add_argument("--bilinear_residual_scale", type=float, default=getattr(TrainConfig, "bilinear_residual_scale", 0.2))
+    p.add_argument("--explicit_spoa_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "explicit_spoa_enabled", True))
+    p.add_argument("--spoa_role_dropout", type=float, default=getattr(TrainConfig, "spoa_role_dropout", 0.05))
+    p.add_argument("--spoa_aux_scale", type=float, default=getattr(TrainConfig, "spoa_aux_scale", 1.0))
     p.add_argument("--clip_name", type=str, default=TrainConfig.clip_name)
     p.add_argument("--clip_input_res", type=int, default=TrainConfig.clip_input_res)
     p.add_argument("--gradient_checkpointing", type=_str2bool, nargs="?", const=True, default=TrainConfig.gradient_checkpointing)
@@ -265,6 +339,13 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--eval_sgg_clip_obj_crop_padding", type=float, default=getattr(TrainConfig, "eval_sgg_clip_obj_crop_padding", 0.10))
     p.add_argument("--eval_sgg_sgcls_use_obj_scores", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "eval_sgg_sgcls_use_obj_scores", False))
     p.add_argument("--eval_sgg_sgcls_oracle_labels", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "eval_sgg_sgcls_oracle_labels", False))
+    p.add_argument("--eval_sgg_use_relationness", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "eval_sgg_use_relationness", False))
+    p.add_argument("--eval_sgg_relationness_weight", type=float, default=getattr(TrainConfig, "eval_sgg_relationness_weight", 1.0))
+    p.add_argument("--eval_sgg_relationness_threshold", type=float, default=getattr(TrainConfig, "eval_sgg_relationness_threshold", 0.0))
+    p.add_argument("--eval_sgg_relationness_prune_k", type=int, default=getattr(TrainConfig, "eval_sgg_relationness_prune_k", 0))
+    p.add_argument("--eval_sgg_detector_prune_k", type=int, default=getattr(TrainConfig, "eval_sgg_detector_prune_k", 256))
+    p.add_argument("--eval_sgg_use_object_uncertainty", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "eval_sgg_use_object_uncertainty", True))
+    p.add_argument("--eval_sgg_object_score_power", type=float, default=getattr(TrainConfig, "eval_sgg_object_score_power", 1.0))
     p.add_argument("--eval_sgg_clip_obj_cache_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_clip_obj_cache_enabled)
     p.add_argument("--eval_sgg_clip_obj_cache_dir", type=str, default=TrainConfig.eval_sgg_clip_obj_cache_dir)
     p.add_argument("--eval_sgg_report_nograph", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_report_nograph)
@@ -340,6 +421,9 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "predicate_counterfactual": bool(uses_counterfactual),
             "gate_regularizer": bool(float(getattr(cfg, "gate_regularizer_weight", 0.0)) > 0.0),
             "lattice_negatives": bool(getattr(cfg, "lattice_loss_enabled", True)),
+            "predicate_label_relaxation": bool(getattr(cfg, "predicate_label_relaxation_enabled", False)),
+            "text_predicate_ce": bool(float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) > 0.0),
+            "relationness": bool(getattr(cfg, "relationness_enabled", False) and float(getattr(cfg, "lambda_relationness", 0.0)) > 0.0),
         },
         "ablation_only": {
             "visual_hard_negative": bool(uses_visual_hard),
@@ -354,7 +438,13 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "bayes_calibration_weight": float(getattr(cfg, "bayes_calibration_weight", 0.0)),
             "adaptive_calibration": bool(getattr(cfg, "adaptive_calibration_enabled", False)),
             "adaptive_prior": bool(getattr(cfg, "adaptive_prior_enabled", True)),
+            "adaptive_prior_gate_min": float(getattr(cfg, "adaptive_prior_gate_min", 0.0)),
+            "adaptive_prior_gate_max": float(getattr(cfg, "adaptive_prior_gate_max", 1.0)),
             "bias_residual": bool(getattr(cfg, "bias_residual_enabled", True)),
+            "lambda_calibration_kl": float(getattr(cfg, "lambda_calibration_kl", 0.0)),
+            "lambda_calibration_rank": float(getattr(cfg, "lambda_calibration_rank", 0.0)),
+            "lambda_text_predicate_ce": float(getattr(cfg, "lambda_text_predicate_ce", 0.0)),
+            "lambda_relationness": float(getattr(cfg, "lambda_relationness", 0.0)),
         },
         "architecture": {
             "geom_bias": bool(getattr(cfg, "use_geom_bias", True)),
@@ -363,6 +453,9 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "node_layers": int(getattr(cfg, "progressive_node_layers", 0)),
             "edge_layers": int(getattr(cfg, "progressive_edge_layers", 0)),
             "predicate_classifier": bool(getattr(cfg, "predicate_classifier_enabled", True)),
+            "explicit_spoa": bool(getattr(cfg, "explicit_spoa_enabled", True)),
+            "text_conditioned_projection": bool(getattr(cfg, "text_conditioned_projection_enabled", False)),
+            "relationness_head": bool(getattr(cfg, "relationness_enabled", False)),
         },
         "weights": {
             "lambda_predicate_ce": float(getattr(cfg, "lambda_predicate_ce", 0.0)),
@@ -375,7 +468,13 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "bayes_calibration_weight": float(getattr(cfg, "bayes_calibration_weight", 0.0)),
             "adaptive_calibration": bool(getattr(cfg, "adaptive_calibration_enabled", False)),
             "adaptive_prior": bool(getattr(cfg, "adaptive_prior_enabled", True)),
+            "adaptive_prior_gate_min": float(getattr(cfg, "adaptive_prior_gate_min", 0.0)),
+            "adaptive_prior_gate_max": float(getattr(cfg, "adaptive_prior_gate_max", 1.0)),
             "bias_residual": bool(getattr(cfg, "bias_residual_enabled", True)),
+            "lambda_calibration_kl": float(getattr(cfg, "lambda_calibration_kl", 0.0)),
+            "lambda_calibration_rank": float(getattr(cfg, "lambda_calibration_rank", 0.0)),
+            "lambda_text_predicate_ce": float(getattr(cfg, "lambda_text_predicate_ce", 0.0)),
+            "lambda_relationness": float(getattr(cfg, "lambda_relationness", 0.0)),
         },
     }
 
@@ -1110,6 +1209,10 @@ def main(argv: Optional[List[str]] = None) -> None:
         epoch_l_spoa = 0.0
         epoch_l_ground = 0.0
         epoch_l_pred_ce = 0.0
+        epoch_l_cal_kl = 0.0
+        epoch_l_cal_rank = 0.0
+        epoch_l_text_ce = 0.0
+        epoch_l_relationness = 0.0
         epoch_batches = 0
         epoch_positive_pairs = 0
         epoch_candidate_pairs = 0
@@ -1411,6 +1514,10 @@ def main(argv: Optional[List[str]] = None) -> None:
                 if n_ground > 0:
                     l_dense_grounding = l_dense_grounding / float(n_ground)
                 l_predicate_ce = torch.tensor(0.0, device=device)
+                l_calibration_kl = torch.tensor(0.0, device=device)
+                l_calibration_rank = torch.tensor(0.0, device=device)
+                l_text_predicate_ce = torch.tensor(0.0, device=device)
+                l_relationness = torch.tensor(0.0, device=device)
                 train_objective = train_objective_name
                 logit_adj_tau = float(getattr(cfg, "logit_adj_tau", 0.0))
                 if float(getattr(cfg, "lambda_predicate_ce", 0.0)) > 0.0:
@@ -1419,28 +1526,57 @@ def main(argv: Optional[List[str]] = None) -> None:
                         ce_targets = pos_pred_ids if bool(getattr(cfg, "predicate_ce_positive_only", True)) else flat_pred_ids
                         valid_ce = (ce_targets >= 0) & (ce_targets < int(pred_emb_s2o.shape[0]))
                         if bool(valid_ce.any()):
+                            raw_ce_logits = out.predicate_logits(ce_feats[valid_ce]).float()
                             if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and hasattr(out, "calibrated_predicate_logits"):
                                 ce_logits = out.calibrated_predicate_logits(ce_feats[valid_ce], pred_log_prior).float()
                             else:
-                                ce_logits = out.predicate_logits(ce_feats[valid_ce]).float()
+                                ce_logits = raw_ce_logits
                             if int(ce_logits.shape[-1]) == int(pred_emb_s2o.shape[0]):
                                 if logit_adj_tau > 0.0 and int(pred_log_prior.numel()) == int(ce_logits.shape[-1]):
-                                    ce_logits = ce_logits - (logit_adj_tau * pred_log_prior.view(1, -1))
-                                l_predicate_ce = _predicate_ce_loss(ce_logits, ce_targets[valid_ce].long(), pred_ce_weights, cfg)
+                                    adj = logit_adj_tau * pred_log_prior.view(1, -1)
+                                    ce_logits = ce_logits - adj
+                                    raw_ce_logits = raw_ce_logits - adj
+                                ce_targets_valid = ce_targets[valid_ce].long()
+                                l_predicate_ce = _predicate_ce_loss(ce_logits, ce_targets_valid, pred_ce_weights, cfg, pred_sim_matrix=pred_sim_matrix)
+                                if bool(getattr(cfg, "adaptive_calibration_enabled", False)):
+                                    l_calibration_kl = _calibration_kl_loss(raw_ce_logits, ce_logits)
+                                    l_calibration_rank = _predicate_margin_rank_loss(ce_logits, ce_targets_valid, float(getattr(cfg, "calibration_rank_margin", 0.25)))
                             elif int(pos_pred_ids.numel()) > 0:
                                 valid_pos_ce = (pos_pred_ids >= 0) & (pos_pred_ids < int(pred_emb_s2o.shape[0]))
                                 if bool(valid_pos_ce.any()):
                                     ce_logits = out.score(x_pos[valid_pos_ce], pred_emb_s2o.detach()).float()
                                     if logit_adj_tau > 0.0 and int(pred_log_prior.numel()) == int(ce_logits.shape[-1]):
                                         ce_logits = ce_logits - (logit_adj_tau * pred_log_prior.view(1, -1))
-                                    l_predicate_ce = _predicate_ce_loss(ce_logits, pos_pred_ids[valid_pos_ce].long(), pred_ce_weights, cfg)
+                                    l_predicate_ce = _predicate_ce_loss(ce_logits, pos_pred_ids[valid_pos_ce].long(), pred_ce_weights, cfg, pred_sim_matrix=pred_sim_matrix)
                     elif int(pos_pred_ids.numel()) > 0:
                         valid_ce = (pos_pred_ids >= 0) & (pos_pred_ids < int(pred_emb_s2o.shape[0]))
                         if bool(valid_ce.any()):
                             ce_logits = out.score(x_pos[valid_ce], pred_emb_s2o.detach()).float()
                             if logit_adj_tau > 0.0 and int(pred_log_prior.numel()) == int(ce_logits.shape[-1]):
                                 ce_logits = ce_logits - (logit_adj_tau * pred_log_prior.view(1, -1))
-                            l_predicate_ce = _predicate_ce_loss(ce_logits, pos_pred_ids[valid_ce].long(), pred_ce_weights, cfg)
+                            l_predicate_ce = _predicate_ce_loss(ce_logits, pos_pred_ids[valid_ce].long(), pred_ce_weights, cfg, pred_sim_matrix=pred_sim_matrix)
+                if float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) > 0.0 and int(pos_pred_ids.numel()) > 0:
+                    valid_text_ce = (pos_pred_ids >= 0) & (pos_pred_ids < int(pred_emb_s2o.shape[0]))
+                    if bool(valid_text_ce.any()):
+                        if hasattr(out, "text_predicate_logits"):
+                            text_ce_logits = out.text_predicate_logits(x_pos[valid_text_ce], pred_emb_s2o.detach()).float()
+                        else:
+                            text_ce_logits = out.score(x_pos[valid_text_ce], pred_emb_s2o.detach()).float()
+                        l_text_predicate_ce = _predicate_ce_loss(
+                            text_ce_logits,
+                            pos_pred_ids[valid_text_ce].long(),
+                            pred_ce_weights,
+                            cfg,
+                            pred_sim_matrix=pred_sim_matrix,
+                        )
+                if bool(getattr(cfg, "relationness_enabled", False)) and float(getattr(cfg, "lambda_relationness", 0.0)) > 0.0 and hasattr(out, "relationness_logits"):
+                    rel_targets = flat_pos_mask.to(device=device, dtype=torch.float32)
+                    rel_logits_all = out.relationness_logits(flat_r).float()
+                    if rel_logits_all.numel() == rel_targets.numel() and rel_targets.numel() > 0:
+                        pos_count = rel_targets.sum().clamp_min(1.0)
+                        neg_count = (1.0 - rel_targets).sum().clamp_min(1.0)
+                        pos_weight = (neg_count / pos_count).clamp(min=1.0, max=20.0)
+                        l_relationness = F.binary_cross_entropy_with_logits(rel_logits_all, rel_targets, pos_weight=pos_weight)
                 if train_objective in {"predicate_warmup", "ce_only", "pred_ce"}:
                     spoa_term = l_spoa_alignment * 0.0
                     ground_term = l_dense_grounding * 0.0
@@ -1451,13 +1587,17 @@ def main(argv: Optional[List[str]] = None) -> None:
                     spoa_term = float(cfg.lambda_spoa_alignment) * l_spoa_alignment
                     ground_term = float(cfg.lambda_dense_grounding) * l_dense_grounding
                 pred_ce_term = float(getattr(cfg, "lambda_predicate_ce", 0.0)) * l_predicate_ce
+                cal_kl_term = float(getattr(cfg, "lambda_calibration_kl", 0.0)) * l_calibration_kl
+                cal_rank_term = float(getattr(cfg, "lambda_calibration_rank", 0.0)) * l_calibration_rank
+                text_ce_term = float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) * l_text_predicate_ce
+                relationness_term = float(getattr(cfg, "lambda_relationness", 0.0)) * l_relationness
                 gate_reg = None
                 gate_val = 0.5
                 decoder = model.module.decoder if isinstance(model, DDP) else model.decoder
                 if hasattr(decoder, "last_gate_reg") and decoder.last_gate_reg is not None:
                     gate_reg = decoder.last_gate_reg
                     gate_val = decoder.last_gate_val
-                loss_total = spoa_term + ground_term + pred_ce_term
+                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term
                 calib_reg_weight = float(getattr(cfg, "lambda_calibration_reg", 0.0))
                 if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and calib_reg_weight > 0.0 and hasattr(out, "calibration_regularizer"):
                     calib_reg = out.calibration_regularizer()
@@ -1499,6 +1639,10 @@ def main(argv: Optional[List[str]] = None) -> None:
             epoch_l_spoa += float(l_spoa_alignment.item())
             epoch_l_ground += float(l_dense_grounding.item())
             epoch_l_pred_ce += float(l_predicate_ce.item())
+            epoch_l_cal_kl += float(l_calibration_kl.item())
+            epoch_l_cal_rank += float(l_calibration_rank.item())
+            epoch_l_text_ce += float(l_text_predicate_ce.item())
+            epoch_l_relationness += float(l_relationness.item())
             epoch_batches += 1
             epoch_positive_pairs += int(pos_idx.numel())
             epoch_candidate_pairs += int(flat_r.shape[0])
@@ -1537,6 +1681,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                     f"ep={epoch} st={step} loss={float(loss_total.item()):.3f} "
                     f"spoa={float(l_spoa_alignment.item()):.3f} ground={float(l_dense_grounding.item()):.3f} "
                     f"pred_ce={float(l_predicate_ce.item()):.3f} "
+                    f"cal_kl={float(l_calibration_kl.item()):.3f} cal_rank={float(l_calibration_rank.item()):.3f} "
+                    f"text_ce={float(l_text_predicate_ce.item()):.3f} relness={float(l_relationness.item()):.3f} "
                     f"[ratio={loss_ratio:.2f}, gate={float(gate_val):.2f}] | lr={float(optim.param_groups[0]['lr']):.2e}"
                     f"{timing_msg}",
                     flush=True,
@@ -1564,11 +1710,23 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "avg_counterfactual_spoa": float(epoch_l_spoa / max(1, epoch_batches)),
                 "avg_dense_grounding": float(epoch_l_ground / max(1, epoch_batches)),
                 "avg_predce_logit_adjusted": float(epoch_l_pred_ce / max(1, epoch_batches)),
+                "avg_calibration_kl": float(epoch_l_cal_kl / max(1, epoch_batches)),
+                "avg_calibration_rank": float(epoch_l_cal_rank / max(1, epoch_batches)),
+                "avg_text_predicate_ce": float(epoch_l_text_ce / max(1, epoch_batches)),
+                "avg_relationness": float(epoch_l_relationness / max(1, epoch_batches)),
                 "negative_pair_ratio": float(getattr(cfg, "negative_pair_ratio", -1.0)),
                 "lambda_predicate_ce": float(getattr(cfg, "lambda_predicate_ce", 0.0)),
                 "lambda_counterfactual_in_spoa": float(getattr(cfg, "lambda_counterfactual", 1.0)),
                 "predicate_ce_loss": str(getattr(cfg, "predicate_ce_loss", "ce")),
                 "predicate_ce_positive_only": bool(getattr(cfg, "predicate_ce_positive_only", True)),
+                "predicate_label_relaxation_enabled": bool(getattr(cfg, "predicate_label_relaxation_enabled", False)),
+                "predicate_label_relaxation_epsilon": float(getattr(cfg, "predicate_label_relaxation_epsilon", 0.0)),
+                "predicate_label_relaxation_threshold": float(getattr(cfg, "predicate_label_relaxation_threshold", 0.0)),
+                "text_conditioned_projection_enabled": bool(getattr(cfg, "text_conditioned_projection_enabled", False)),
+                "text_conditioned_projection_residual": float(getattr(cfg, "text_conditioned_projection_residual", 0.0)),
+                "lambda_text_predicate_ce": float(getattr(cfg, "lambda_text_predicate_ce", 0.0)),
+                "relationness_enabled": bool(getattr(cfg, "relationness_enabled", False)),
+                "lambda_relationness": float(getattr(cfg, "lambda_relationness", 0.0)),
                 "predicate_sampler_enabled": bool(getattr(cfg, "predicate_sampler_enabled", False)),
                 "predicate_sampler_power": float(getattr(cfg, "predicate_sampler_power", 0.0)),
                 "ablation_visual_hard_negative_enabled": bool(getattr(cfg, "visual_hard_negative_enabled", False)),
@@ -1584,7 +1742,14 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "bayes_calibration_weight": float(getattr(cfg, "bayes_calibration_weight", 0.0)),
                 "adaptive_calibration_enabled": bool(getattr(cfg, "adaptive_calibration_enabled", False)),
                 "adaptive_prior_scale": float(getattr(cfg, "adaptive_prior_scale", 1.0)),
+                "adaptive_prior_gate_min": float(getattr(cfg, "adaptive_prior_gate_min", 0.0)),
+                "adaptive_prior_gate_max": float(getattr(cfg, "adaptive_prior_gate_max", 1.0)),
+                "lambda_calibration_kl": float(getattr(cfg, "lambda_calibration_kl", 0.0)),
+                "lambda_calibration_rank": float(getattr(cfg, "lambda_calibration_rank", 0.0)),
+                "calibration_rank_margin": float(getattr(cfg, "calibration_rank_margin", 0.25)),
                 "bias_residual_scale": float(getattr(cfg, "bias_residual_scale", 0.25)),
+                "explicit_spoa_enabled": bool(getattr(cfg, "explicit_spoa_enabled", True)),
+                "spoa_aux_scale": float(getattr(cfg, "spoa_aux_scale", 1.0)),
                 "clip_unfreeze_after_epochs": int(getattr(cfg, "clip_unfreeze_after_epochs", 0)),
                 "num_batches": int(epoch_batches),
                 "positive_pairs": int(epoch_positive_pairs),

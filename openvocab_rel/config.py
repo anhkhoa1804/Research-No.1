@@ -92,9 +92,19 @@ class TrainConfig:
     predicate_ce_weight_power: float = 0.5
     predicate_ce_max_weight: float = 5.0
     predicate_ce_positive_only: bool = True
+    predicate_label_relaxation_enabled: bool = False
+    predicate_label_relaxation_epsilon: float = 0.08
+    predicate_label_relaxation_threshold: float = 0.72
+    predicate_label_relaxation_topk: int = 4
     predicate_sampler_enabled: bool = False
     predicate_sampler_power: float = 0.75
     predicate_sampler_max_weight: float = 20.0
+    text_conditioned_projection_enabled: bool = False
+    text_conditioned_projection_residual: float = 0.35
+    lambda_text_predicate_ce: float = 0.0
+    relationness_enabled: bool = False
+    relationness_threshold: float = 0.0
+    lambda_relationness: float = 0.0
     temp: float = 0.07
     ground_num_queries: int = 3
     rel_queue_size: int = 32768
@@ -120,8 +130,13 @@ class TrainConfig:
     adaptive_prior_enabled: bool = True
     bias_residual_enabled: bool = True
     adaptive_prior_scale: float = 1.0
+    adaptive_prior_gate_min: float = 0.0
+    adaptive_prior_gate_max: float = 1.0
     bias_residual_scale: float = 0.25
     lambda_calibration_reg: float = 0.001
+    lambda_calibration_kl: float = 0.0
+    lambda_calibration_rank: float = 0.0
+    calibration_rank_margin: float = 0.25
     calibration_grad_clip_norm: float = 0.0
 
     # LoRA fine-tuning.
@@ -141,6 +156,9 @@ class TrainConfig:
     bilinear_low_rank: bool = False
     bilinear_rank: int = 32
     bilinear_residual_scale: float = 0.2
+    explicit_spoa_enabled: bool = True
+    spoa_role_dropout: float = 0.05
+    spoa_aux_scale: float = 1.0
     clip_name: str = "openai/clip-vit-large-patch14-336"
     clip_input_res: int = 336
     gradient_checkpointing: bool = False
@@ -173,6 +191,13 @@ class TrainConfig:
     eval_sgg_clip_obj_crop_padding: float = 0.10
     eval_sgg_sgcls_use_obj_scores: bool = False
     eval_sgg_sgcls_oracle_labels: bool = False
+    eval_sgg_use_relationness: bool = False
+    eval_sgg_relationness_weight: float = 1.0
+    eval_sgg_relationness_threshold: float = 0.0
+    eval_sgg_relationness_prune_k: int = 0
+    eval_sgg_detector_prune_k: int = 256
+    eval_sgg_use_object_uncertainty: bool = True
+    eval_sgg_object_score_power: float = 1.0
     eval_sgg_clip_obj_cache_enabled: bool = True
     eval_sgg_clip_obj_cache_dir: str = "runs/clip_obj_cache"
     eval_sgg_report_nograph: bool = True
@@ -247,6 +272,9 @@ def apply_gpu_preset(cfg: TrainConfig, preset: str) -> TrainConfig:
         "a100_80gb": "a100_80gb_balanced",
         "a100_balanced": "a100_80gb_balanced",
         "a100_throughput": "a100_80gb_throughput",
+        "a100_40gb": "a100_40gb",
+        "a100_40g": "a100_40gb",
+        "a10040": "a100_40gb",
         "high": "a100_80gb_throughput",
         "high_80gb": "a100_80gb_throughput",
         "l4": "l4_24gb",
@@ -256,10 +284,10 @@ def apply_gpu_preset(cfg: TrainConfig, preset: str) -> TrainConfig:
         "l4_22g": "l4_22gb_lowmem",
     }
     key = aliases.get(key, key)
-    if key not in {"a100_80gb_balanced", "a100_80gb_throughput", "l4_24gb", "l4_22gb_lowmem"}:
+    if key not in {"a100_80gb_balanced", "a100_80gb_throughput", "a100_40gb", "l4_24gb", "l4_22gb_lowmem"}:
         raise ValueError(
             f"Unsupported GPU preset: {preset}. "
-            "Use a100_80gb_balanced, a100_80gb_throughput, high_80gb, l4_24gb, or l4_22gb_lowmem."
+            "Use a100_80gb_balanced, a100_80gb_throughput, a100_40gb, high_80gb, l4_24gb, or l4_22gb_lowmem."
         )
 
     cfg.loader_persistent_workers = True
@@ -294,6 +322,21 @@ def apply_gpu_preset(cfg: TrainConfig, preset: str) -> TrainConfig:
         elif int(cfg.stage) == 3:
             cfg.batch_size = 32
             cfg.gradient_checkpointing = True
+    elif key == "a100_40gb":
+        cfg.num_workers = min(max(int(cfg.num_workers), 6), 8)
+        cfg.loader_prefetch_factor = 3
+        cfg.rel_queue_size = min(max(int(cfg.rel_queue_size), 8192), 16384)
+        if int(cfg.stage) == 1:
+            cfg.batch_size = 96
+            cfg.gradient_checkpointing = False
+        elif int(cfg.stage) == 2:
+            cfg.batch_size = 12
+            cfg.gradient_checkpointing = True
+        elif int(cfg.stage) == 3:
+            cfg.batch_size = 16
+            cfg.gradient_checkpointing = True
+            cfg.eval_sgg_detector_prune_k = min(int(getattr(cfg, "eval_sgg_detector_prune_k", 256)), 192)
+
     elif key == "l4_24gb":
         cfg.num_workers = min(max(int(cfg.num_workers), 4), 6)
         cfg.loader_prefetch_factor = 2
@@ -350,6 +393,17 @@ def apply_stage_config(cfg):
         cfg.lambda_predicate_ce = 2.0
         cfg.lambda_counterfactual = 0.0
         cfg.lambda_visual_hard_negative = 0.0
+        cfg.explicit_spoa_enabled = True
+        cfg.adaptive_calibration_enabled = True
+        cfg.adaptive_prior_enabled = True
+        cfg.bias_residual_enabled = True
+        cfg.adaptive_prior_gate_min = 0.05
+        cfg.adaptive_prior_gate_max = 0.65
+        cfg.lambda_calibration_reg = 0.001
+        cfg.lambda_calibration_kl = 0.02
+        cfg.lambda_calibration_rank = 0.05
+        cfg.calibration_rank_margin = 0.20
+        cfg.predicate_label_relaxation_enabled = False
         cfg.visual_hard_negative_enabled = False
         cfg.predicate_counterfactual_enabled = False
         cfg.gate_regularizer_weight = 0.0
@@ -389,10 +443,25 @@ def apply_stage_config(cfg):
         cfg.lambda_spoa_alignment = 0.5
         cfg.lambda_dense_grounding = 0.25
         cfg.lambda_predicate_ce = 1.5
-        cfg.lambda_counterfactual = 0.0
+        cfg.lambda_counterfactual = 0.05
         cfg.lambda_visual_hard_negative = 0.25
+        cfg.explicit_spoa_enabled = True
+        cfg.spoa_aux_scale = 1.0
+        cfg.adaptive_calibration_enabled = True
+        cfg.adaptive_prior_enabled = True
+        cfg.bias_residual_enabled = True
+        cfg.adaptive_prior_gate_min = 0.05
+        cfg.adaptive_prior_gate_max = 0.75
+        cfg.lambda_calibration_reg = 0.001
+        cfg.lambda_calibration_kl = 0.03
+        cfg.lambda_calibration_rank = 0.08
+        cfg.calibration_rank_margin = 0.25
+        cfg.predicate_label_relaxation_enabled = True
+        cfg.predicate_label_relaxation_epsilon = 0.08
+        cfg.predicate_label_relaxation_threshold = 0.72
+        cfg.predicate_label_relaxation_topk = 4
         cfg.visual_hard_negative_enabled = True
-        cfg.predicate_counterfactual_enabled = False
+        cfg.predicate_counterfactual_enabled = True
         cfg.gate_regularizer_weight = 0.01
         cfg.predicate_ce_loss = "focal"
         cfg.predicate_ce_gamma = 1.5
@@ -440,9 +509,30 @@ def apply_stage_config(cfg):
         cfg.rel_queue_size = 8192
         cfg.predicate_classifier_enabled = True
         cfg.eval_sgg_use_predicate_classifier = True
+        cfg.eval_sgg_predicate_score_mode = "ensemble"
+        cfg.eval_sgg_predicate_ensemble_alpha = 0.45
+        cfg.text_conditioned_projection_enabled = True
+        cfg.text_conditioned_projection_residual = 0.35
+        cfg.lambda_text_predicate_ce = 0.4
+        cfg.relationness_enabled = True
+        cfg.lambda_relationness = 0.15
+        cfg.eval_sgg_use_relationness = True
+        cfg.eval_sgg_relationness_weight = 0.75
+        cfg.eval_sgg_relationness_prune_k = 128
+        cfg.eval_sgg_detector_prune_k = 192
+        cfg.eval_sgg_use_object_uncertainty = True
+        cfg.eval_sgg_object_score_power = 1.0
         cfg.prompt_aug_max_paraphrases = 1
         cfg.eval_research_suite = False
         cfg.fp8_enabled = False
+
+    if int(cfg.stage) == 3:
+        cfg.text_conditioned_projection_enabled = True
+        cfg.lambda_text_predicate_ce = max(float(getattr(cfg, "lambda_text_predicate_ce", 0.0)), 0.4)
+        cfg.relationness_enabled = True
+        cfg.lambda_relationness = max(float(getattr(cfg, "lambda_relationness", 0.0)), 0.15)
+        cfg.eval_sgg_use_relationness = True
+        cfg.eval_sgg_use_object_uncertainty = True
 
     return cfg
 
