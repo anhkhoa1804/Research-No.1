@@ -98,6 +98,14 @@ class TrainConfig:
     predicate_label_relaxation_epsilon: float = 0.08
     predicate_label_relaxation_threshold: float = 0.72
     predicate_label_relaxation_topk: int = 4
+    predicate_group_relaxation_enabled: bool = False
+    predicate_group_relaxation_epsilon: float = 0.04
+    predicate_group_relaxation_max_group_size: int = 12
+    lambda_role_swap_rank: float = 0.0
+    role_swap_rank_margin: float = 0.20
+    role_swap_rank_use_calibrated_logits: bool = False
+    tail_logit_adjustment_enabled: bool = False
+    tail_logit_adjustment_tau: float = 0.0
     predicate_sampler_enabled: bool = False
     predicate_sampler_power: float = 0.75
     predicate_sampler_max_weight: float = 20.0

@@ -50,6 +50,19 @@ ARGS=(
   --adaptive_prior_enabled true
   --bias_residual_enabled true
   --predicate_label_relaxation_enabled true
+  --predicate_group_relaxation_enabled "${PREDICATE_GROUP_RELAXATION_ENABLED:-false}"
+  --predicate_group_relaxation_epsilon "${PREDICATE_GROUP_RELAXATION_EPSILON:-0.04}"
+  --lambda_role_swap_rank "${LAMBDA_ROLE_SWAP_RANK:-0.0}"
+  --role_swap_rank_margin "${ROLE_SWAP_RANK_MARGIN:-0.20}"
+  --tail_logit_adjustment_enabled "${TAIL_LOGIT_ADJUSTMENT_ENABLED:-false}"
+  --tail_logit_adjustment_tau "${TAIL_LOGIT_ADJUSTMENT_TAU:-0.0}"
+  --predicate_sampler_enabled "${PREDICATE_SAMPLER_ENABLED:-false}"
+  --predicate_sampler_power "${PREDICATE_SAMPLER_POWER:-0.75}"
+  --predicate_sampler_max_weight "${PREDICATE_SAMPLER_MAX_WEIGHT:-20.0}"
+  --asymmetric_pair_fusion_enabled "${ASYMMETRIC_PAIR_FUSION_ENABLED:-false}"
+  --asymmetric_pair_fusion_include_reverse_diff "${ASYMMETRIC_PAIR_FUSION_INCLUDE_REVERSE_DIFF:-true}"
+  --asymmetric_pair_fusion_hidden_mult "${ASYMMETRIC_PAIR_FUSION_HIDDEN_MULT:-2.0}"
+  --predicate_metadata_path "${PREDICATE_METADATA_PATH:-configs/predicate_metadata_vg150.json}"
   --text_conditioned_projection_enabled true
   --text_conditioned_projection_residual "${TEXT_PROJ_RESIDUAL:-0.35}"
   --relationness_enabled true
@@ -70,7 +83,10 @@ ARGS=(
   --eval_every "${EVAL_EVERY:-1}"
   --eval_batches "${EVAL_BATCHES:-200}"
   --eval_sgg_predicate_score_mode "${EVAL_SCORE_MODE:-ensemble}"
+  --eval_sgg_compare_score_modes "${EVAL_COMPARE_SCORE_MODES:-}"
   --eval_sgg_predicate_ensemble_alpha "${EVAL_ENSEMBLE_ALPHA:-0.45}"
+  --eval_sgg_role_swap_metric_enabled "${EVAL_ROLE_SWAP_METRIC_ENABLED:-true}"
+  --eval_sgg_routing_diag_enabled "${EVAL_ROUTING_DIAG_ENABLED:-true}"
   --eval_sgg_use_relationness true
   --eval_sgg_relationness_weight "${RELATIONNESS_WEIGHT:-0.75}"
   --eval_sgg_relationness_prune_k "${RELATIONNESS_PRUNE_K:-96}"

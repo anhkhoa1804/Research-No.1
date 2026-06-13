@@ -215,3 +215,38 @@ presets:
     eval_sgg_compare_score_modes: classifier,text,ensemble
     checkpoint_selection_lambda_mr: 1.0
     checkpoint_selection_mu_tail: 1.0
+  pure_next_role_tail_pilot:
+    description: "PURE-next pilot: asymmetric fusion + sampler + role ranking + group relaxation + tail logit adjustment"
+    gpu_preset: l4_24gb
+    stage: 3
+    clip_input_res: 448
+    batch_size: 8
+    accum_steps: 2
+    samples_per_epoch: 10000
+    eval_batches: 100
+    max_objects: 32
+    max_pairs: 64
+    learned_prune_k: 64
+    explicit_spoa_enabled: true
+    asymmetric_pair_fusion_enabled: true
+    asymmetric_pair_fusion_include_reverse_diff: true
+    asymmetric_pair_fusion_hidden_mult: 2.0
+    predicate_sampler_enabled: true
+    predicate_sampler_power: 0.75
+    predicate_sampler_max_weight: 20.0
+    predicate_label_relaxation_enabled: true
+    predicate_group_relaxation_enabled: true
+    predicate_group_relaxation_epsilon: 0.04
+    predicate_metadata_path: configs/predicate_metadata_vg150.json
+    lambda_role_swap_rank: 0.08
+    role_swap_rank_margin: 0.20
+    tail_logit_adjustment_enabled: true
+    tail_logit_adjustment_tau: 0.25
+    eval_sgg_role_swap_metric_enabled: true
+    eval_sgg_role_swap_margin: 0.0
+    eval_sgg_routing_diag_enabled: true
+    eval_sgg_use_gt_pairs: false
+    eval_sgg_predicate_score_mode: classifier
+    eval_sgg_compare_score_modes: classifier,text,ensemble
+    checkpoint_selection_lambda_mr: 1.0
+    checkpoint_selection_mu_tail: 3.0
