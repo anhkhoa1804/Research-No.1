@@ -555,6 +555,9 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "gate_regularizer": bool(float(getattr(cfg, "gate_regularizer_weight", 0.0)) > 0.0),
             "lattice_negatives": bool(getattr(cfg, "lattice_loss_enabled", True)),
             "predicate_label_relaxation": bool(getattr(cfg, "predicate_label_relaxation_enabled", False)),
+            "predicate_group_relaxation": bool(getattr(cfg, "predicate_group_relaxation_enabled", False)),
+            "role_swap_rank": bool(float(getattr(cfg, "lambda_role_swap_rank", 0.0)) > 0.0),
+            "tail_logit_adjustment": bool(getattr(cfg, "tail_logit_adjustment_enabled", False)),
             "text_predicate_ce": bool(float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) > 0.0),
             "relationness": bool(getattr(cfg, "relationness_enabled", False) and float(getattr(cfg, "lambda_relationness", 0.0)) > 0.0),
         },
@@ -578,6 +581,8 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "lambda_calibration_rank": float(getattr(cfg, "lambda_calibration_rank", 0.0)),
             "lambda_text_predicate_ce": float(getattr(cfg, "lambda_text_predicate_ce", 0.0)),
             "lambda_relationness": float(getattr(cfg, "lambda_relationness", 0.0)),
+            "lambda_role_swap_rank": float(getattr(cfg, "lambda_role_swap_rank", 0.0)),
+            "tail_logit_adjustment_tau": float(getattr(cfg, "tail_logit_adjustment_tau", 0.0)),
         },
         "architecture": {
             "geom_bias": bool(getattr(cfg, "use_geom_bias", True)),
@@ -1369,6 +1374,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         epoch_l_cal_rank = 0.0
         epoch_l_text_ce = 0.0
         epoch_l_relationness = 0.0
+        epoch_l_role_swap = 0.0
         epoch_batches = 0
         epoch_positive_pairs = 0
         epoch_candidate_pairs = 0
