@@ -82,6 +82,8 @@ class TrainConfig:
     eval_sgg_text_temperature: float = 1.0
     eval_sgg_predicate_diag_topk: int = 8
     eval_sgg_compare_score_modes: str = ""  # comma list, e.g. classifier,text,ensemble
+    checkpoint_selection_lambda_mr: float = 1.0
+    checkpoint_selection_mu_tail: float = 1.0
     freq_bias_enabled: bool = False
     freq_bias_path: str = ""
     freq_bias_alpha: float = 0.5
@@ -101,10 +103,17 @@ class TrainConfig:
     predicate_sampler_max_weight: float = 20.0
     text_conditioned_projection_enabled: bool = False
     text_conditioned_projection_residual: float = 0.35
+    open_vocab_predicate_primary: bool = False
+    open_vocab_classifier_aux_weight: float = 0.5
     lambda_text_predicate_ce: float = 0.0
     relationness_enabled: bool = False
     relationness_threshold: float = 0.0
     lambda_relationness: float = 0.0
+    one_stage_facade_enabled: bool = False
+    one_stage_max_pairs: int = 256
+    retrieval_index_enabled: bool = False
+    retrieval_triplets_per_image: int = 100
+    pure_target_phases: str = "sgcls,sgdet,one_stage,open_vocab,retrieval"
     temp: float = 0.07
     ground_num_queries: int = 3
     rel_queue_size: int = 32768
@@ -116,6 +125,10 @@ class TrainConfig:
     rfs_t: float = 0.001
     use_geom_bias: bool = True
     vector_fusion_gate: bool = True
+    asymmetric_pair_fusion_enabled: bool = False
+    asymmetric_pair_fusion_include_reverse_diff: bool = True
+    asymmetric_pair_fusion_hidden_mult: float = 2.0
+    predicate_metadata_path: str = "configs/predicate_metadata_vg150.json"
     geom_fourier_dim: int = 256
     logit_adj_tau: float = 0.0
     eval_logit_adj_tau: float = -1.0  # negative means reuse logit_adj_tau for eval
@@ -158,7 +171,8 @@ class TrainConfig:
     bilinear_residual_scale: float = 0.2
     explicit_spoa_enabled: bool = True
     spoa_role_dropout: float = 0.05
-    spoa_aux_scale: float = 1.0
+    spoa_attr_scale: float = 1.0
+    spoa_aux_scale: float = 1.0  # Backward-compatible alias for older presets/checkpoints.
     clip_name: str = "openai/clip-vit-large-patch14-336"
     clip_input_res: int = 336
     gradient_checkpointing: bool = False
@@ -201,6 +215,9 @@ class TrainConfig:
     eval_sgg_clip_obj_cache_enabled: bool = True
     eval_sgg_clip_obj_cache_dir: str = "runs/clip_obj_cache"
     eval_sgg_report_nograph: bool = True
+    eval_sgg_role_swap_metric_enabled: bool = True
+    eval_sgg_role_swap_margin: float = 0.0
+    eval_sgg_routing_diag_enabled: bool = True
     eval_sgg_use_no_interaction_prior: bool = False
     eval_sgg_no_interaction_text: str = "no relation or interaction between the objects"
     eval_sgg_grounding_dino_enabled: bool = True
@@ -446,6 +463,7 @@ def apply_stage_config(cfg):
         cfg.lambda_counterfactual = 0.05
         cfg.lambda_visual_hard_negative = 0.25
         cfg.explicit_spoa_enabled = True
+        cfg.spoa_attr_scale = 1.0
         cfg.spoa_aux_scale = 1.0
         cfg.adaptive_calibration_enabled = True
         cfg.adaptive_prior_enabled = True

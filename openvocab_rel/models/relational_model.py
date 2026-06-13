@@ -228,8 +228,19 @@ class ProgressiveRelationalDecoder(nn.Module):
         
         self.use_geom_bias = getattr(cfg, "use_geom_bias", True)
         self.vector_fusion_gate = bool(getattr(cfg, "vector_fusion_gate", True))
+        self.asymmetric_pair_fusion_enabled = bool(getattr(cfg, "asymmetric_pair_fusion_enabled", False))
+        self.asymmetric_pair_fusion_include_reverse_diff = bool(getattr(cfg, "asymmetric_pair_fusion_include_reverse_diff", True))
+        asym_basis_parts = 5 if self.asymmetric_pair_fusion_include_reverse_diff else 4
+        asym_hidden_dim = max(self.dim, int(round(self.dim * float(getattr(cfg, "asymmetric_pair_fusion_hidden_mult", 2.0)))))
+        self.asymmetric_pair_proj = nn.Sequential(
+            nn.LayerNorm(self.dim * asym_basis_parts),
+            nn.Linear(self.dim * asym_basis_parts, asym_hidden_dim),
+            nn.GELU(),
+            nn.Linear(asym_hidden_dim, self.dim),
+            nn.LayerNorm(self.dim),
+        )
         self.explicit_spoa_enabled = bool(getattr(cfg, "explicit_spoa_enabled", True))
-        self.spoa_aux_scale = float(max(0.0, getattr(cfg, "spoa_aux_scale", 1.0)))
+        self.spoa_attr_scale = float(max(0.0, getattr(cfg, "spoa_attr_scale", getattr(cfg, "spoa_aux_scale", 1.0))))
         self.fusion_gate_temperature = float(max(0.2, getattr(cfg, "fusion_gate_temperature", 0.7)))
         self.fusion_gate = nn.Sequential(
             nn.Linear(self.dim * 3, self.dim),
@@ -273,21 +284,27 @@ class ProgressiveRelationalDecoder(nn.Module):
             nn.Dropout(float(max(0.0, getattr(cfg, "spoa_role_dropout", 0.05)))),
             nn.Linear(self.dim, self.dim),
         )
-        self.aux_branch = nn.Sequential(
+        self.subject_attr_branch = nn.Sequential(
+            nn.LayerNorm(self.dim),
+            nn.Linear(self.dim, self.dim),
+            nn.GELU(),
+            nn.Linear(self.dim, self.dim),
+        )
+        self.object_attr_branch = nn.Sequential(
             nn.LayerNorm(self.dim),
             nn.Linear(self.dim, self.dim),
             nn.GELU(),
             nn.Linear(self.dim, self.dim),
         )
         self.predicate_branch = nn.Sequential(
-            nn.LayerNorm(self.dim * 3),
-            nn.Linear(self.dim * 3, self.dim),
+            nn.LayerNorm(self.dim * 4),
+            nn.Linear(self.dim * 4, self.dim),
             nn.GELU(),
             nn.Linear(self.dim, self.dim),
         )
         self.spoa_fusion = nn.Sequential(
-            nn.LayerNorm(self.dim * 4),
-            nn.Linear(self.dim * 4, self.dim * 2),
+            nn.LayerNorm(self.dim * 5),
+            nn.Linear(self.dim * 5, self.dim * 2),
             nn.GELU(),
             nn.Linear(self.dim * 2, self.dim),
         )
@@ -400,6 +417,15 @@ class ProgressiveRelationalDecoder(nn.Module):
 
         return visual_tokens, object_tokens
 
+    def _semantic_pair_feature(self, sub_norm: torch.Tensor, obj_norm: torch.Tensor) -> torch.Tensor:
+        if self.asymmetric_pair_fusion_enabled:
+            parts = [sub_norm, obj_norm, sub_norm - obj_norm]
+            if self.asymmetric_pair_fusion_include_reverse_diff:
+                parts.append(obj_norm - sub_norm)
+            parts.append(sub_norm * obj_norm)
+            return F.normalize(self.asymmetric_pair_proj(torch.cat(parts, dim=-1)), dim=-1, eps=1e-6)
+        return F.normalize(sub_norm + obj_norm, dim=-1, eps=1e-6)
+
     def forward_pairs(
         self,
         visual_tokens,
@@ -423,7 +449,7 @@ class ProgressiveRelationalDecoder(nn.Module):
             
             sub_norm = F.normalize(sub_feat, dim=-1)
             obj_norm = F.normalize(obj_feat, dim=-1)
-            sem_feat = F.normalize(sub_norm + obj_norm, dim=-1, eps=1e-6)
+            sem_feat = self._semantic_pair_feature(sub_norm, obj_norm)
             geom_norm = F.normalize(geom_feat_proj, dim=-1, eps=1e-6)
             if self.vector_fusion_gate:
                 concat_feats = torch.cat([sub_norm, obj_norm, geom_norm], dim=-1)
@@ -443,15 +469,17 @@ class ProgressiveRelationalDecoder(nn.Module):
             if self.explicit_spoa_enabled:
                 sub_role = self.subject_branch(sub_feat) + self.subject_role_embedding.to(dtype=sub_feat.dtype)
                 obj_role = self.object_branch(obj_feat) + self.object_role_embedding.to(dtype=obj_feat.dtype)
-                aux_role = self.aux_branch(geom_feat_proj) * self.spoa_aux_scale
+                sub_attr = self.subject_attr_branch(sub_feat) * self.spoa_attr_scale
+                obj_attr = self.object_attr_branch(obj_feat) * self.spoa_attr_scale
                 pred_role = self.predicate_query.to(device=sub_feat.device, dtype=sub_feat.dtype).expand_as(sub_role)
-                pred_role = pred_role + self.predicate_branch(torch.cat([sub_role, obj_role, aux_role], dim=-1))
+                pred_role = pred_role + self.predicate_branch(torch.cat([sub_role, sub_attr, obj_role, obj_attr], dim=-1))
                 spoa_state = torch.cat(
                     [
                         F.normalize(sub_role, dim=-1, eps=1e-6),
+                        F.normalize(sub_attr, dim=-1, eps=1e-6),
                         F.normalize(pred_role, dim=-1, eps=1e-6),
                         F.normalize(obj_role, dim=-1, eps=1e-6),
-                        F.normalize(aux_role, dim=-1, eps=1e-6),
+                        F.normalize(obj_attr, dim=-1, eps=1e-6),
                     ],
                     dim=-1,
                 )
@@ -482,19 +510,22 @@ class ProgressiveRelationalDecoder(nn.Module):
             self.last_gate_reg = ((gate - 0.5) ** 2).mean()
             self.last_gate_val = gate.mean().detach()
 
-            fused_feat = gate * (sub_norm + obj_norm) + (1.0 - gate) * geom_norm
+            sem_feat = self._semantic_pair_feature(sub_norm, obj_norm)
+            fused_feat = gate * sem_feat + (1.0 - gate) * geom_norm
             if self.explicit_spoa_enabled:
                 sub_role = self.subject_branch(sub_feat) + self.subject_role_embedding.to(dtype=sub_feat.dtype)
                 obj_role = self.object_branch(obj_feat) + self.object_role_embedding.to(dtype=obj_feat.dtype)
-                aux_role = self.aux_branch(geom_feat_proj) * self.spoa_aux_scale
+                sub_attr = self.subject_attr_branch(sub_feat) * self.spoa_attr_scale
+                obj_attr = self.object_attr_branch(obj_feat) * self.spoa_attr_scale
                 pred_role = self.predicate_query.to(device=sub_feat.device, dtype=sub_feat.dtype).expand_as(sub_role)
-                pred_role = pred_role + self.predicate_branch(torch.cat([sub_role, obj_role, aux_role], dim=-1))
+                pred_role = pred_role + self.predicate_branch(torch.cat([sub_role, sub_attr, obj_role, obj_attr], dim=-1))
                 spoa_state = torch.cat(
                     [
                         F.normalize(sub_role, dim=-1, eps=1e-6),
+                        F.normalize(sub_attr, dim=-1, eps=1e-6),
                         F.normalize(pred_role, dim=-1, eps=1e-6),
                         F.normalize(obj_role, dim=-1, eps=1e-6),
-                        F.normalize(aux_role, dim=-1, eps=1e-6),
+                        F.normalize(obj_attr, dim=-1, eps=1e-6),
                     ],
                     dim=-1,
                 )
@@ -730,7 +761,7 @@ class RelationalModel(nn.Module):
             raise TypeError("forward_from_featmap requires pairs.")
 
         boxes = [b.to(device, non_blocking=True) if b is not None else b for b in boxes]
-    
+
         return_swapped = bool(kwargs.get("return_swapped", True))
         prune_override = kwargs.get("learned_prune_k_override", None)
         if prune_override is None:
@@ -739,12 +770,6 @@ class RelationalModel(nn.Module):
             prune_k = int(prune_override)
         force_keep = kwargs.get("force_keep", None)
         obj_semantic_feats = kwargs.get("obj_semantic_feats", None)
-
-        boxes = obj_boxes_224 if obj_boxes_224 is not None else obj_boxes
-        if boxes is None:
-            raise TypeError("forward_from_featmap requires obj_boxes or obj_boxes_224.")
-        if pairs is None:
-            raise TypeError("forward_from_featmap requires pairs.")
 
         kept_idx = self._compute_kept_indices(
             obj_boxes=boxes,
@@ -808,6 +833,81 @@ class RelationalModel(nn.Module):
 
     def text_predicate_logits(self, rel_feats: torch.Tensor, text_feats: torch.Tensor) -> torch.Tensor:
         return self.score(self.text_relation_features(rel_feats), text_feats)
+
+    def predicate_scores(
+        self,
+        rel_feats: torch.Tensor,
+        predicate_text_feats: Optional[torch.Tensor] = None,
+        pred_log_prior: Optional[torch.Tensor] = None,
+        mode: Optional[str] = None,
+    ) -> torch.Tensor:
+        """Unified predicate scoring for classifier, text, and open-vocabulary paths."""
+        if mode is None:
+            mode = "text" if bool(getattr(self.cfg, "open_vocab_predicate_primary", False)) else str(getattr(self.cfg, "eval_sgg_predicate_score_mode", "ensemble"))
+        mode = str(mode).strip().lower()
+        text_logits: Optional[torch.Tensor] = None
+        if predicate_text_feats is not None:
+            text_logits = self.text_predicate_logits(rel_feats, predicate_text_feats).float()
+
+        if mode in {"text", "open_vocab", "open-vocab", "cosine", "clip"}:
+            if text_logits is None:
+                raise ValueError("predicate_scores(mode='text') requires predicate_text_feats.")
+            return text_logits
+
+        cls_logits = self.calibrated_predicate_logits(rel_feats, pred_log_prior).float() if self.adaptive_calibration_enabled else self.predicate_logits(rel_feats).float()
+        if mode in {"classifier", "cls", "ce"} or text_logits is None:
+            return cls_logits
+        if int(cls_logits.shape[-1]) != int(text_logits.shape[-1]):
+            return text_logits
+
+        alpha = float(getattr(self.cfg, "eval_sgg_predicate_ensemble_alpha", 0.5))
+        if bool(getattr(self.cfg, "open_vocab_predicate_primary", False)):
+            alpha = float(getattr(self.cfg, "open_vocab_classifier_aux_weight", alpha))
+        alpha = max(0.0, min(1.0, alpha))
+        cls_norm = F.layer_norm(cls_logits, cls_logits.shape[-1:])
+        text_norm = F.layer_norm(text_logits, text_logits.shape[-1:])
+        return (alpha * cls_norm) + ((1.0 - alpha) * text_norm)
+
+    def forward_one_stage_facade(
+        self,
+        feat_map: torch.Tensor,
+        obj_boxes: List[torch.Tensor],
+        obj_scores: Optional[List[torch.Tensor]] = None,
+        obj_labels: Optional[List[List[str]]] = None,
+        max_pairs: Optional[int] = None,
+    ):
+        """One-stage-style facade over proposal boxes for SGDet integration.
+
+        This does not detect objects itself; it standardizes the image -> proposals ->
+        relation features interface so external detectors can plug into PURE without
+        using ground-truth pairs.
+        """
+        if max_pairs is None:
+            max_pairs = int(getattr(self.cfg, "one_stage_max_pairs", 256))
+        pairs: List[List[Tuple[int, int]]] = []
+        for boxes in obj_boxes:
+            n = int(0 if boxes is None else boxes.shape[0])
+            pair_list = [(i, j) for i in range(n) for j in range(n) if i != j]
+            pairs.append(pair_list)
+        regs, rels, rel_swaps, assigns, gates, kept_idx = self.forward_from_featmap(
+            feat_map=feat_map,
+            obj_boxes=obj_boxes,
+            pairs=pairs,
+            return_swapped=False,
+            learned_prune_k_override=int(max_pairs),
+        )
+        return {
+            "object_boxes": obj_boxes,
+            "object_scores": obj_scores,
+            "object_labels": obj_labels,
+            "pairs": pairs,
+            "kept_indices": kept_idx,
+            "object_features": regs,
+            "relation_features": rels,
+            "relation_swaps": rel_swaps,
+            "assignments": assigns,
+            "edge_gates": gates,
+        }
 
     def relationness_logits(self, rel_feats: torch.Tensor) -> torch.Tensor:
         if rel_feats.numel() == 0:

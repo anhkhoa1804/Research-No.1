@@ -3,7 +3,9 @@ import argparse
 import json
 import math
 import os
+import subprocess
 import time
+import hashlib
 from collections import Counter
 from dataclasses import replace
 from typing import Any, Dict, List, Optional, Tuple
@@ -37,6 +39,61 @@ from .prompts import (
     pred_prompt,
     pred_prompt_roles,
 )
+
+
+def _safe_git_commit() -> str:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True, stderr=subprocess.DEVNULL).strip()
+    except Exception:
+        return ""
+
+
+def _stable_hash_json(value: Any) -> str:
+    try:
+        raw = json.dumps(value, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
+        return hashlib.sha256(raw).hexdigest()[:16]
+    except Exception:
+        return ""
+
+
+def _experiment_snapshot(cfg: TrainConfig, pred_to_idx: Optional[Dict[str, int]] = None) -> Dict[str, Any]:
+    cfg_dict = dict(getattr(cfg, "__dict__", {}))
+    pred_vocab = []
+    if isinstance(pred_to_idx, dict) and pred_to_idx:
+        pred_vocab = [str(name) for name, _idx in sorted(pred_to_idx.items(), key=lambda kv: int(kv[1]))]
+    return {
+        "git_commit": _safe_git_commit(),
+        "train_config": cfg_dict,
+        "train_config_hash": _stable_hash_json(cfg_dict),
+        "score_mode": str(getattr(cfg, "eval_sgg_predicate_score_mode", "unknown")),
+        "calibration": {
+            "ensemble_alpha": float(getattr(cfg, "eval_sgg_predicate_ensemble_alpha", 0.0)),
+            "bayes_weight": float(getattr(cfg, "bayes_calibration_weight", 0.0)),
+            "adaptive_enabled": bool(getattr(cfg, "adaptive_calibration_enabled", False)),
+            "adaptive_prior_scale": float(getattr(cfg, "adaptive_prior_scale", 1.0)),
+            "adaptive_prior_gate_min": float(getattr(cfg, "adaptive_prior_gate_min", 0.0)),
+            "adaptive_prior_gate_max": float(getattr(cfg, "adaptive_prior_gate_max", 1.0)),
+            "bias_residual_scale": float(getattr(cfg, "bias_residual_scale", 0.0)),
+        },
+        "predicate_vocab_hash": _stable_hash_json(pred_vocab),
+        "num_predicates": int(len(pred_vocab)),
+        "data": {
+            "vg150_root": str(getattr(cfg, "vg150_root", "")),
+            "vg150_source": str(getattr(cfg, "vg150_source", "")),
+            "hf_dataset_id": str(getattr(cfg, "hf_dataset_id", "")),
+            "hf_train_split": str(getattr(cfg, "hf_train_split", "")),
+            "hf_val_split": str(getattr(cfg, "hf_val_split", "")),
+            "max_images": int(getattr(cfg, "max_images", 0)),
+            "samples_per_epoch": int(getattr(cfg, "samples_per_epoch", 0)),
+        },
+    }
+
+
+def _attach_experiment_snapshot(metrics_dump: Dict[str, Any], cfg: TrainConfig, pred_to_idx: Optional[Dict[str, int]] = None) -> None:
+    snapshot = _experiment_snapshot(cfg, pred_to_idx)
+    metrics_dump["experiment"] = snapshot
+    metrics_dump["config"] = snapshot["train_config"]
+
 def _timing_sync(device: torch.device, enabled: bool) -> None:
     if enabled and device.type == "cuda":
         torch.cuda.synchronize(device)
@@ -240,6 +297,8 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--eval_sgg_text_temperature", type=float, default=getattr(TrainConfig, "eval_sgg_text_temperature", 1.0))
     p.add_argument("--eval_sgg_predicate_diag_topk", type=int, default=TrainConfig.eval_sgg_predicate_diag_topk)
     p.add_argument("--eval_sgg_compare_score_modes", type=str, default=getattr(TrainConfig, "eval_sgg_compare_score_modes", ""))
+    p.add_argument("--checkpoint_selection_lambda_mr", type=float, default=getattr(TrainConfig, "checkpoint_selection_lambda_mr", 1.0))
+    p.add_argument("--checkpoint_selection_mu_tail", type=float, default=getattr(TrainConfig, "checkpoint_selection_mu_tail", 1.0))
     p.add_argument("--freq_bias_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "freq_bias_enabled", False))
     p.add_argument("--freq_bias_path", type=str, default=getattr(TrainConfig, "freq_bias_path", ""))
     p.add_argument("--freq_bias_alpha", type=float, default=getattr(TrainConfig, "freq_bias_alpha", 0.5))
@@ -257,10 +316,17 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--predicate_sampler_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.predicate_sampler_enabled)
     p.add_argument("--text_conditioned_projection_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "text_conditioned_projection_enabled", False))
     p.add_argument("--text_conditioned_projection_residual", type=float, default=getattr(TrainConfig, "text_conditioned_projection_residual", 0.35))
+    p.add_argument("--open_vocab_predicate_primary", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "open_vocab_predicate_primary", False))
+    p.add_argument("--open_vocab_classifier_aux_weight", type=float, default=getattr(TrainConfig, "open_vocab_classifier_aux_weight", 0.5))
     p.add_argument("--lambda_text_predicate_ce", type=float, default=getattr(TrainConfig, "lambda_text_predicate_ce", 0.0))
     p.add_argument("--relationness_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "relationness_enabled", False))
     p.add_argument("--relationness_threshold", type=float, default=getattr(TrainConfig, "relationness_threshold", 0.0))
     p.add_argument("--lambda_relationness", type=float, default=getattr(TrainConfig, "lambda_relationness", 0.0))
+    p.add_argument("--one_stage_facade_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "one_stage_facade_enabled", False))
+    p.add_argument("--one_stage_max_pairs", type=int, default=getattr(TrainConfig, "one_stage_max_pairs", 256))
+    p.add_argument("--retrieval_index_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "retrieval_index_enabled", False))
+    p.add_argument("--retrieval_triplets_per_image", type=int, default=getattr(TrainConfig, "retrieval_triplets_per_image", 100))
+    p.add_argument("--pure_target_phases", type=str, default=getattr(TrainConfig, "pure_target_phases", "sgcls,sgdet,one_stage,open_vocab,retrieval"))
     p.add_argument("--predicate_sampler_power", type=float, default=TrainConfig.predicate_sampler_power)
     p.add_argument("--predicate_sampler_max_weight", type=float, default=TrainConfig.predicate_sampler_max_weight)
     p.add_argument("--temp", type=float, default=TrainConfig.temp)
@@ -273,6 +339,9 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--rfs_t", type=float, default=TrainConfig.rfs_t)
     p.add_argument("--use_geom_bias", type=_str2bool, nargs="?", const=True, default=TrainConfig.use_geom_bias)
     p.add_argument("--vector_fusion_gate", type=_str2bool, nargs="?", const=True, default=TrainConfig.vector_fusion_gate)
+    p.add_argument("--asymmetric_pair_fusion_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "asymmetric_pair_fusion_enabled", False))
+    p.add_argument("--asymmetric_pair_fusion_include_reverse_diff", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "asymmetric_pair_fusion_include_reverse_diff", True))
+    p.add_argument("--asymmetric_pair_fusion_hidden_mult", type=float, default=getattr(TrainConfig, "asymmetric_pair_fusion_hidden_mult", 2.0))
     p.add_argument("--geom_fourier_dim", type=int, default=TrainConfig.geom_fourier_dim)
     p.add_argument("--logit_adj_tau", type=float, default=TrainConfig.logit_adj_tau)
     p.add_argument("--eval_logit_adj_tau", type=float, default=TrainConfig.eval_logit_adj_tau)
@@ -310,6 +379,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--bilinear_residual_scale", type=float, default=getattr(TrainConfig, "bilinear_residual_scale", 0.2))
     p.add_argument("--explicit_spoa_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "explicit_spoa_enabled", True))
     p.add_argument("--spoa_role_dropout", type=float, default=getattr(TrainConfig, "spoa_role_dropout", 0.05))
+    p.add_argument("--spoa_attr_scale", type=float, default=getattr(TrainConfig, "spoa_attr_scale", 1.0))
     p.add_argument("--spoa_aux_scale", type=float, default=getattr(TrainConfig, "spoa_aux_scale", 1.0))
     p.add_argument("--clip_name", type=str, default=TrainConfig.clip_name)
     p.add_argument("--clip_input_res", type=int, default=TrainConfig.clip_input_res)
@@ -349,6 +419,10 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--eval_sgg_clip_obj_cache_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_clip_obj_cache_enabled)
     p.add_argument("--eval_sgg_clip_obj_cache_dir", type=str, default=TrainConfig.eval_sgg_clip_obj_cache_dir)
     p.add_argument("--eval_sgg_report_nograph", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_report_nograph)
+    p.add_argument("--eval_sgg_role_swap_metric_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "eval_sgg_role_swap_metric_enabled", True))
+    p.add_argument("--eval_sgg_role_swap_margin", type=float, default=getattr(TrainConfig, "eval_sgg_role_swap_margin", 0.0))
+    p.add_argument("--eval_sgg_routing_diag_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "eval_sgg_routing_diag_enabled", True))
+    p.add_argument("--predicate_metadata_path", type=str, default=getattr(TrainConfig, "predicate_metadata_path", ""))
     p.add_argument("--eval_sgg_use_no_interaction_prior", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_use_no_interaction_prior)
     p.add_argument("--eval_sgg_no_interaction_text", type=str, default=TrainConfig.eval_sgg_no_interaction_text)
     p.add_argument("--eval_sgg_grounding_dino_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_grounding_dino_enabled)
@@ -406,6 +480,8 @@ def _objective_uses_grounding(train_objective: str) -> bool:
 
 
 def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[str, Any]:
+    from .phase_audit import pure_phase_audit
+
     uses_spoa = _objective_uses_spoa(train_objective_name) and float(getattr(cfg, "lambda_spoa_alignment", 0.0)) > 0.0
     uses_ground = _objective_uses_grounding(train_objective_name) and float(getattr(cfg, "lambda_dense_grounding", 0.0)) > 0.0
     uses_counterfactual = uses_spoa and bool(getattr(cfg, "predicate_counterfactual_enabled", True)) and float(getattr(cfg, "lambda_counterfactual", 0.0)) > 0.0
@@ -455,8 +531,12 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "predicate_classifier": bool(getattr(cfg, "predicate_classifier_enabled", True)),
             "explicit_spoa": bool(getattr(cfg, "explicit_spoa_enabled", True)),
             "text_conditioned_projection": bool(getattr(cfg, "text_conditioned_projection_enabled", False)),
+            "open_vocab_predicate_primary": bool(getattr(cfg, "open_vocab_predicate_primary", False)),
             "relationness_head": bool(getattr(cfg, "relationness_enabled", False)),
+            "one_stage_facade": bool(getattr(cfg, "one_stage_facade_enabled", False)),
+            "retrieval_index": bool(getattr(cfg, "retrieval_index_enabled", False)),
         },
+        "target_phases": pure_phase_audit(cfg),
         "weights": {
             "lambda_predicate_ce": float(getattr(cfg, "lambda_predicate_ce", 0.0)),
             "lambda_spoa_alignment": float(getattr(cfg, "lambda_spoa_alignment", 0.0)),
@@ -721,6 +801,7 @@ def _print_epoch_summary(metrics_dump: Dict[str, Any]) -> None:
     if len(predcls) > 0:
         print(f"| {'PredCls R@50':<20} | {_metric(predcls, 'R@50'):>8.4f} |")
         print(f"| {'PredCls mR@50':<20} | {_metric(predcls, 'mR@50'):>8.4f} |")
+        print(f"| {'PredCls H/B/T':<20} | {_metric(predcls, 'head_mR@50'):>2.2f}/{_metric(predcls, 'body_mR@50'):>2.2f}/{_metric(predcls, 'tail_mR@50'):>2.2f} |")
     if len(sgcls) > 0:
         print(f"| {'SGCls R@50':<20} | {_metric(sgcls, 'R@50'):>8.4f} |")
         print(f"| {'SGCls mR@50':<20} | {_metric(sgcls, 'mR@50'):>8.4f} |")
@@ -1027,7 +1108,17 @@ def main(argv: Optional[List[str]] = None) -> None:
     if bool(getattr(cfg, "resume", False)) and os.path.exists(resume_path):
         ckpt = torch.load(resume_path, map_location="cpu")
         mdl = model.module if isinstance(model, DDP) else model
-        mdl.load_state_dict(ckpt.get("model", ckpt), strict=False)
+        model_state = ckpt.get("model", ckpt)
+        current_state = mdl.state_dict()
+        compatible_state = {
+            key: value
+            for key, value in model_state.items()
+            if key in current_state and tuple(value.shape) == tuple(current_state[key].shape)
+        }
+        skipped_state = sorted(set(model_state.keys()) - set(compatible_state.keys()))
+        mdl.load_state_dict(compatible_state, strict=False)
+        if skipped_state:
+            print(f"[System] Skipped {len(skipped_state)} incompatible model tensors while resuming.", flush=True)
         if "clip" in ckpt:
             unwrap_ddp(clip_model).load_state_dict(ckpt["clip"], strict=False)
             print("[System] Loaded fine-tuned CLIP weights.")
@@ -1120,7 +1211,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         model.eval()
         unwrap_ddp(clip_model).eval()
         
-        metrics_dump = {"epoch": 0, "train": {"avg_loss": 0.0}}
+        metrics_dump = {"epoch": 0, "run_name": str(cfg.run_name), "seed": int(cfg.seed), "train": {"avg_loss": 0.0}}
+        _attach_experiment_snapshot(metrics_dump, cfg, pred_to_idx)
         _run_core_evals(
             args,
             cfg,
@@ -1185,6 +1277,8 @@ def main(argv: Optional[List[str]] = None) -> None:
         
     best_predcls_r50 = float("-inf")
     best_predcls_mr50 = float("-inf")
+    best_predcls_tail_mr50 = float("-inf")
+    best_predcls_selection = float("-inf")
 
     for epoch in range(start_epoch, int(cfg.epochs)):
             
@@ -1697,6 +1791,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "optim": optim.state_dict(),
                 "scaler": scaler.state_dict(),
                 "cfg": cfg.__dict__,
+                "experiment": _experiment_snapshot(cfg, pred_to_idx),
             }
             if not bool(cfg.freeze_clip):
                 ckpt["clip"] = unwrap_ddp(clip_model).state_dict()
@@ -1704,6 +1799,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             torch.save(ckpt, str(cfg.save_path))
             print(f"[System] Saved lightweight checkpoint to {cfg.save_path}", flush=True)
             metrics_dump: Dict[str, Any] = {"epoch": int(epoch), "run_name": str(cfg.run_name), "seed": int(cfg.seed)}
+            _attach_experiment_snapshot(metrics_dump, cfg, pred_to_idx)
             metrics_dump["active_branches"] = active_branch_report
             metrics_dump["train"] = {
                 "avg_loss": float(epoch_loss / max(1, epoch_batches)),
@@ -1749,7 +1845,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "calibration_rank_margin": float(getattr(cfg, "calibration_rank_margin", 0.25)),
                 "bias_residual_scale": float(getattr(cfg, "bias_residual_scale", 0.25)),
                 "explicit_spoa_enabled": bool(getattr(cfg, "explicit_spoa_enabled", True)),
-                "spoa_aux_scale": float(getattr(cfg, "spoa_aux_scale", 1.0)),
+                "spoa_attr_scale": float(getattr(cfg, "spoa_attr_scale", getattr(cfg, "spoa_aux_scale", 1.0))),
                 "clip_unfreeze_after_epochs": int(getattr(cfg, "clip_unfreeze_after_epochs", 0)),
                 "num_batches": int(epoch_batches),
                 "positive_pairs": int(epoch_positive_pairs),
@@ -1795,6 +1891,12 @@ def main(argv: Optional[List[str]] = None) -> None:
                     break
             predcls_r50 = float(predcls_metrics.get("R@50", 0.0) or 0.0)
             predcls_mr50 = float(predcls_metrics.get("mR@50", 0.0) or 0.0)
+            predcls_tail_mr50 = float(predcls_metrics.get("tail_mR@50", 0.0) or 0.0)
+            selection_score = (
+                predcls_r50
+                + float(getattr(cfg, "checkpoint_selection_lambda_mr", 1.0)) * predcls_mr50
+                + float(getattr(cfg, "checkpoint_selection_mu_tail", 1.0)) * predcls_tail_mr50
+            )
             save_dir = os.path.dirname(str(cfg.save_path)) or "."
             save_stem = os.path.splitext(os.path.basename(str(cfg.save_path)))[0]
             if predcls_r50 > best_predcls_r50:
@@ -1807,9 +1909,22 @@ def main(argv: Optional[List[str]] = None) -> None:
                 best_path = os.path.join(save_dir, f"{save_stem}_best_mR50.pt")
                 torch.save(ckpt, best_path)
                 print(f"[System] Saved best PredCls mR@50 checkpoint to {best_path} ({predcls_mr50:.4f})", flush=True)
+            if predcls_tail_mr50 > best_predcls_tail_mr50:
+                best_predcls_tail_mr50 = predcls_tail_mr50
+                best_path = os.path.join(save_dir, f"{save_stem}_best_tail_mR50.pt")
+                torch.save(ckpt, best_path)
+                print(f"[System] Saved best PredCls tail mR@50 checkpoint to {best_path} ({predcls_tail_mr50:.4f})", flush=True)
+            if selection_score > best_predcls_selection:
+                best_predcls_selection = selection_score
+                best_path = os.path.join(save_dir, f"{save_stem}_best_selection.pt")
+                torch.save(ckpt, best_path)
+                print(f"[System] Saved best selection checkpoint to {best_path} ({selection_score:.4f})", flush=True)
+            metrics_dump["selection_score"] = float(selection_score)
             metrics_dump["best_so_far"] = {
                 "PredCls_R@50": float(best_predcls_r50),
                 "PredCls_mR@50": float(best_predcls_mr50),
+                "PredCls_tail_mR@50": float(best_predcls_tail_mr50),
+                "PredCls_selection_score": float(best_predcls_selection),
             }
 
             if is_main():

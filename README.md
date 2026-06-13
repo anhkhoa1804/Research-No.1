@@ -17,7 +17,7 @@ The maintained thesis direction is:
 - Use VG150 for main PredCls / GT-pair reporting.
 - Use CORE as a diagnostic benchmark and optional robustness-training ablation, not as a replacement for VG150.
 
-Current local headline PredCls results used in the presentation:
+Current local headline PredCls results retained for experiment context:
 
 | Setting | R@50 | mR@50 | Notes |
 | --- | ---: | ---: | --- |
@@ -43,6 +43,8 @@ openvocab_rel/clip_utils.py               CLIP setup and image/text helpers
 openvocab_rel/geometry.py                 geometry utilities
 openvocab_rel/prompts.py                  text prompt helpers
 openvocab_rel/text_cache.py               text embedding cache utilities
+openvocab_rel/retrieval.py                triplet retrieval index utilities
+openvocab_rel/phase_audit.py              five-phase readiness audit
 configs/presets.yaml                      GPU/runtime presets
 scripts/run_pure_next.sh                  low-level configurable train/eval entrypoint
 scripts/train_l4_phase34.sh               current L4 Phase 3/4 training runner
@@ -51,11 +53,8 @@ tools/prepare_vg150_subset.py             HF -> local VG150 JSONL/images
 tools/check_vg150_diagnostics.py          dataset diagnostics guard
 tools/build_vg150_frequency_prior.py      subject-object predicate prior builder
 tools/build_vg150_clean_vocab.py          clean VG150 object/predicate vocab builder
-tools/summarize_metrics.py                compact metric summary across runs
-notes/current_status.tex                  compact technical status note
-notes/paper1_pure.tex                     PURE paper draft
-notes/paper2_core.tex                     CORE paper draft
-notes/presentation/main.tex               Beamer defense slides
+tools/model_report_card.py               standardized raw/text/ensemble/calibrated report card
+notes/pure_conference_upgrade_roadmap.md current PURE conference roadmap
 ```
 
 ## Problem Definition
@@ -106,6 +105,20 @@ L_PURE = λ_ce L_PredCE-LA + λ_spoa L_CF-SPOA + λ_g L_Ground
 - **Dense Grounding**: keeps subject, object, and pair features visually anchored to dense image evidence.
 
 Calibration is not counted as a fourth loss because it is applied at evaluation time.
+
+## Five-Phase Extension Hooks
+
+The repository now exposes implementation hooks for the five directions needed to move beyond the current PredCls / GT-pair headline setting:
+
+| Phase | Status in code | Main entry points |
+| --- | --- | --- |
+| SGCls bridge | Available | CLIP object-label candidates in `eval_sgg_standard` |
+| SGDet bridge | Available | Grounding-DINO proposal path in `eval_sgg_standard` |
+| One-stage facade | Available | `RelationalModel.forward_one_stage_facade` for detector proposals |
+| Open-vocabulary predicates | Available | `RelationalModel.predicate_scores(..., mode="text")` and `--open_vocab_predicate_primary` |
+| Retrieval index | Available | `TripletRetrievalIndex` and `build_triplet_records` |
+
+These hooks do not change the main claim: the maintained and best-validated setting remains PredCls / GT-pair. The SGCls, SGDet, one-stage facade, open-vocabulary predicate scoring, and retrieval index are extension paths that can be enabled and reported separately.
 
 ## Metrics and Reporting Policy
 
@@ -189,6 +202,24 @@ CKPT=checkpoints/pure_l4_phase34.pt EVAL_BATCHES=500 bash scripts/eval_l4_phase3
 
 Use `scripts/run_pure_next.sh` only when you need the lower-level configurable entrypoint.
 
+
+Create the standard report card after a run:
+
+```bash
+python3 tools/model_report_card.py runs/*/metrics.jsonl \
+  --train_jsonl datasets/train.jsonl
+```
+
+Use this report as the accepted summary format for comparing raw classifier, text-only, ensemble, and calibrated score modes. If the metrics include per-predicate recall, the tool also reports head/body/tail mR@50 and worst predicates.
+
+First PURE-next modeling pilot:
+
+```bash
+bash scripts/train_l4_phase34.sh   --asymmetric_pair_fusion_enabled true   --eval_sgg_role_swap_metric_enabled true   --eval_sgg_compare_score_modes classifier,text,ensemble
+```
+
+This keeps the protocol PredCls-focused while testing whether asymmetric pair fusion improves role-swap margins and raw/ensemble mR@50.
+
 ## CORE Benchmark Workflow
 
 CORE-specific conversion, merge, evaluation, and ablation helpers have been archived from the active workspace. The maintained code path is VG150 Phase 3/4 training/evaluation through the L4 scripts above.
@@ -203,30 +234,17 @@ SGCls / SGDet diagnostics are available through the maintained evaluation script
 CKPT=checkpoints/pure_l4_phase34.pt EVAL_SGDET=true EVAL_BATCHES=100 bash scripts/eval_l4_phase34.sh
 ```
 
-## Presentation and Notes
+## Notes
 
-The defense slides live in:
+The active planning note is:
 
 ```text
-notes/presentation/main.tex
+notes/pure_conference_upgrade_roadmap.md
 ```
 
-Build from the presentation directory:
+Report and presentation folders are intentionally removed from the active workspace. Keep future notes focused on PURE conference experiments, metrics, and reproducibility.
 
-```bash
-cd notes/presentation
-latexmk -xelatex -interaction=nonstopmode -halt-on-error main.tex
-```
-
-The current slide structure is:
-
-1. Introduction: motivation, topic, problem definition, objectives, scope.
-2. Related Work: SGG foundations, CLIP, debiasing, open-vocabulary baselines.
-3. Proposed Method: PURE architecture, three losses, CORE benchmark design.
-4. Experimental Results and Analysis: VG150 protocol, metrics, training results, ablations, CORE analysis.
-5. Conclusion: summary, limitations, demo, references.
-
-## Report-Ready LaTeX Table
+## Paper Table Snippet
 
 ```latex
 \begin{table}[h]
@@ -264,7 +282,7 @@ PURE ultra-light raw e2 & 35.22 & 20.35 & best raw mR@50 \\
 - Keep generated datasets, checkpoints, and runs out of git unless intentionally archived.
 - Use `requirements.txt` for dependency reference.
 - When reporting numbers, include protocol, score mode, checkpoint, alpha/calibration setting, and evaluation batch count.
-- Prefer concise notes in `notes/current_status.tex` and defense-ready slides in `notes/presentation/main.tex`.
+- Prefer concise experiment notes in `notes/pure_conference_upgrade_roadmap.md` or future focused Markdown files under `notes/`.
 ## PURE Phase 1/2 Upgrades
 
 The maintained PURE path now includes the first two roadmap upgrades:

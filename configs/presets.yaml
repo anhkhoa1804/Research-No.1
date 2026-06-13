@@ -108,7 +108,7 @@ presets:
     description: "Phase 2 preset: explicit multi-branch SPOA plus soft ambiguous-negative relaxation"
     explicit_spoa_enabled: true
     spoa_role_dropout: 0.05
-    spoa_aux_scale: 1.0
+    spoa_attr_scale: 1.0
     adaptive_calibration_enabled: true
     adaptive_prior_enabled: true
     bias_residual_enabled: true
@@ -149,6 +149,23 @@ presets:
     eval_sgg_use_object_uncertainty: true
     eval_sgg_object_score_power: 1.0
 
+  pure_five_phase_hooks:
+    description: "Enable all five extension hooks: SGCls, SGDet, one-stage facade, open-vocabulary predicates, and retrieval indexing"
+    stage: 3
+    eval_sgg_use_clip_obj_classifier: true
+    eval_sgg_grounding_dino_enabled: true
+    one_stage_facade_enabled: true
+    one_stage_max_pairs: 256
+    text_conditioned_projection_enabled: true
+    open_vocab_predicate_primary: true
+    open_vocab_classifier_aux_weight: 0.25
+    relationness_enabled: true
+    lambda_relationness: 0.15
+    eval_sgg_use_relationness: true
+    eval_sgg_relationness_prune_k: 128
+    retrieval_index_enabled: true
+    retrieval_triplets_per_image: 100
+
   a100_40gb_phase34:
     description: "A100 40GB Phase 3/4 preset: higher-throughput text-conditioned + relationness SGDet path"
     gpu_preset: a100_40gb
@@ -174,3 +191,27 @@ presets:
     eval_sgg_detector_prune_k: 192
     eval_sgg_use_object_uncertainty: true
     eval_sgg_object_score_power: 1.0
+  pure_next_asym_role_pilot:
+    description: "PURE-next pilot: asymmetric pair fusion plus role-swap diagnostics for PredCls"
+    gpu_preset: l4_24gb
+    stage: 3
+    clip_input_res: 448
+    batch_size: 8
+    accum_steps: 2
+    samples_per_epoch: 8000
+    eval_batches: 100
+    max_objects: 32
+    max_pairs: 64
+    explicit_spoa_enabled: true
+    asymmetric_pair_fusion_enabled: true
+    asymmetric_pair_fusion_include_reverse_diff: true
+    asymmetric_pair_fusion_hidden_mult: 2.0
+    predicate_metadata_path: configs/predicate_metadata_vg150.json
+    eval_sgg_role_swap_metric_enabled: true
+    eval_sgg_role_swap_margin: 0.0
+    eval_sgg_routing_diag_enabled: true
+    eval_sgg_use_gt_pairs: false
+    eval_sgg_predicate_score_mode: ensemble
+    eval_sgg_compare_score_modes: classifier,text,ensemble
+    checkpoint_selection_lambda_mr: 1.0
+    checkpoint_selection_mu_tail: 1.0

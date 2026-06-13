@@ -20,6 +20,7 @@ from .clip_utils import clip_text_features, encode_predicate_vocab
 from .ddp_utils import unwrap_ddp
 from .geometry import preprocess_boxes_to_clip224
 from .prompts import PredicateCanonicalizer, counterfactual_prompt_variants, pred_prompt, pred_prompt_ensemble, pred_prompt_roles
+from .predicate_metadata import is_symmetric, load_predicate_metadata, predicate_group
 from .config import TrainConfig
 
 
@@ -526,6 +527,8 @@ def _collect_gt_triplets(ex: Dict[str, Any], device: torch.device) -> Dict[str, 
     gt_pred: List[str] = []
     gt_sb: List[List[float]] = []
     gt_ob: List[List[float]] = []
+    gt_subj_idx: List[int] = []
+    gt_obj_idx: List[int] = []
 
     n = min(len(pairs), len(preds))
     for idx in range(n):
@@ -548,6 +551,8 @@ def _collect_gt_triplets(ex: Dict[str, Any], device: torch.device) -> Dict[str, 
         gt_obj.append(obj_labels[o_idx])
         gt_sb.append(obj_boxes[s_idx].tolist())
         gt_ob.append(obj_boxes[o_idx].tolist())
+        gt_subj_idx.append(int(s_idx))
+        gt_obj_idx.append(int(o_idx))
 
     return {
         "subj_labels": gt_subj,
@@ -555,6 +560,8 @@ def _collect_gt_triplets(ex: Dict[str, Any], device: torch.device) -> Dict[str, 
         "obj_labels": gt_obj,
         "subj_boxes": torch.tensor(gt_sb, dtype=torch.float32, device=device) if len(gt_sb) > 0 else torch.empty((0, 4), dtype=torch.float32, device=device),
         "obj_boxes": torch.tensor(gt_ob, dtype=torch.float32, device=device) if len(gt_ob) > 0 else torch.empty((0, 4), dtype=torch.float32, device=device),
+        "subj_idx": gt_subj_idx,
+        "obj_idx": gt_obj_idx,
     }
 
 
@@ -1148,6 +1155,116 @@ def _update_predicate_diag(diag: Dict[str, Any], pred_vocab: List[str], gt_label
             diag["pred_counts"][key] = int(diag["pred_counts"].get(key, 0)) + 1
 
 
+
+def _sorted_predicate_counts(counts: Dict[str, int]) -> List[Tuple[str, int]]:
+    return sorted(
+        [(str(label).strip().lower(), int(count)) for label, count in counts.items() if int(count) > 0],
+        key=lambda kv: (-kv[1], kv[0]),
+    )
+
+
+def _predicate_bucket_items(counts: Dict[str, int]) -> Dict[str, List[Tuple[str, int]]]:
+    items = _sorted_predicate_counts(counts)
+    if len(items) == 0:
+        return {"head": [], "body": [], "tail": []}
+    n = len(items)
+    head_n = max(1, int(math.ceil(0.2 * n)))
+    tail_n = max(1, int(math.ceil(0.2 * n)))
+    return {
+        "head": items[:head_n],
+        "body": items[head_n:max(head_n, n - tail_n)],
+        "tail": items[max(head_n, n - tail_n):],
+    }
+
+
+def _predicate_buckets_from_counts(counts: Dict[str, int]) -> Dict[str, str]:
+    return {
+        label: bucket
+        for bucket, values in _predicate_bucket_items(counts).items()
+        for label, _count in values
+    }
+
+
+def _bucket_mean_recall(hits: Dict[str, int], counts: Dict[str, int], buckets: Dict[str, str]) -> Dict[str, float]:
+    grouped: Dict[str, List[float]] = {"head": [], "body": [], "tail": []}
+    for pred, bucket in buckets.items():
+        if bucket not in grouped:
+            continue
+        denom = int(counts.get(pred, 0))
+        if denom <= 0:
+            continue
+        grouped[bucket].append(float(hits.get(pred, 0)) / float(denom))
+    return {f"{bucket}_mR": float(sum(values) / max(1, len(values))) for bucket, values in grouped.items()}
+
+
+def _routing_diag_update(diag: Dict[str, Any], decoder: Any, batch: List[Dict[str, Any]], cfg: TrainConfig) -> None:
+    points_list = getattr(decoder, "last_deformable_points", [])
+    weights_list = getattr(decoder, "last_routing_attention", [])
+    if not isinstance(points_list, list) or len(points_list) == 0:
+        return
+    eps = 1.0e-6
+    for bi, points in enumerate(points_list):
+        if not isinstance(points, torch.Tensor) or points.numel() == 0 or bi >= len(batch):
+            continue
+        pts = points.detach().float().cpu().clamp(0.0, 1.0)
+        boxes = batch[bi].get("obj_boxes_224", None)
+        if not isinstance(boxes, torch.Tensor):
+            try:
+                boxes, _ = preprocess_boxes_to_clip224(batch[bi]["image"], batch[bi]["obj_boxes"], out_size=int(getattr(cfg, "clip_input_res", 224)))
+            except Exception:
+                boxes = batch[bi].get("obj_boxes", torch.empty((0, 4)))
+        if not isinstance(boxes, torch.Tensor) or int(boxes.shape[0]) == 0:
+            continue
+        box_norm = boxes.detach().float().cpu() / float(max(1, int(getattr(cfg, "clip_input_res", 224))))
+        n = min(int(pts.shape[0]), int(box_norm.shape[0]))
+        if n <= 0:
+            continue
+        pts = pts[:n]
+        box_norm = box_norm[:n].clamp(0.0, 1.0)
+        x = pts[..., 0]
+        y = pts[..., 1]
+        inside = (x >= box_norm[:, None, 0]) & (x <= box_norm[:, None, 2]) & (y >= box_norm[:, None, 1]) & (y <= box_norm[:, None, 3])
+        centers = 0.5 * (box_norm[:, :2] + box_norm[:, 2:4])
+        dist = torch.linalg.vector_norm(pts - centers[:, None, :], dim=-1)
+        spread = torch.linalg.vector_norm(pts - pts.mean(dim=1, keepdim=True), dim=-1)
+        diag["objects"] = int(diag.get("objects", 0)) + n
+        diag["points"] = int(diag.get("points", 0)) + int(inside.numel())
+        diag["inside_points"] = int(diag.get("inside_points", 0)) + int(inside.sum().item())
+        diag["point_spread_sum"] = float(diag.get("point_spread_sum", 0.0)) + float(spread.mean(dim=1).sum().item())
+        diag["center_distance_sum"] = float(diag.get("center_distance_sum", 0.0)) + float(dist.mean(dim=1).sum().item())
+        if bi < len(weights_list) and isinstance(weights_list[bi], torch.Tensor) and weights_list[bi].numel() > 0:
+            w = weights_list[bi].detach().float().cpu()
+            if w.ndim == 3 and int(w.shape[0]) == 1:
+                w = w.squeeze(0)
+            w = w[:n].clamp_min(eps)
+            w = w / w.sum(dim=-1, keepdim=True).clamp_min(eps)
+            entropy = -(w * w.log()).sum(dim=-1)
+            norm = math.log(max(2, int(w.shape[-1])))
+            diag["entropy_sum"] = float(diag.get("entropy_sum", 0.0)) + float((entropy / max(eps, norm)).sum().item())
+            diag["entropy_objects"] = int(diag.get("entropy_objects", 0)) + int(entropy.numel())
+
+
+def _routing_diag_finalize(diag: Dict[str, Any]) -> Dict[str, Any]:
+    objects = max(1, int(diag.get("objects", 0)))
+    points = max(1, int(diag.get("points", 0)))
+    entropy_objects = max(1, int(diag.get("entropy_objects", 0)))
+    return {
+        "objects": int(diag.get("objects", 0)),
+        "points": int(diag.get("points", 0)),
+        "inside_point_fraction": float(diag.get("inside_points", 0)) / float(points),
+        "point_spread_mean": float(diag.get("point_spread_sum", 0.0)) / float(objects),
+        "center_distance_mean": float(diag.get("center_distance_sum", 0.0)) / float(objects),
+        "routing_entropy_mean": float(diag.get("entropy_sum", 0.0)) / float(entropy_objects),
+    }
+
+def _predicate_exposure_from_counts(counts: Dict[str, int]) -> Dict[str, Any]:
+    tiers = _predicate_bucket_items(counts)
+    return {
+        tier: [{"label": label, "count": count} for label, count in values]
+        for tier, values in tiers.items()
+    } | {"num_predicates": len(_sorted_predicate_counts(counts))}
+
+
 def _finalize_predicate_diag(diag: Dict[str, Any], topk: int) -> Dict[str, Any]:
     def top_items(counts: Dict[str, int]) -> List[Dict[str, Any]]:
         items = sorted(counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0])))[: max(1, int(topk))]
@@ -1158,6 +1275,9 @@ def _finalize_predicate_diag(diag: Dict[str, Any], topk: int) -> Dict[str, Any]:
         "num_images": int(diag.get("num_images", 0)),
         "gt_top": top_items(diag.get("gt_counts", {})),
         "pred_top": top_items(diag.get("pred_counts", {})),
+        "gt_by_group": dict(sorted(diag.get("gt_by_group", {}).items())),
+        "pred_by_group": dict(sorted(diag.get("pred_by_group", {}).items())),
+        "exposure": _predicate_exposure_from_counts(diag.get("gt_counts", {})),
     }
 
 
@@ -1180,6 +1300,8 @@ def eval_sgg_standard(
     ks = [20, 50, 100]
     iou_thresh = float(getattr(cfg, "eval_sgg_iou_thresh", 0.5))
     pred_vocab = _ensure_eval_predicate_vocab(scan_vg150_predicate_vocab(cfg.vg150_root))
+    pred_metadata = load_predicate_metadata(str(getattr(cfg, "predicate_metadata_path", "")), pred_vocab)
+    pred_to_idx = {str(pred).strip().lower(): idx for idx, pred in enumerate(pred_vocab)}
     pred_log_prior = _predicate_log_prior_for_eval(cfg, loader, pred_vocab, device)
     freq_bias = _load_frequency_bias(cfg, pred_vocab, device)
     obj_vocab = _load_vg150_object_vocab(cfg.vg150_root)
@@ -1233,6 +1355,8 @@ def eval_sgg_standard(
         "num_images": 0,
         "gt_counts": {},
         "pred_counts": {},
+        "gt_by_group": {},
+        "pred_by_group": {},
     }
     object_diag: Dict[str, Any] = {
         "num_images": 0,
@@ -1243,6 +1367,17 @@ def eval_sgg_standard(
         "triplet_endpoint_topk_hits": 0,
         "gt_top": {},
         "pred_top1": {},
+    }
+    routing_diag: Dict[str, Any] = {"enabled": bool(getattr(cfg, "eval_sgg_routing_diag_enabled", True))}
+    role_swap_diag: Dict[str, Any] = {
+        "enabled": bool(getattr(cfg, "eval_sgg_role_swap_metric_enabled", True)),
+        "margin_threshold": float(getattr(cfg, "eval_sgg_role_swap_margin", 0.0)),
+        "n": 0,
+        "consistent": 0,
+        "failures": 0,
+        "margin_sum": 0.0,
+        "margin_abs_sum": 0.0,
+        "per_predicate": {},
     }
 
     def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
@@ -1320,6 +1455,9 @@ def eval_sgg_standard(
             obj_semantic_feats=obj_anchor_feats,
         )
 
+        if bool(routing_diag.get("enabled", True)):
+            _routing_diag_update(routing_diag, getattr(out, "decoder", None), eval_batch, cfg)
+
         for ex, pair_list, rel_feat, valid in zip(eval_batch, pair_lists, rels, valid_mask):
             if not valid:
                 continue
@@ -1355,6 +1493,13 @@ def eval_sgg_standard(
                 rel_probs = _mask_background_predicates(rel_probs * interaction_prior.unsqueeze(1), pred_vocab)
             pair_pred_scores, pair_pred_idx = rel_probs.max(dim=-1)
             _update_predicate_diag(predicate_diag, pred_vocab, gt["pred_labels"], pair_pred_idx)
+            for pred_name in gt["pred_labels"]:
+                group = predicate_group(pred_metadata, pred_name)
+                predicate_diag["gt_by_group"][group] = int(predicate_diag["gt_by_group"].get(group, 0)) + 1
+            for pred_id in pair_pred_idx.detach().cpu().long().tolist():
+                if 0 <= int(pred_id) < len(pred_vocab):
+                    group = predicate_group(pred_metadata, pred_vocab[int(pred_id)])
+                    predicate_diag["pred_by_group"][group] = int(predicate_diag["pred_by_group"].get(group, 0)) + 1
             rel_weight = float(getattr(cfg, "eval_sgg_relationness_weight", 1.0)) if bool(getattr(cfg, "eval_sgg_use_relationness", False)) else 0.0
             pair_base_scores = relationness_scores.clamp(0.0, 1.0).pow(max(0.0, rel_weight)) if rel_weight > 0.0 else torch.ones_like(pair_pred_scores)
             prune_k_eval = int(getattr(cfg, "eval_sgg_relationness_prune_k", 0))
@@ -1365,6 +1510,39 @@ def eval_sgg_standard(
                 pair_pred_scores = pair_pred_scores.index_select(0, keep_rel)
                 pair_pred_idx = pair_pred_idx.index_select(0, keep_rel)
                 pair_base_scores = pair_base_scores.index_select(0, keep_rel)
+
+            if bool(role_swap_diag.get("enabled", True)) and len(pair_list) > 0 and int(rel_logits.shape[0]) == len(pair_list):
+                pair_to_idx = {(int(s_idx), int(o_idx)): idx for idx, (s_idx, o_idx) in enumerate(pair_list)}
+                margin_threshold = float(role_swap_diag.get("margin_threshold", 0.0))
+                n_gt = min(len(gt.get("subj_idx", [])), len(gt.get("obj_idx", [])), len(gt.get("pred_labels", [])))
+                for gi in range(n_gt):
+                    pred_name = str(gt["pred_labels"][gi]).strip().lower()
+                    if pred_name == "" or is_symmetric(pred_metadata, pred_name):
+                        continue
+                    pred_id = pred_to_idx.get(pred_name, None)
+                    if pred_id is None:
+                        continue
+                    s_idx = int(gt["subj_idx"][gi])
+                    o_idx = int(gt["obj_idx"][gi])
+                    fwd_idx = pair_to_idx.get((s_idx, o_idx), None)
+                    rev_idx = pair_to_idx.get((o_idx, s_idx), None)
+                    if fwd_idx is None or rev_idx is None:
+                        continue
+                    margin = float((rel_logits[int(fwd_idx), int(pred_id)] - rel_logits[int(rev_idx), int(pred_id)]).detach().cpu().item())
+                    role_swap_diag["n"] = int(role_swap_diag.get("n", 0)) + 1
+                    role_swap_diag["margin_sum"] = float(role_swap_diag.get("margin_sum", 0.0)) + margin
+                    role_swap_diag["margin_abs_sum"] = float(role_swap_diag.get("margin_abs_sum", 0.0)) + abs(margin)
+                    if margin > margin_threshold:
+                        role_swap_diag["consistent"] = int(role_swap_diag.get("consistent", 0)) + 1
+                    else:
+                        role_swap_diag["failures"] = int(role_swap_diag.get("failures", 0)) + 1
+                    per_pred = role_swap_diag["per_predicate"].setdefault(pred_name, {"n": 0, "consistent": 0, "failures": 0, "margin_sum": 0.0})
+                    per_pred["n"] = int(per_pred.get("n", 0)) + 1
+                    per_pred["margin_sum"] = float(per_pred.get("margin_sum", 0.0)) + margin
+                    if margin > margin_threshold:
+                        per_pred["consistent"] = int(per_pred.get("consistent", 0)) + 1
+                    else:
+                        per_pred["failures"] = int(per_pred.get("failures", 0)) + 1
 
             def _process_task(task_name: str, triplets: Dict[str, Any]):
                 triplets = _normalize_triplet_labels(triplets, label_aliases)
@@ -1527,12 +1705,17 @@ def eval_sgg_standard(
             "freq_bias_source_predicates": int(freq_bias.get("num_source_predicates", 0)) if isinstance(freq_bias, dict) else 0,
             "no_interaction_text": str(getattr(cfg, "eval_sgg_no_interaction_text", "no relation or interaction between the objects")),
             "zero_shot_predicates": sorted(zs_predicates),
+            "predicate_metadata_path": str(getattr(cfg, "predicate_metadata_path", "")),
+            "predicate_metadata_size": int(len(pred_metadata)),
+            "routing_diag_enabled": bool(getattr(cfg, "eval_sgg_routing_diag_enabled", True)),
             "grounding_dino_enabled": bool(getattr(cfg, "eval_sgg_grounding_dino_enabled", True)),
             "grounding_dino_cache_enabled": bool(getattr(cfg, "eval_sgg_grounding_dino_cache_enabled", True)),
             "grounding_dino_cache_dir": str(getattr(cfg, "eval_sgg_grounding_dino_cache_dir", "runs/grounding_dino_cache")),
         }
     }
     
+    pred_buckets_eval = _predicate_buckets_from_counts(global_gt_counts)
+
     for task in tasks:
         n = int(accum[task]["n"])
         if n <= 0:
@@ -1543,6 +1726,7 @@ def eval_sgg_standard(
             continue
             
         gt_count = int(accum[task]["global_gt"])
+        bucket_mr50 = _bucket_mean_recall(global_hits[task][50], global_gt_counts, pred_buckets_eval)
         outm[task] = {
             "available": True,
             "graph_constraint": not task.endswith("_nogc"),
@@ -1552,6 +1736,10 @@ def eval_sgg_standard(
             "mR@20": _compute_global_mr(global_hits[task][20], global_gt_counts),
             "mR@50": _compute_global_mr(global_hits[task][50], global_gt_counts),
             "mR@100": _compute_global_mr(global_hits[task][100], global_gt_counts),
+            "head_mR@50": bucket_mr50.get("head_mR", 0.0),
+            "body_mR@50": bucket_mr50.get("body_mR", 0.0),
+            "tail_mR@50": bucket_mr50.get("tail_mR", 0.0),
+            "predicate_buckets": dict(sorted(pred_buckets_eval.items())),
             "zR@20": _compute_global_mr(zs_hits[task][20], zs_gt_counts) if len(zs_predicates) > 0 else 0.0,
             "zR@50": _compute_global_mr(zs_hits[task][50], zs_gt_counts) if len(zs_predicates) > 0 else 0.0,
             "zR@100": _compute_global_mr(zs_hits[task][100], zs_gt_counts) if len(zs_predicates) > 0 else 0.0,
@@ -1560,7 +1748,31 @@ def eval_sgg_standard(
             "image_mean_R@100": float(accum[task]["image_r"][100]) / float(n),
             "n": float(n),
             "num_gt": float(gt_count),
+            "per_predicate_R@50": {p: _compute_global_recall(global_hits[task][50][p], global_gt_counts[p]) for p in pred_vocab if int(global_gt_counts[p]) > 0},
+            "per_predicate_R@100": {p: _compute_global_recall(global_hits[task][100][p], global_gt_counts[p]) for p in pred_vocab if int(global_gt_counts[p]) > 0},
         }
+    role_n = int(role_swap_diag.get("n", 0))
+    per_pred_role = {}
+    for pred_name, stats in role_swap_diag.get("per_predicate", {}).items():
+        pred_n = int(stats.get("n", 0))
+        if pred_n <= 0:
+            continue
+        per_pred_role[pred_name] = {
+            "n": pred_n,
+            "consistency": float(stats.get("consistent", 0)) / float(pred_n),
+            "failure_rate": float(stats.get("failures", 0)) / float(pred_n),
+            "margin_mean": float(stats.get("margin_sum", 0.0)) / float(pred_n),
+        }
+    outm["role_swap_diag"] = {
+        "enabled": bool(role_swap_diag.get("enabled", True)),
+        "n": float(role_n),
+        "consistency": float(role_swap_diag.get("consistent", 0)) / float(max(1, role_n)),
+        "failure_rate": float(role_swap_diag.get("failures", 0)) / float(max(1, role_n)),
+        "margin_mean": float(role_swap_diag.get("margin_sum", 0.0)) / float(max(1, role_n)),
+        "margin_abs_mean": float(role_swap_diag.get("margin_abs_sum", 0.0)) / float(max(1, role_n)),
+        "margin_threshold": float(role_swap_diag.get("margin_threshold", 0.0)),
+        "per_predicate": per_pred_role,
+    }
     outm["predicate_diag"] = _finalize_predicate_diag(
         predicate_diag,
         int(getattr(cfg, "eval_sgg_predicate_diag_topk", 8)),
@@ -1572,6 +1784,8 @@ def eval_sgg_standard(
             {"label": key, "count": int(value)}
             for key, value in sorted(counts.items(), key=lambda kv: (-int(kv[1]), str(kv[0])))[: int(getattr(cfg, "eval_sgg_predicate_diag_topk", 8))]
         ]
+    outm["routing_diag"] = _routing_diag_finalize(routing_diag)
+    outm["routing_diag"]["enabled"] = bool(routing_diag.get("enabled", True))
     outm["object_diag"] = {
         "num_images": int(object_diag.get("num_images", 0)),
         "num_objects": int(object_diag.get("num_objects", 0)),
@@ -1827,6 +2041,11 @@ def _forward_eval_batch(
     pixel, obj_boxes_224, batch_pairs = _prepare_eval_batch(cfg, batch, processor, device)
     amp_dtype = _resolve_amp_dtype(cfg, device)
 
+    decoder = getattr(out, "decoder", None)
+    old_capture_diagnostics = getattr(decoder, "capture_diagnostics", None) if decoder is not None else None
+    if decoder is not None and bool(getattr(cfg, "eval_sgg_routing_diag_enabled", False)):
+        decoder.capture_diagnostics = True
+
     with torch.amp.autocast("cuda", dtype=amp_dtype, enabled=bool(cfg.amp) and device.type == "cuda"):
         cm = unwrap_ddp(clip_model)
         vision_out = cm.vision_model(pixel_values=pixel)
@@ -1834,7 +2053,7 @@ def _forward_eval_batch(
         batch_size, num_patches, hidden = tokens.shape
         side = int(math.sqrt(num_patches))
         feat_map = tokens.transpose(1, 2).reshape(batch_size, hidden, side, side)
-        return out.forward_from_featmap(
+        result = out.forward_from_featmap(
             feat_map,
             obj_boxes_224=obj_boxes_224,
             pairs=batch_pairs,
@@ -1844,6 +2063,9 @@ def _forward_eval_batch(
             learned_prune_k_override=learned_prune_k_override,
             obj_semantic_feats=obj_semantic_feats,
         )
+    if decoder is not None and old_capture_diagnostics is not None:
+        decoder.capture_diagnostics = bool(old_capture_diagnostics)
+    return result
 
 
 def split_predicates_head_mid_tail(pred_vocab: List[str], pred_freq: Dict[str, int]) -> Dict[str, set]:
