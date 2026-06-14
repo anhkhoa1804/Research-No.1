@@ -104,8 +104,11 @@ EVAL_SGG_CLIP_OBJ_CROP_PADDING=${EVAL_SGG_CLIP_OBJ_CROP_PADDING:-0.10}
 EVAL_SGG_SGCLS_USE_OBJ_SCORES=${EVAL_SGG_SGCLS_USE_OBJ_SCORES:-false}
 EVAL_SGG_SGCLS_ORACLE_LABELS=${EVAL_SGG_SGCLS_ORACLE_LABELS:-false}
 EVAL_SGG_USE_GT_PAIRS=${EVAL_SGG_USE_GT_PAIRS:-true}
+EVAL_SGG_USE_RELATIONNESS=${EVAL_SGG_USE_RELATIONNESS:-true}
 EVAL_SGG_GROUNDING_DINO_ENABLED=${EVAL_SGG_GROUNDING_DINO_ENABLED:-false}
 EVAL_SGG_REPORT_NOGRAPH=${EVAL_SGG_REPORT_NOGRAPH:-false}
+USE_ALL_PAIRS=${USE_ALL_PAIRS:-false}
+NEGATIVE_PAIR_RATIO=${NEGATIVE_PAIR_RATIO:-2.0}
 TRAIN_OBJECTIVE=${TRAIN_OBJECTIVE:-full}
 PREDICATE_CE_POSITIVE_ONLY=${PREDICATE_CE_POSITIVE_ONLY:-false}
 LAMBDA_PREDICATE_CE=${LAMBDA_PREDICATE_CE:-1.2}
@@ -187,6 +190,8 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --vg150_root "${DATA_ROOT}" \
   --max_images "${MAX_IMAGES}" \
   --samples_per_epoch "${SAMPLES_PER_EPOCH}" \
+  --use_all_pairs "${USE_ALL_PAIRS}" \
+  --negative_pair_ratio "${NEGATIVE_PAIR_RATIO}" \
   --seed "${SEED}" \
   --epochs "${EPOCHS}" \
   --lr "${LR}" \
@@ -242,6 +247,7 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --eval_batches "${EVAL_BATCHES}" \
   --eval_on_train_split "${EVAL_ON_TRAIN_SPLIT}" \
   --eval_sgg_use_gt_pairs "${EVAL_SGG_USE_GT_PAIRS}" \
+  --eval_sgg_use_relationness "${EVAL_SGG_USE_RELATIONNESS}" \
   --eval_sgg_predicate_score_mode "${EVAL_SCORE_MODE}" \
   --eval_sgg_predicate_ensemble_alpha "${EVAL_ENSEMBLE_ALPHA}" \
   --eval_sgg_classifier_temperature "${EVAL_CLASSIFIER_TEMPERATURE}" \

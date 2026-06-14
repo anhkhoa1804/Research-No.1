@@ -262,6 +262,30 @@ def _row_id(row: MetricRow, path: Path) -> str:
     return f"{run}:epoch={epoch}"
 
 
+def _row_config(row: MetricRow) -> Dict[str, Any]:
+    cfg = row.get("config", row.get("train_config", row.get("cfg", {})))
+    return cfg if isinstance(cfg, dict) else {}
+
+
+def _protocol_label(row: MetricRow) -> str:
+    cfg = _row_config(row)
+    val_sgg = row.get("val_sgg") if isinstance(row.get("val_sgg"), dict) else {}
+    protocol = val_sgg.get("protocol", {}) if isinstance(val_sgg, dict) else {}
+    protocol = protocol if isinstance(protocol, dict) else {}
+
+    use_gt_pairs = bool(protocol.get("use_gt_pairs", cfg.get("eval_sgg_use_gt_pairs", False)))
+    use_relationness = bool(protocol.get("relationness_enabled", cfg.get("eval_sgg_use_relationness", False)))
+    use_sgdet = bool(protocol.get("grounding_dino_enabled", cfg.get("eval_sgg_grounding_dino_enabled", False)))
+
+    if use_sgdet:
+        base = "sgdet"
+    elif use_gt_pairs:
+        base = "gt-pairs"
+    else:
+        base = "all-pairs"
+    return f"{base}+rel" if use_relationness and not use_gt_pairs else base
+
+
 def _summaries(rows_by_file: List[Tuple[Path, MetricRow]], buckets: Dict[str, str], lambda_mr: float, mu_tail: float) -> List[Dict[str, Any]]:
     summaries: List[Dict[str, Any]] = []
     for path, row in rows_by_file:
@@ -274,12 +298,14 @@ def _summaries(rows_by_file: List[Tuple[Path, MetricRow]], buckets: Dict[str, st
             role_diag = row.get("role_swap_diag", {}) if isinstance(row.get("role_swap_diag", {}), dict) else {}
             if not role_diag:
                 role_diag = _get(row, ["val_sgg", "role_swap_diag"], {}) or {}
+            cfg = _row_config(row)
             summaries.append(
                 {
                     "file": str(path),
                     "id": _row_id(row, path),
                     "epoch": row.get("epoch"),
                     "run_name": row.get("run_name", path.parent.name or path.stem),
+                    "protocol": _protocol_label(row),
                     "mode": mode,
                     "family": _mode_family(mode),
                     "R@50": _first_float(enriched, R_KEYS),
@@ -292,7 +318,7 @@ def _summaries(rows_by_file: List[Tuple[Path, MetricRow]], buckets: Dict[str, st
                     "role_swap_margin_mean": _as_float(role_diag.get("margin_mean", 0.0), 0.0) if isinstance(role_diag, dict) else 0.0,
                     "role_swap_failure_rate": _as_float(role_diag.get("failure_rate", 0.0), 0.0) if isinstance(role_diag, dict) else 0.0,
                     "per_predicate_R@50": per_pred,
-                    "config": row.get("config", row.get("train_config", row.get("cfg", {}))),
+                    "config": cfg,
                 }
             )
     return summaries
@@ -311,6 +337,7 @@ def _print_best(label: str, row: Optional[Dict[str, Any]]) -> None:
         return
     print(
         f"{label}: {row['id']} mode={row['mode']} "
+        f"protocol={row.get('protocol', 'unknown')} "
         f"R@50={row['R@50']:.4f} mR@50={row['mR@50']:.4f} "
         f"head/body/tail={row['head_mR@50']:.4f}/{row['body_mR@50']:.4f}/{row['tail_mR@50']:.4f} "
         f"role_swap={row.get('role_swap_consistency', 0.0):.4f} "
@@ -320,12 +347,23 @@ def _print_best(label: str, row: Optional[Dict[str, Any]]) -> None:
 
 def _print_family_table(rows: List[Dict[str, Any]]) -> None:
     print("\nScore-family best rows:")
-    print(f"{'family':<14} {'run/epoch':<34} {'mode':<18} {'R@50':>8} {'mR@50':>8} {'tail':>8} {'role':>8}")
+    print(f"{'family':<14} {'protocol':<14} {'run/epoch':<34} {'mode':<18} {'R@50':>8} {'mR@50':>8} {'tail':>8} {'role':>8}")
     for family in sorted({row["family"] for row in rows}):
         best = _best([row for row in rows if row["family"] == family], "combined")
         if not best:
             continue
-        print(f"{family:<14} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>8.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f} {best.get('role_swap_consistency', 0.0):>8.4f}")
+        print(f"{family:<14} {best.get('protocol', 'unknown')[:14]:<14} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>8.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f} {best.get('role_swap_consistency', 0.0):>8.4f}")
+
+
+def _print_protocol_table(rows: List[Dict[str, Any]]) -> None:
+    print("\nProtocol best rows:")
+    print(f"{'protocol':<14} {'family':<14} {'run/epoch':<34} {'mode':<18} {'R@50':>8} {'mR@50':>8} {'tail':>8}")
+    for protocol in sorted({row.get("protocol", "unknown") for row in rows}):
+        protocol_rows = [row for row in rows if row.get("protocol", "unknown") == protocol]
+        best = _best(protocol_rows, "combined")
+        if not best:
+            continue
+        print(f"{protocol[:14]:<14} {best['family'][:14]:<14} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>8.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f}")
 
 
 def _print_worst_predicates(row: Optional[Dict[str, Any]], limit: int) -> None:
@@ -352,8 +390,13 @@ def _print_config_snapshot(row: Optional[Dict[str, Any]]) -> None:
         "seed",
         "eval_sgg_predicate_score_mode",
         "eval_sgg_predicate_ensemble_alpha",
+        "eval_sgg_use_gt_pairs",
+        "eval_sgg_use_relationness",
+        "eval_sgg_relationness_prune_k",
         "bayes_calibration_weight",
         "adaptive_calibration_enabled",
+        "use_all_pairs",
+        "negative_pair_ratio",
         "predicate_sampler_enabled",
         "predicate_sampler_power",
         "predicate_label_relaxation_enabled",
@@ -420,6 +463,7 @@ def main() -> None:
     _print_best("Best mR@50", best_mr)
     _print_best("Best combined", best_combined)
     _print_family_table(summaries)
+    _print_protocol_table(summaries)
     _print_worst_predicates(best_combined, int(args.worst))
     _print_config_snapshot(best_combined)
 
