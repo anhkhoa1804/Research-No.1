@@ -71,6 +71,7 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --eval_sgg_use_gt_pairs "${EVAL_SGG_USE_GT_PAIRS}" \
   --eval_sgg_use_relationness "${EVAL_SGG_USE_RELATIONNESS}" \
   --eval_sgg_relationness_weight "${RELATIONNESS_WEIGHT:-0.75}" \
+  --eval_sgg_prune_score_mode "${PRUNE_SCORE_MODE:-relationness}" \
   --eval_sgg_relationness_prune_k "${RELATIONNESS_PRUNE_K:-96}" \
   --eval_sgg_detector_prune_k "${DETECTOR_PRUNE_K:-128}" \
   --eval_sgg_use_object_uncertainty true \

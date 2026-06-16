@@ -30,6 +30,7 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="Summarize PURE SGG gate diagnostics from metrics files.")
     parser.add_argument("metrics", nargs="+", type=Path, help="metrics.jsonl/json files")
     parser.add_argument("--top", type=int, default=8, help="number of confusion rows to print")
+    parser.add_argument("--all_rows", action="store_true", help="show every metrics row instead of the latest row per run/mode/alpha")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     args = parser.parse_args()
 
@@ -71,6 +72,13 @@ def main() -> None:
                     "allpairs_mR50": _as_float(allpairs.get("mR@50", 0.0), 0.0),
                 }
             )
+
+    if not args.all_rows:
+        latest = {}
+        for row in summaries:
+            key = (row.get("run_name"), row.get("score_mode"), row.get("alpha"), row.get("gt_pairs"))
+            latest[key] = row
+        summaries = list(latest.values())
 
     if args.json:
         print(json.dumps(summaries, ensure_ascii=False, indent=2))

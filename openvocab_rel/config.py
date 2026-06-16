@@ -216,6 +216,7 @@ class TrainConfig:
     eval_sgg_use_relationness: bool = False
     eval_sgg_relationness_weight: float = 1.0
     eval_sgg_relationness_threshold: float = 0.0
+    eval_sgg_prune_score_mode: str = "relationness"  # relationness, predicate, hybrid
     eval_sgg_relationness_prune_k: int = 0
     eval_sgg_detector_prune_k: int = 256
     eval_sgg_use_object_uncertainty: bool = True
