@@ -1379,6 +1379,67 @@ def eval_sgg_standard(
         "margin_abs_sum": 0.0,
         "per_predicate": {},
     }
+    pair_rank_diag: Dict[str, Any] = {
+        "n": 0,
+        "rank_sum": 0.0,
+        "top1": 0,
+        "top5": 0,
+        "top10": 0,
+        "top50": 0,
+        "missing_pair": 0,
+        "pruned_pair": 0,
+        "relationness_score_sum": 0.0,
+        "gt_counts": Counter(),
+        "top1_confusions": Counter(),
+        "miss_confusions": Counter(),
+        "per_predicate": {},
+    }
+
+    def _update_pair_rank_diag(
+        gt_triplets: Dict[str, Any],
+        pairs_before_prune: List[Tuple[int, int]],
+        pairs_after_prune: List[Tuple[int, int]],
+        rel_probs_before_prune: torch.Tensor,
+        relationness_before_prune: torch.Tensor,
+    ) -> None:
+        n_gt = min(len(gt_triplets.get("subj_idx", [])), len(gt_triplets.get("obj_idx", [])), len(gt_triplets.get("pred_labels", [])))
+        if n_gt <= 0 or int(rel_probs_before_prune.numel()) == 0:
+            return
+        pair_to_idx = {(int(s_idx), int(o_idx)): idx for idx, (s_idx, o_idx) in enumerate(pairs_before_prune)}
+        kept_pairs = {(int(s_idx), int(o_idx)) for s_idx, o_idx in pairs_after_prune}
+        top_pred_idx = rel_probs_before_prune.argmax(dim=-1).detach().cpu().long().tolist()
+        for gi in range(n_gt):
+            pred_name = str(gt_triplets["pred_labels"][gi]).strip().lower()
+            pred_id = pred_to_idx.get(pred_name, None)
+            if pred_id is None:
+                continue
+            pair = (int(gt_triplets["subj_idx"][gi]), int(gt_triplets["obj_idx"][gi]))
+            pair_rank_diag["n"] = int(pair_rank_diag.get("n", 0)) + 1
+            pair_rank_diag["gt_counts"][pred_name] += 1
+            per_pred = pair_rank_diag["per_predicate"].setdefault(pred_name, {"n": 0, "top1": 0, "top5": 0, "top10": 0, "top50": 0, "missing_pair": 0, "pruned_pair": 0, "rank_sum": 0.0})
+            per_pred["n"] = int(per_pred.get("n", 0)) + 1
+            pair_idx = pair_to_idx.get(pair, None)
+            if pair_idx is None:
+                pair_rank_diag["missing_pair"] = int(pair_rank_diag.get("missing_pair", 0)) + 1
+                per_pred["missing_pair"] = int(per_pred.get("missing_pair", 0)) + 1
+                continue
+            if pair not in kept_pairs:
+                pair_rank_diag["pruned_pair"] = int(pair_rank_diag.get("pruned_pair", 0)) + 1
+                per_pred["pruned_pair"] = int(per_pred.get("pruned_pair", 0)) + 1
+            if 0 <= int(pair_idx) < int(relationness_before_prune.numel()):
+                pair_rank_diag["relationness_score_sum"] = float(pair_rank_diag.get("relationness_score_sum", 0.0)) + float(relationness_before_prune[int(pair_idx)].detach().cpu().item())
+            scores = rel_probs_before_prune[int(pair_idx)].detach()
+            rank = int((scores > scores[int(pred_id)]).sum().item()) + 1
+            pair_rank_diag["rank_sum"] = float(pair_rank_diag.get("rank_sum", 0.0)) + float(rank)
+            per_pred["rank_sum"] = float(per_pred.get("rank_sum", 0.0)) + float(rank)
+            top_name = pred_vocab[int(top_pred_idx[int(pair_idx)])] if 0 <= int(top_pred_idx[int(pair_idx)]) < len(pred_vocab) else ""
+            pair_rank_diag["top1_confusions"][(pred_name, str(top_name).strip().lower())] += 1
+            if rank > 50:
+                pair_rank_diag["miss_confusions"][(pred_name, str(top_name).strip().lower())] += 1
+            for cutoff in (1, 5, 10, 50):
+                if rank <= cutoff:
+                    pair_rank_diag[f"top{cutoff}"] = int(pair_rank_diag.get(f"top{cutoff}", 0)) + 1
+                    per_pred[f"top{cutoff}"] = int(per_pred.get(f"top{cutoff}", 0)) + 1
 
     def _update_object_diag(gt_labels_i: List[str], cand_labels_i: List[List[str]], gt_pred_labels_i: List[str], gt_subj_i: List[str], gt_obj_i: List[str]) -> None:
         object_diag["num_images"] = int(object_diag.get("num_images", 0)) + 1
@@ -1492,6 +1553,9 @@ def eval_sgg_standard(
                 interaction_prior = (1.0 - no_prob).to(dtype=torch.float32)
                 rel_probs = _mask_background_predicates(rel_probs * interaction_prior.unsqueeze(1), pred_vocab)
             pair_pred_scores, pair_pred_idx = rel_probs.max(dim=-1)
+            pairs_before_prune = list(pair_list)
+            rel_probs_before_prune = rel_probs
+            relationness_before_prune = relationness_scores
             _update_predicate_diag(predicate_diag, pred_vocab, gt["pred_labels"], pair_pred_idx)
             for pred_name in gt["pred_labels"]:
                 group = predicate_group(pred_metadata, pred_name)
@@ -1510,6 +1574,8 @@ def eval_sgg_standard(
                 pair_pred_scores = pair_pred_scores.index_select(0, keep_rel)
                 pair_pred_idx = pair_pred_idx.index_select(0, keep_rel)
                 pair_base_scores = pair_base_scores.index_select(0, keep_rel)
+
+            _update_pair_rank_diag(gt, pairs_before_prune, pair_list, rel_probs_before_prune, relationness_before_prune)
 
             if bool(role_swap_diag.get("enabled", True)) and len(pair_list) > 0 and int(rel_logits.shape[0]) == len(pair_list):
                 pair_to_idx = {(int(s_idx), int(o_idx)): idx for idx, (s_idx, o_idx) in enumerate(pair_list)}
@@ -1777,6 +1843,40 @@ def eval_sgg_standard(
         predicate_diag,
         int(getattr(cfg, "eval_sgg_predicate_diag_topk", 8)),
     )
+    pair_rank_n = max(1, int(pair_rank_diag.get("n", 0)))
+    pair_rank_topk = int(getattr(cfg, "eval_sgg_predicate_diag_topk", 8))
+    def _top_confusions(counter: Counter) -> List[Dict[str, Any]]:
+        rows = []
+        for (gt_pred, pred_pred), count in counter.most_common(pair_rank_topk):
+            rows.append({"gt": str(gt_pred), "pred": str(pred_pred), "count": int(count)})
+        return rows
+    per_pair_rank = {}
+    for pred_name, stats in pair_rank_diag.get("per_predicate", {}).items():
+        pred_n = max(1, int(stats.get("n", 0)))
+        per_pair_rank[pred_name] = {
+            "n": int(stats.get("n", 0)),
+            "mean_rank": float(stats.get("rank_sum", 0.0)) / float(pred_n),
+            "top1": float(stats.get("top1", 0)) / float(pred_n),
+            "top5": float(stats.get("top5", 0)) / float(pred_n),
+            "top10": float(stats.get("top10", 0)) / float(pred_n),
+            "top50": float(stats.get("top50", 0)) / float(pred_n),
+            "missing_pair_rate": float(stats.get("missing_pair", 0)) / float(pred_n),
+            "pruned_pair_rate": float(stats.get("pruned_pair", 0)) / float(pred_n),
+        }
+    outm["pair_rank_diag"] = {
+        "n": int(pair_rank_diag.get("n", 0)),
+        "mean_gt_predicate_rank_on_pair": float(pair_rank_diag.get("rank_sum", 0.0)) / float(pair_rank_n),
+        "top1": float(pair_rank_diag.get("top1", 0)) / float(pair_rank_n),
+        "top5": float(pair_rank_diag.get("top5", 0)) / float(pair_rank_n),
+        "top10": float(pair_rank_diag.get("top10", 0)) / float(pair_rank_n),
+        "top50": float(pair_rank_diag.get("top50", 0)) / float(pair_rank_n),
+        "missing_pair_rate": float(pair_rank_diag.get("missing_pair", 0)) / float(pair_rank_n),
+        "pruned_pair_rate": float(pair_rank_diag.get("pruned_pair", 0)) / float(pair_rank_n),
+        "mean_gt_pair_relationness": float(pair_rank_diag.get("relationness_score_sum", 0.0)) / float(pair_rank_n),
+        "top1_confusions": _top_confusions(pair_rank_diag.get("top1_confusions", Counter())),
+        "miss_confusions": _top_confusions(pair_rank_diag.get("miss_confusions", Counter())),
+        "per_predicate": per_pair_rank,
+    }
     num_objects = max(1, int(object_diag.get("num_objects", 0)))
     num_gt_triplets = max(1, int(object_diag.get("num_gt_triplets", 0)))
     def _top_counts(counts: Dict[str, int]) -> List[Dict[str, Any]]:
