@@ -14,10 +14,20 @@ EVAL_SGG_USE_RELATIONNESS="${EVAL_SGG_USE_RELATIONNESS:-true}"
 EVAL_SGG_REPORT_NOGRAPH="${EVAL_SGG_REPORT_NOGRAPH:-true}"
 EVAL_COMPARE_SCORE_MODES="${EVAL_COMPARE_SCORE_MODES:-classifier,text,ensemble}"
 BAYES_CALIBRATION_WEIGHT="${BAYES_CALIBRATION_WEIGHT:-0.0}"
-FREQ_BIAS_ENABLED="${FREQ_BIAS_ENABLED:-false}"
+FREQ_BIAS_ENABLED="${FREQ_BIAS_ENABLED:-auto}"
 FREQ_BIAS_PATH="${FREQ_BIAS_PATH:-${DATA_ROOT}/frequency_prior.json}"
 FREQ_BIAS_ALPHA="${FREQ_BIAS_ALPHA:-0.0}"
 FREQ_BIAS_SMOOTHING="${FREQ_BIAS_SMOOTHING:-1.0}"
+
+if [[ "${FREQ_BIAS_ENABLED}" == "auto" ]]; then
+  if awk -v a="${BAYES_CALIBRATION_WEIGHT}" 'BEGIN { exit !(a > 0.0) }' && [[ -f "${FREQ_BIAS_PATH}" ]]; then
+    FREQ_BIAS_ENABLED=true
+  else
+    FREQ_BIAS_ENABLED=false
+  fi
+fi
+
+echo "[eval_l4_phase34] calibration alpha=${BAYES_CALIBRATION_WEIGHT} freq_bias_enabled=${FREQ_BIAS_ENABLED} freq_bias_path=${FREQ_BIAS_PATH}"
 
 if [[ ! -f "${CKPT}" ]]; then
   echo "[eval_l4_phase34] checkpoint not found: ${CKPT}" >&2

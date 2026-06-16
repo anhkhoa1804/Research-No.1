@@ -30,5 +30,7 @@ for alpha in ${ALPHAS}; do
   EVAL_SCORE_MODE="${EVAL_SCORE_MODE}" \
   EVAL_COMPARE_SCORE_MODES="${EVAL_COMPARE_SCORE_MODES}" \
   BAYES_CALIBRATION_WEIGHT="${alpha}" \
+  FREQ_BIAS_ENABLED="${FREQ_BIAS_ENABLED:-auto}" \
+  FREQ_BIAS_PATH="${FREQ_BIAS_PATH:-datasets/frequency_prior.json}" \
   bash scripts/eval_l4_phase34.sh
 done
