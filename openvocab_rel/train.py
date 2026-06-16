@@ -272,6 +272,34 @@ def _role_swap_ranking_loss(fwd_logits: torch.Tensor, rev_logits: torch.Tensor, 
     return F.relu(float(margin) - fwd_score + rev_score).mean()
 
 
+def _relationness_pair_rank_loss(
+    logits: torch.Tensor,
+    pos_mask: torch.Tensor,
+    img_ids: torch.Tensor,
+    margin: float,
+    topk: int,
+) -> torch.Tensor:
+    if logits.numel() == 0 or pos_mask.numel() == 0 or img_ids.numel() == 0:
+        return logits.sum() * 0.0
+    losses: List[torch.Tensor] = []
+    pos_mask = pos_mask.bool().view(-1)
+    img_ids = img_ids.view(-1)
+    for img_id in torch.unique(img_ids.detach()):
+        same_img = img_ids == img_id
+        img_pos = same_img & pos_mask
+        img_neg = same_img & (~pos_mask)
+        if not bool(img_pos.any()) or not bool(img_neg.any()):
+            continue
+        pos_scores = logits[img_pos].float()
+        neg_scores = logits[img_neg].float()
+        take = min(int(max(1, topk)), int(neg_scores.numel()))
+        hard_neg = torch.topk(neg_scores, k=take, largest=True).values
+        losses.append(F.relu(float(margin) - pos_scores[:, None] + hard_neg[None, :]).mean())
+    if len(losses) == 0:
+        return logits.sum() * 0.0
+    return torch.stack(losses).mean()
+
+
 def _build_predicate_group_matrix(pred_vocab: List[str], metadata: Dict[str, Dict[str, Any]], device: torch.device) -> torch.Tensor:
     groups = [predicate_group(metadata, pred) for pred in pred_vocab]
     n = len(groups)
@@ -381,6 +409,9 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--relationness_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "relationness_enabled", False))
     p.add_argument("--relationness_threshold", type=float, default=getattr(TrainConfig, "relationness_threshold", 0.0))
     p.add_argument("--lambda_relationness", type=float, default=getattr(TrainConfig, "lambda_relationness", 0.0))
+    p.add_argument("--lambda_relationness_rank", type=float, default=getattr(TrainConfig, "lambda_relationness_rank", 0.0))
+    p.add_argument("--relationness_rank_margin", type=float, default=getattr(TrainConfig, "relationness_rank_margin", 0.25))
+    p.add_argument("--relationness_rank_topk", type=int, default=getattr(TrainConfig, "relationness_rank_topk", 32))
     p.add_argument("--one_stage_facade_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "one_stage_facade_enabled", False))
     p.add_argument("--one_stage_max_pairs", type=int, default=getattr(TrainConfig, "one_stage_max_pairs", 256))
     p.add_argument("--retrieval_index_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "retrieval_index_enabled", False))
@@ -1376,6 +1407,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         epoch_l_cal_rank = 0.0
         epoch_l_text_ce = 0.0
         epoch_l_relationness = 0.0
+        epoch_l_relationness_rank = 0.0
         epoch_l_role_swap = 0.0
         epoch_batches = 0
         epoch_positive_pairs = 0
@@ -1683,6 +1715,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 l_calibration_rank = torch.tensor(0.0, device=device)
                 l_text_predicate_ce = torch.tensor(0.0, device=device)
                 l_relationness = torch.tensor(0.0, device=device)
+                l_relationness_rank = torch.tensor(0.0, device=device)
                 l_role_swap_rank = torch.tensor(0.0, device=device)
                 train_objective = train_objective_name
                 logit_adj_tau = float(getattr(cfg, "logit_adj_tau", 0.0))
@@ -1770,6 +1803,14 @@ def main(argv: Optional[List[str]] = None) -> None:
                         neg_count = (1.0 - rel_targets).sum().clamp_min(1.0)
                         pos_weight = (neg_count / pos_count).clamp(min=1.0, max=20.0)
                         l_relationness = F.binary_cross_entropy_with_logits(rel_logits_all, rel_targets, pos_weight=pos_weight)
+                        if float(getattr(cfg, "lambda_relationness_rank", 0.0)) > 0.0:
+                            l_relationness_rank = _relationness_pair_rank_loss(
+                                rel_logits_all,
+                                flat_pos_mask,
+                                flat_img_ids,
+                                float(getattr(cfg, "relationness_rank_margin", 0.25)),
+                                int(getattr(cfg, "relationness_rank_topk", 32)),
+                            )
                 if train_objective in {"predicate_warmup", "ce_only", "pred_ce"}:
                     spoa_term = l_spoa_alignment * 0.0
                     ground_term = l_dense_grounding * 0.0
@@ -1784,6 +1825,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 cal_rank_term = float(getattr(cfg, "lambda_calibration_rank", 0.0)) * l_calibration_rank
                 text_ce_term = float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) * l_text_predicate_ce
                 relationness_term = float(getattr(cfg, "lambda_relationness", 0.0)) * l_relationness
+                relationness_rank_term = float(getattr(cfg, "lambda_relationness_rank", 0.0)) * l_relationness_rank
                 role_swap_term = float(getattr(cfg, "lambda_role_swap_rank", 0.0)) * l_role_swap_rank
                 gate_reg = None
                 gate_val = 0.5
@@ -1791,7 +1833,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 if hasattr(decoder, "last_gate_reg") and decoder.last_gate_reg is not None:
                     gate_reg = decoder.last_gate_reg
                     gate_val = decoder.last_gate_val
-                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + role_swap_term
+                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + relationness_rank_term + role_swap_term
                 calib_reg_weight = float(getattr(cfg, "lambda_calibration_reg", 0.0))
                 if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and calib_reg_weight > 0.0 and hasattr(out, "calibration_regularizer"):
                     calib_reg = out.calibration_regularizer()
@@ -1837,6 +1879,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             epoch_l_cal_rank += float(l_calibration_rank.item())
             epoch_l_text_ce += float(l_text_predicate_ce.item())
             epoch_l_relationness += float(l_relationness.item())
+            epoch_l_relationness_rank += float(l_relationness_rank.item())
             epoch_l_role_swap += float(l_role_swap_rank.item())
             epoch_batches += 1
             epoch_positive_pairs += int(pos_idx.numel())
@@ -1877,7 +1920,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                     f"spoa={float(l_spoa_alignment.item()):.3f} ground={float(l_dense_grounding.item()):.3f} "
                     f"pred_ce={float(l_predicate_ce.item()):.3f} "
                     f"cal_kl={float(l_calibration_kl.item()):.3f} cal_rank={float(l_calibration_rank.item()):.3f} "
-                    f"text_ce={float(l_text_predicate_ce.item()):.3f} relness={float(l_relationness.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
+                    f"text_ce={float(l_text_predicate_ce.item()):.3f} relness={float(l_relationness.item()):.3f} "
+                    f"rel_rank={float(l_relationness_rank.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
                     f"[ratio={loss_ratio:.2f}, gate={float(gate_val):.2f}] | lr={float(optim.param_groups[0]['lr']):.2e}"
                     f"{timing_msg}",
                     flush=True,
@@ -1911,6 +1955,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "avg_calibration_rank": float(epoch_l_cal_rank / max(1, epoch_batches)),
                 "avg_text_predicate_ce": float(epoch_l_text_ce / max(1, epoch_batches)),
                 "avg_relationness": float(epoch_l_relationness / max(1, epoch_batches)),
+                "avg_relationness_rank": float(epoch_l_relationness_rank / max(1, epoch_batches)),
                 "avg_role_swap_rank": float(epoch_l_role_swap / max(1, epoch_batches)),
                 "lambda_role_swap_rank": float(getattr(cfg, "lambda_role_swap_rank", 0.0)),
                 "role_swap_rank_margin": float(getattr(cfg, "role_swap_rank_margin", 0.20)),
@@ -1931,6 +1976,9 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "lambda_text_predicate_ce": float(getattr(cfg, "lambda_text_predicate_ce", 0.0)),
                 "relationness_enabled": bool(getattr(cfg, "relationness_enabled", False)),
                 "lambda_relationness": float(getattr(cfg, "lambda_relationness", 0.0)),
+                "lambda_relationness_rank": float(getattr(cfg, "lambda_relationness_rank", 0.0)),
+                "relationness_rank_margin": float(getattr(cfg, "relationness_rank_margin", 0.25)),
+                "relationness_rank_topk": int(getattr(cfg, "relationness_rank_topk", 32)),
                 "predicate_sampler_enabled": bool(getattr(cfg, "predicate_sampler_enabled", False)),
                 "predicate_sampler_power": float(getattr(cfg, "predicate_sampler_power", 0.0)),
                 "ablation_visual_hard_negative_enabled": bool(getattr(cfg, "visual_hard_negative_enabled", False)),

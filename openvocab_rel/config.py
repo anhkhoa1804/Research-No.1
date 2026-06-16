@@ -117,6 +117,9 @@ class TrainConfig:
     relationness_enabled: bool = False
     relationness_threshold: float = 0.0
     lambda_relationness: float = 0.0
+    lambda_relationness_rank: float = 0.0
+    relationness_rank_margin: float = 0.25
+    relationness_rank_topk: int = 32
     one_stage_facade_enabled: bool = False
     one_stage_max_pairs: int = 256
     retrieval_index_enabled: bool = False
