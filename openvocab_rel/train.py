@@ -309,6 +309,8 @@ def _triplet_allpairs_rank_loss(
     topk: int,
     relationness_logits: Optional[torch.Tensor] = None,
     relationness_weight: float = 0.0,
+    class_weights: Optional[torch.Tensor] = None,
+    class_weight_power: float = 0.0,
 ) -> torch.Tensor:
     if predicate_logits.numel() == 0 or targets.numel() == 0 or pos_mask.numel() == 0 or img_ids.numel() == 0:
         return predicate_logits.sum() * 0.0
@@ -340,7 +342,13 @@ def _triplet_allpairs_rank_loss(
         hard_neg = torch.topk(candidate_neg, k=take, largest=True).values
         pos_idx = torch.nonzero(img_pos, as_tuple=False).squeeze(1)
         pos_score = scores[pos_idx, targets[pos_idx]]
-        losses.append(F.relu(float(margin) - pos_score[:, None] + hard_neg[None, :]).mean())
+        per_pos = F.relu(float(margin) - pos_score[:, None] + hard_neg[None, :]).mean(dim=1)
+        if class_weights is not None and class_weights.numel() == scores.shape[-1] and float(class_weight_power) > 0.0:
+            w = class_weights.to(device=scores.device, dtype=scores.dtype).index_select(0, targets[pos_idx]).clamp_min(1.0e-6)
+            w = torch.pow(w, float(class_weight_power))
+            w = w / w.mean().clamp_min(1.0e-6)
+            per_pos = per_pos * w
+        losses.append(per_pos.mean())
     if len(losses) == 0:
         return scores.sum() * 0.0
     return torch.stack(losses).mean()
@@ -462,6 +470,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--triplet_rank_margin", type=float, default=getattr(TrainConfig, "triplet_rank_margin", 0.20))
     p.add_argument("--triplet_rank_topk", type=int, default=getattr(TrainConfig, "triplet_rank_topk", 64))
     p.add_argument("--triplet_rank_relationness_weight", type=float, default=getattr(TrainConfig, "triplet_rank_relationness_weight", 0.25))
+    p.add_argument("--triplet_rank_class_weight_power", type=float, default=getattr(TrainConfig, "triplet_rank_class_weight_power", 0.0))
     p.add_argument("--one_stage_facade_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "one_stage_facade_enabled", False))
     p.add_argument("--one_stage_max_pairs", type=int, default=getattr(TrainConfig, "one_stage_max_pairs", 256))
     p.add_argument("--retrieval_index_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "retrieval_index_enabled", False))
@@ -670,6 +679,7 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "lambda_triplet_rank": float(getattr(cfg, "lambda_triplet_rank", 0.0)),
             "triplet_rank_margin": float(getattr(cfg, "triplet_rank_margin", 0.20)),
             "triplet_rank_topk": int(getattr(cfg, "triplet_rank_topk", 64)),
+            "triplet_rank_class_weight_power": float(getattr(cfg, "triplet_rank_class_weight_power", 0.0)),
             "lambda_role_swap_rank": float(getattr(cfg, "lambda_role_swap_rank", 0.0)),
             "tail_logit_adjustment_tau": float(getattr(cfg, "tail_logit_adjustment_tau", 0.0)),
         },
@@ -1891,6 +1901,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                                 int(getattr(cfg, "triplet_rank_topk", 64)),
                                 relationness_logits=triplet_rel_logits,
                                 relationness_weight=float(getattr(cfg, "triplet_rank_relationness_weight", 0.25)),
+                                class_weights=pred_ce_weights,
+                                class_weight_power=float(getattr(cfg, "triplet_rank_class_weight_power", 0.0)),
                             )
                 if train_objective in {"predicate_warmup", "ce_only", "pred_ce"}:
                     spoa_term = l_spoa_alignment * 0.0

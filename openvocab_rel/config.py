@@ -124,6 +124,7 @@ class TrainConfig:
     triplet_rank_margin: float = 0.20
     triplet_rank_topk: int = 64
     triplet_rank_relationness_weight: float = 0.25
+    triplet_rank_class_weight_power: float = 0.0
     one_stage_facade_enabled: bool = False
     one_stage_max_pairs: int = 256
     retrieval_index_enabled: bool = False

@@ -81,6 +81,7 @@ ARGS=(
   --triplet_rank_margin "${TRIPLET_RANK_MARGIN:-0.20}"
   --triplet_rank_topk "${TRIPLET_RANK_TOPK:-64}"
   --triplet_rank_relationness_weight "${TRIPLET_RANK_RELATIONNESS_WEIGHT:-0.25}"
+  --triplet_rank_class_weight_power "${TRIPLET_RANK_CLASS_WEIGHT_POWER:-0.0}"
   --lambda_calibration_reg "${LAMBDA_CALIBRATION_REG:-0.001}"
   --lambda_calibration_kl "${LAMBDA_CALIBRATION_KL:-0.03}"
   --lambda_calibration_rank "${LAMBDA_CALIBRATION_RANK:-0.08}"
