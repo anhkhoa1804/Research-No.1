@@ -13,6 +13,11 @@ EVAL_SGG_USE_GT_PAIRS="${EVAL_SGG_USE_GT_PAIRS:-false}"
 EVAL_SGG_USE_RELATIONNESS="${EVAL_SGG_USE_RELATIONNESS:-true}"
 EVAL_SGG_REPORT_NOGRAPH="${EVAL_SGG_REPORT_NOGRAPH:-true}"
 EVAL_COMPARE_SCORE_MODES="${EVAL_COMPARE_SCORE_MODES:-classifier,text,ensemble}"
+BAYES_CALIBRATION_WEIGHT="${BAYES_CALIBRATION_WEIGHT:-0.0}"
+FREQ_BIAS_ENABLED="${FREQ_BIAS_ENABLED:-false}"
+FREQ_BIAS_PATH="${FREQ_BIAS_PATH:-${DATA_ROOT}/frequency_prior.json}"
+FREQ_BIAS_ALPHA="${FREQ_BIAS_ALPHA:-0.0}"
+FREQ_BIAS_SMOOTHING="${FREQ_BIAS_SMOOTHING:-1.0}"
 
 if [[ ! -f "${CKPT}" ]]; then
   echo "[eval_l4_phase34] checkpoint not found: ${CKPT}" >&2
@@ -48,6 +53,11 @@ PYTHONUNBUFFERED=1 "${PYTHON}" -u -m openvocab_rel.train \
   --eval_sgg_predicate_score_mode "${EVAL_SCORE_MODE:-ensemble}" \
   --eval_sgg_compare_score_modes "${EVAL_COMPARE_SCORE_MODES}" \
   --eval_sgg_predicate_ensemble_alpha "${EVAL_ENSEMBLE_ALPHA:-0.45}" \
+  --bayes_calibration_weight "${BAYES_CALIBRATION_WEIGHT}" \
+  --freq_bias_enabled "${FREQ_BIAS_ENABLED}" \
+  --freq_bias_path "${FREQ_BIAS_PATH}" \
+  --freq_bias_alpha "${FREQ_BIAS_ALPHA}" \
+  --freq_bias_smoothing "${FREQ_BIAS_SMOOTHING}" \
   --eval_sgg_use_gt_pairs "${EVAL_SGG_USE_GT_PAIRS}" \
   --eval_sgg_use_relationness "${EVAL_SGG_USE_RELATIONNESS}" \
   --eval_sgg_relationness_weight "${RELATIONNESS_WEIGHT:-0.75}" \

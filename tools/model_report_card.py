@@ -24,6 +24,12 @@ MODE_ALIASES = {
 }
 
 
+def _truthy(value: Any) -> bool:
+    if isinstance(value, bool):
+        return value
+    return str(value).strip().lower() in {"1", "true", "yes", "y", "on"}
+
+
 def _get(data: Any, path: Iterable[str], default: Any = None) -> Any:
     cur = data
     for key in path:
@@ -299,6 +305,13 @@ def _summaries(rows_by_file: List[Tuple[Path, MetricRow]], buckets: Dict[str, st
             if not role_diag:
                 role_diag = _get(row, ["val_sgg", "role_swap_diag"], {}) or {}
             cfg = _row_config(row)
+            val_sgg = row.get("val_sgg") if isinstance(row.get("val_sgg"), dict) else {}
+            settings = val_sgg.get("settings", {}) if isinstance(val_sgg.get("settings"), dict) else {}
+            bayes_weight = _as_float(settings.get("bayes_calibration_weight", cfg.get("bayes_calibration_weight", 0.0)), 0.0)
+            freq_bias_alpha = _as_float(settings.get("freq_bias_alpha", cfg.get("freq_bias_alpha", 0.0)), 0.0)
+            freq_bias_enabled = _truthy(settings.get("freq_bias_enabled", cfg.get("freq_bias_enabled", False)))
+            is_fixed_prior = bayes_weight > 0.0 or (freq_bias_enabled and freq_bias_alpha > 0.0)
+            adaptive_enabled = _truthy(cfg.get("adaptive_calibration_enabled", settings.get("adaptive_calibration_enabled", False)))
             summaries.append(
                 {
                     "file": str(path),
@@ -308,6 +321,10 @@ def _summaries(rows_by_file: List[Tuple[Path, MetricRow]], buckets: Dict[str, st
                     "protocol": _protocol_label(row),
                     "mode": mode,
                     "family": _mode_family(mode),
+                    "calibration": "fixed-prior" if is_fixed_prior else ("adaptive-trained" if adaptive_enabled else "raw"),
+                    "bayes_calibration_weight": bayes_weight,
+                    "freq_bias_enabled": freq_bias_enabled,
+                    "freq_bias_alpha": freq_bias_alpha,
                     "R@50": _first_float(enriched, R_KEYS),
                     "mR@50": _first_float(enriched, MR_KEYS),
                     "tail_mR@50": _as_float(enriched.get("tail_mR@50", enriched.get("tail_mr50", 0.0)), 0.0),
@@ -338,6 +355,8 @@ def _print_best(label: str, row: Optional[Dict[str, Any]]) -> None:
     print(
         f"{label}: {row['id']} mode={row['mode']} "
         f"protocol={row.get('protocol', 'unknown')} "
+        f"calib={row.get('calibration', 'unknown')} "
+        f"alpha={row.get('bayes_calibration_weight', 0.0):.3f} "
         f"R@50={row['R@50']:.4f} mR@50={row['mR@50']:.4f} "
         f"head/body/tail={row['head_mR@50']:.4f}/{row['body_mR@50']:.4f}/{row['tail_mR@50']:.4f} "
         f"role_swap={row.get('role_swap_consistency', 0.0):.4f} "
@@ -347,23 +366,23 @@ def _print_best(label: str, row: Optional[Dict[str, Any]]) -> None:
 
 def _print_family_table(rows: List[Dict[str, Any]]) -> None:
     print("\nScore-family best rows:")
-    print(f"{'family':<14} {'protocol':<14} {'run/epoch':<34} {'mode':<18} {'R@50':>8} {'mR@50':>8} {'tail':>8} {'role':>8}")
+    print(f"{'family':<14} {'protocol':<14} {'calib':<14} {'alpha':>6} {'run/epoch':<34} {'mode':<18} {'R@50':>8} {'mR@50':>8} {'tail':>8} {'role':>8}")
     for family in sorted({row["family"] for row in rows}):
         best = _best([row for row in rows if row["family"] == family], "combined")
         if not best:
             continue
-        print(f"{family:<14} {best.get('protocol', 'unknown')[:14]:<14} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>8.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f} {best.get('role_swap_consistency', 0.0):>8.4f}")
+        print(f"{family:<14} {best.get('protocol', 'unknown')[:14]:<14} {best.get('calibration', 'unknown')[:14]:<14} {best.get('bayes_calibration_weight', 0.0):>6.3f} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>8.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f} {best.get('role_swap_consistency', 0.0):>8.4f}")
 
 
 def _print_protocol_table(rows: List[Dict[str, Any]]) -> None:
     print("\nProtocol best rows:")
-    print(f"{'protocol':<14} {'family':<14} {'run/epoch':<34} {'mode':<18} {'R@50':>8} {'mR@50':>8} {'tail':>8}")
+    print(f"{'protocol':<14} {'family':<14} {'calib':<14} {'alpha':>6} {'run/epoch':<34} {'mode':<18} {'R@50':>8} {'mR@50':>8} {'tail':>8}")
     for protocol in sorted({row.get("protocol", "unknown") for row in rows}):
         protocol_rows = [row for row in rows if row.get("protocol", "unknown") == protocol]
         best = _best(protocol_rows, "combined")
         if not best:
             continue
-        print(f"{protocol[:14]:<14} {best['family'][:14]:<14} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>8.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f}")
+        print(f"{protocol[:14]:<14} {best['family'][:14]:<14} {best.get('calibration', 'unknown')[:14]:<14} {best.get('bayes_calibration_weight', 0.0):>6.3f} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>8.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f}")
 
 
 def _print_worst_predicates(row: Optional[Dict[str, Any]], limit: int) -> None:
@@ -416,6 +435,7 @@ def main() -> None:
     parser.add_argument("--tail_frac", type=float, default=0.30, help="bottom fraction of predicates marked tail")
     parser.add_argument("--lambda_mr", type=float, default=1.0, help="combined score weight for mR@50")
     parser.add_argument("--mu_tail", type=float, default=1.0, help="combined score weight for tail_mR@50")
+    parser.add_argument("--protocol", default="", help="only rank rows from this protocol, e.g. all-pairs, all-pairs+rel, gt-pairs, sgdet")
     parser.add_argument("--worst", type=int, default=10, help="number of worst predicates to print")
     parser.add_argument("--json", action="store_true", help="emit machine-readable JSON")
     args = parser.parse_args()
@@ -439,9 +459,17 @@ def main() -> None:
     if not summaries:
         raise SystemExit("No usable PredCls/SGG metric rows found.")
 
-    best_r = _best(summaries, "R@50")
-    best_mr = _best(summaries, "mR@50")
-    best_combined = _best(summaries, "combined")
+    rank_rows = summaries
+    if str(args.protocol).strip():
+        protocol_filter = str(args.protocol).strip().lower()
+        rank_rows = [row for row in summaries if str(row.get("protocol", "")).lower() == protocol_filter]
+        if not rank_rows:
+            available = ", ".join(sorted({str(row.get("protocol", "unknown")) for row in summaries}))
+            raise SystemExit(f"No rows matched --protocol {args.protocol!r}. Available protocols: {available}")
+
+    best_r = _best(rank_rows, "R@50")
+    best_mr = _best(rank_rows, "mR@50")
+    best_combined = _best(rank_rows, "combined")
 
     payload = {
         "num_files": len(paths),
@@ -451,6 +479,7 @@ def main() -> None:
         "best_R@50": best_r,
         "best_mR@50": best_mr,
         "best_combined": best_combined,
+        "rank_protocol": str(args.protocol).strip() or "all",
         "rows": summaries,
     }
     if args.json:
@@ -458,7 +487,7 @@ def main() -> None:
         return
 
     print("PURE model report card")
-    print(f"files={len(paths)} rows={len(rows_by_file)} score_rows={len(summaries)} buckets={payload['bucket_counts']}")
+    print(f"files={len(paths)} rows={len(rows_by_file)} score_rows={len(summaries)} rank_protocol={payload['rank_protocol']} buckets={payload['bucket_counts']}")
     _print_best("Best R@50", best_r)
     _print_best("Best mR@50", best_mr)
     _print_best("Best combined", best_combined)
