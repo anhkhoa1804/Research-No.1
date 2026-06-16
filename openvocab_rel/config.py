@@ -120,6 +120,10 @@ class TrainConfig:
     lambda_relationness_rank: float = 0.0
     relationness_rank_margin: float = 0.25
     relationness_rank_topk: int = 32
+    lambda_triplet_rank: float = 0.0
+    triplet_rank_margin: float = 0.20
+    triplet_rank_topk: int = 64
+    triplet_rank_relationness_weight: float = 0.25
     one_stage_facade_enabled: bool = False
     one_stage_max_pairs: int = 256
     retrieval_index_enabled: bool = False

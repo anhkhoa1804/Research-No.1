@@ -300,6 +300,52 @@ def _relationness_pair_rank_loss(
     return torch.stack(losses).mean()
 
 
+def _triplet_allpairs_rank_loss(
+    predicate_logits: torch.Tensor,
+    targets: torch.Tensor,
+    pos_mask: torch.Tensor,
+    img_ids: torch.Tensor,
+    margin: float,
+    topk: int,
+    relationness_logits: Optional[torch.Tensor] = None,
+    relationness_weight: float = 0.0,
+) -> torch.Tensor:
+    if predicate_logits.numel() == 0 or targets.numel() == 0 or pos_mask.numel() == 0 or img_ids.numel() == 0:
+        return predicate_logits.sum() * 0.0
+    if int(predicate_logits.shape[0]) != int(targets.shape[0]) or int(predicate_logits.shape[-1]) <= 1:
+        return predicate_logits.sum() * 0.0
+    scores = predicate_logits.float()
+    if relationness_logits is not None and relationness_logits.numel() == scores.shape[0] and float(relationness_weight) != 0.0:
+        scores = scores + (float(relationness_weight) * relationness_logits.float().view(-1, 1))
+    targets = targets.long().view(-1)
+    pos_mask = pos_mask.bool().view(-1)
+    img_ids = img_ids.view(-1)
+    valid_pos = pos_mask & (targets >= 0) & (targets < int(scores.shape[-1]))
+    if not bool(valid_pos.any()):
+        return scores.sum() * 0.0
+    neg_scores = scores.clone()
+    pos_rows = torch.nonzero(valid_pos, as_tuple=False).squeeze(1)
+    neg_scores[pos_rows, targets[pos_rows]] = -10000.0
+    losses: List[torch.Tensor] = []
+    for img_id in torch.unique(img_ids.detach()):
+        same_img = img_ids == img_id
+        img_pos = same_img & valid_pos
+        if not bool(img_pos.any()):
+            continue
+        candidate_neg = neg_scores[same_img].reshape(-1)
+        candidate_neg = candidate_neg[candidate_neg > -9999.0]
+        if candidate_neg.numel() == 0:
+            continue
+        take = min(int(max(1, topk)), int(candidate_neg.numel()))
+        hard_neg = torch.topk(candidate_neg, k=take, largest=True).values
+        pos_idx = torch.nonzero(img_pos, as_tuple=False).squeeze(1)
+        pos_score = scores[pos_idx, targets[pos_idx]]
+        losses.append(F.relu(float(margin) - pos_score[:, None] + hard_neg[None, :]).mean())
+    if len(losses) == 0:
+        return scores.sum() * 0.0
+    return torch.stack(losses).mean()
+
+
 def _build_predicate_group_matrix(pred_vocab: List[str], metadata: Dict[str, Dict[str, Any]], device: torch.device) -> torch.Tensor:
     groups = [predicate_group(metadata, pred) for pred in pred_vocab]
     n = len(groups)
@@ -412,6 +458,10 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--lambda_relationness_rank", type=float, default=getattr(TrainConfig, "lambda_relationness_rank", 0.0))
     p.add_argument("--relationness_rank_margin", type=float, default=getattr(TrainConfig, "relationness_rank_margin", 0.25))
     p.add_argument("--relationness_rank_topk", type=int, default=getattr(TrainConfig, "relationness_rank_topk", 32))
+    p.add_argument("--lambda_triplet_rank", type=float, default=getattr(TrainConfig, "lambda_triplet_rank", 0.0))
+    p.add_argument("--triplet_rank_margin", type=float, default=getattr(TrainConfig, "triplet_rank_margin", 0.20))
+    p.add_argument("--triplet_rank_topk", type=int, default=getattr(TrainConfig, "triplet_rank_topk", 64))
+    p.add_argument("--triplet_rank_relationness_weight", type=float, default=getattr(TrainConfig, "triplet_rank_relationness_weight", 0.25))
     p.add_argument("--one_stage_facade_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "one_stage_facade_enabled", False))
     p.add_argument("--one_stage_max_pairs", type=int, default=getattr(TrainConfig, "one_stage_max_pairs", 256))
     p.add_argument("--retrieval_index_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "retrieval_index_enabled", False))
@@ -617,6 +667,9 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "lambda_relationness_rank": float(getattr(cfg, "lambda_relationness_rank", 0.0)),
             "relationness_rank_margin": float(getattr(cfg, "relationness_rank_margin", 0.25)),
             "relationness_rank_topk": int(getattr(cfg, "relationness_rank_topk", 32)),
+            "lambda_triplet_rank": float(getattr(cfg, "lambda_triplet_rank", 0.0)),
+            "triplet_rank_margin": float(getattr(cfg, "triplet_rank_margin", 0.20)),
+            "triplet_rank_topk": int(getattr(cfg, "triplet_rank_topk", 64)),
             "lambda_role_swap_rank": float(getattr(cfg, "lambda_role_swap_rank", 0.0)),
             "tail_logit_adjustment_tau": float(getattr(cfg, "tail_logit_adjustment_tau", 0.0)),
         },
@@ -1418,6 +1471,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         epoch_l_text_ce = 0.0
         epoch_l_relationness = 0.0
         epoch_l_relationness_rank = 0.0
+        epoch_l_triplet_rank = 0.0
         epoch_l_role_swap = 0.0
         epoch_batches = 0
         epoch_positive_pairs = 0
@@ -1726,6 +1780,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 l_text_predicate_ce = torch.tensor(0.0, device=device)
                 l_relationness = torch.tensor(0.0, device=device)
                 l_relationness_rank = torch.tensor(0.0, device=device)
+                l_triplet_rank = torch.tensor(0.0, device=device)
                 l_role_swap_rank = torch.tensor(0.0, device=device)
                 train_objective = train_objective_name
                 logit_adj_tau = float(getattr(cfg, "logit_adj_tau", 0.0))
@@ -1821,6 +1876,22 @@ def main(argv: Optional[List[str]] = None) -> None:
                                 float(getattr(cfg, "relationness_rank_margin", 0.25)),
                                 int(getattr(cfg, "relationness_rank_topk", 32)),
                             )
+                if float(getattr(cfg, "lambda_triplet_rank", 0.0)) > 0.0 and hasattr(out, "predicate_logits"):
+                    triplet_valid = (flat_pred_ids >= 0) & (flat_pred_ids < int(pred_emb_s2o.shape[0]))
+                    if bool(triplet_valid.any()):
+                        triplet_logits = out.predicate_logits(flat_r).float()
+                        if triplet_logits.shape[0] == flat_pred_ids.shape[0] and triplet_logits.shape[-1] == pred_emb_s2o.shape[0]:
+                            triplet_rel_logits = rel_logits_all if "rel_logits_all" in locals() else None
+                            l_triplet_rank = _triplet_allpairs_rank_loss(
+                                triplet_logits,
+                                flat_pred_ids,
+                                flat_pos_mask,
+                                flat_img_ids,
+                                float(getattr(cfg, "triplet_rank_margin", 0.20)),
+                                int(getattr(cfg, "triplet_rank_topk", 64)),
+                                relationness_logits=triplet_rel_logits,
+                                relationness_weight=float(getattr(cfg, "triplet_rank_relationness_weight", 0.25)),
+                            )
                 if train_objective in {"predicate_warmup", "ce_only", "pred_ce"}:
                     spoa_term = l_spoa_alignment * 0.0
                     ground_term = l_dense_grounding * 0.0
@@ -1836,6 +1907,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 text_ce_term = float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) * l_text_predicate_ce
                 relationness_term = float(getattr(cfg, "lambda_relationness", 0.0)) * l_relationness
                 relationness_rank_term = float(getattr(cfg, "lambda_relationness_rank", 0.0)) * l_relationness_rank
+                triplet_rank_term = float(getattr(cfg, "lambda_triplet_rank", 0.0)) * l_triplet_rank
                 role_swap_term = float(getattr(cfg, "lambda_role_swap_rank", 0.0)) * l_role_swap_rank
                 gate_reg = None
                 gate_val = 0.5
@@ -1843,7 +1915,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 if hasattr(decoder, "last_gate_reg") and decoder.last_gate_reg is not None:
                     gate_reg = decoder.last_gate_reg
                     gate_val = decoder.last_gate_val
-                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + relationness_rank_term + role_swap_term
+                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + relationness_rank_term + triplet_rank_term + role_swap_term
                 calib_reg_weight = float(getattr(cfg, "lambda_calibration_reg", 0.0))
                 if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and calib_reg_weight > 0.0 and hasattr(out, "calibration_regularizer"):
                     calib_reg = out.calibration_regularizer()
@@ -1890,6 +1962,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             epoch_l_text_ce += float(l_text_predicate_ce.item())
             epoch_l_relationness += float(l_relationness.item())
             epoch_l_relationness_rank += float(l_relationness_rank.item())
+            epoch_l_triplet_rank += float(l_triplet_rank.item())
             epoch_l_role_swap += float(l_role_swap_rank.item())
             epoch_batches += 1
             epoch_positive_pairs += int(pos_idx.numel())
@@ -1931,7 +2004,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                     f"pred_ce={float(l_predicate_ce.item()):.3f} "
                     f"cal_kl={float(l_calibration_kl.item()):.3f} cal_rank={float(l_calibration_rank.item()):.3f} "
                     f"text_ce={float(l_text_predicate_ce.item()):.3f} relness={float(l_relationness.item()):.3f} "
-                    f"rel_rank={float(l_relationness_rank.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
+                    f"rel_rank={float(l_relationness_rank.item()):.3f} tri_rank={float(l_triplet_rank.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
                     f"[ratio={loss_ratio:.2f}, gate={float(gate_val):.2f}] | lr={float(optim.param_groups[0]['lr']):.2e}"
                     f"{timing_msg}",
                     flush=True,
@@ -1966,6 +2039,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "avg_text_predicate_ce": float(epoch_l_text_ce / max(1, epoch_batches)),
                 "avg_relationness": float(epoch_l_relationness / max(1, epoch_batches)),
                 "avg_relationness_rank": float(epoch_l_relationness_rank / max(1, epoch_batches)),
+                "avg_triplet_rank": float(epoch_l_triplet_rank / max(1, epoch_batches)),
                 "avg_role_swap_rank": float(epoch_l_role_swap / max(1, epoch_batches)),
                 "lambda_role_swap_rank": float(getattr(cfg, "lambda_role_swap_rank", 0.0)),
                 "role_swap_rank_margin": float(getattr(cfg, "role_swap_rank_margin", 0.20)),
