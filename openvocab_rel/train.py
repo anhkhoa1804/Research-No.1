@@ -470,6 +470,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--eval_sgg_relationness_weight", type=float, default=getattr(TrainConfig, "eval_sgg_relationness_weight", 1.0))
     p.add_argument("--eval_sgg_relationness_threshold", type=float, default=getattr(TrainConfig, "eval_sgg_relationness_threshold", 0.0))
     p.add_argument("--eval_sgg_prune_score_mode", type=str, default=getattr(TrainConfig, "eval_sgg_prune_score_mode", "relationness"))
+    p.add_argument("--eval_sgg_pair_score_mode", type=str, default=getattr(TrainConfig, "eval_sgg_pair_score_mode", "relationness"))
     p.add_argument("--eval_sgg_relationness_prune_k", type=int, default=getattr(TrainConfig, "eval_sgg_relationness_prune_k", 0))
     p.add_argument("--eval_sgg_detector_prune_k", type=int, default=getattr(TrainConfig, "eval_sgg_detector_prune_k", 256))
     p.add_argument("--eval_sgg_use_object_uncertainty", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "eval_sgg_use_object_uncertainty", True))

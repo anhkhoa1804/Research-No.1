@@ -1102,22 +1102,42 @@ def _apply_frequency_bias(
     return logits.float() + (alpha * pair_prior)
 
 
+def _pair_score_values(
+    mode: str,
+    relationness_scores: torch.Tensor,
+    pair_pred_scores: torch.Tensor,
+    rel_weight: float,
+) -> torch.Tensor:
+    mode_norm = str(mode).strip().lower()
+    rel_base = relationness_scores.clamp(0.0, 1.0).pow(max(0.0, float(rel_weight))) if float(rel_weight) > 0.0 else torch.ones_like(pair_pred_scores)
+    pred_base = pair_pred_scores.clamp(0.0, 1.0)
+    if mode_norm in {"none", "uniform", "off", "1"}:
+        return torch.ones_like(pair_pred_scores)
+    if mode_norm in {"predicate", "pred", "classifier"}:
+        return pred_base
+    if mode_norm in {"hybrid", "joint", "product"}:
+        return rel_base * pred_base
+    if mode_norm in {"max", "union"}:
+        return torch.maximum(rel_base, pred_base)
+    return rel_base
+
+
 def _pair_prune_scores(
     cfg: Any,
     relationness_scores: torch.Tensor,
     pair_pred_scores: torch.Tensor,
     rel_weight: float,
 ) -> torch.Tensor:
-    mode = str(getattr(cfg, "eval_sgg_prune_score_mode", "relationness")).strip().lower()
-    rel_base = relationness_scores.clamp(0.0, 1.0).pow(max(0.0, float(rel_weight))) if float(rel_weight) > 0.0 else torch.ones_like(pair_pred_scores)
-    pred_base = pair_pred_scores.clamp(0.0, 1.0)
-    if mode in {"predicate", "pred", "classifier"}:
-        return pred_base
-    if mode in {"hybrid", "joint", "product"}:
-        return rel_base * pred_base
-    if mode in {"max", "union"}:
-        return torch.maximum(rel_base, pred_base)
-    return rel_base
+    return _pair_score_values(getattr(cfg, "eval_sgg_prune_score_mode", "relationness"), relationness_scores, pair_pred_scores, rel_weight)
+
+
+def _pair_triplet_scores(
+    cfg: Any,
+    relationness_scores: torch.Tensor,
+    pair_pred_scores: torch.Tensor,
+    rel_weight: float,
+) -> torch.Tensor:
+    return _pair_score_values(getattr(cfg, "eval_sgg_pair_score_mode", "relationness"), relationness_scores, pair_pred_scores, rel_weight)
 
 
 def _relation_predicate_logits(
@@ -1583,7 +1603,7 @@ def eval_sgg_standard(
                     group = predicate_group(pred_metadata, pred_vocab[int(pred_id)])
                     predicate_diag["pred_by_group"][group] = int(predicate_diag["pred_by_group"].get(group, 0)) + 1
             rel_weight = float(getattr(cfg, "eval_sgg_relationness_weight", 1.0)) if bool(getattr(cfg, "eval_sgg_use_relationness", False)) else 0.0
-            pair_base_scores = relationness_scores.clamp(0.0, 1.0).pow(max(0.0, rel_weight)) if rel_weight > 0.0 else torch.ones_like(pair_pred_scores)
+            pair_base_scores = _pair_triplet_scores(cfg, relationness_scores, pair_pred_scores, rel_weight)
             pair_prune_scores = _pair_prune_scores(cfg, relationness_scores, pair_pred_scores, rel_weight)
             prune_k_eval = int(getattr(cfg, "eval_sgg_relationness_prune_k", 0))
             if prune_k_eval > 0 and int(pair_prune_scores.numel()) > prune_k_eval:
@@ -1714,7 +1734,7 @@ def eval_sgg_standard(
                             rel_probs_d = _mask_background_predicates(rel_probs_d * interaction_prior_d.unsqueeze(1), pred_vocab)
                         pair_pred_scores_d, pair_pred_idx_d = rel_probs_d.max(dim=-1)
                         rel_weight_d = float(getattr(cfg, "eval_sgg_relationness_weight", 1.0)) if bool(getattr(cfg, "eval_sgg_use_relationness", False)) else 0.0
-                        pair_base_scores_d = relationness_scores_d.clamp(0.0, 1.0).pow(max(0.0, rel_weight_d)) if rel_weight_d > 0.0 else torch.ones_like(pair_pred_scores_d)
+                        pair_base_scores_d = _pair_triplet_scores(cfg, relationness_scores_d, pair_pred_scores_d, rel_weight_d)
                         pair_prune_scores_d = _pair_prune_scores(cfg, relationness_scores_d, pair_pred_scores_d, rel_weight_d)
                         rel_threshold_d = float(getattr(cfg, "eval_sgg_relationness_threshold", 0.0))
                         if rel_threshold_d > 0.0 and bool(getattr(cfg, "eval_sgg_use_relationness", False)):
@@ -1773,6 +1793,7 @@ def eval_sgg_standard(
             "relationness_threshold": float(getattr(cfg, "eval_sgg_relationness_threshold", 0.0)),
             "relationness_prune_k": int(getattr(cfg, "eval_sgg_relationness_prune_k", 0)),
             "prune_score_mode": str(getattr(cfg, "eval_sgg_prune_score_mode", "relationness")),
+            "pair_score_mode": str(getattr(cfg, "eval_sgg_pair_score_mode", "relationness")),
             "detector_prune_k": int(getattr(cfg, "eval_sgg_detector_prune_k", 0)),
             "object_uncertainty_enabled": bool(getattr(cfg, "eval_sgg_use_object_uncertainty", True)),
             "object_score_power": float(getattr(cfg, "eval_sgg_object_score_power", 1.0)),
