@@ -110,7 +110,7 @@ if [[ -n "${RESUME_FROM}" ]]; then
     echo "[train_l4_phase34] resume checkpoint not found: ${RESUME_FROM}" >&2
     exit 2
   fi
-  ARGS+=(--resume true --resume_from "${RESUME_FROM}")
+  ARGS+=(--resume true --resume_from "${RESUME_FROM}" --reset_epoch "${RESET_EPOCH:-true}")
 else
   ARGS+=(--resume false)
 fi

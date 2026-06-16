@@ -1309,7 +1309,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                     p.requires_grad_(True)
         if hasattr(cm, "logit_scale") and isinstance(cm.logit_scale, torch.Tensor):
             cm.logit_scale.requires_grad_(True)
-    if int(cfg.epochs) == 0 and is_main():
+    if (bool(getattr(args, "eval_only", False)) or int(cfg.epochs) == 0) and is_main():
         print("\n[Evaluation Only Mode]")
         model.eval()
         unwrap_ddp(clip_model).eval()
@@ -1382,6 +1382,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     best_predcls_mr50 = float("-inf")
     best_predcls_tail_mr50 = float("-inf")
     best_predcls_selection = float("-inf")
+
+    if int(start_epoch) >= int(cfg.epochs):
+        print(
+            f"[System] start_epoch={int(start_epoch)} >= epochs={int(cfg.epochs)}; no training epochs to run. "
+            "Use --reset_epoch true or set EPOCHS larger than the resumed checkpoint epoch.",
+            flush=True,
+        )
 
     for epoch in range(start_epoch, int(cfg.epochs)):
             
