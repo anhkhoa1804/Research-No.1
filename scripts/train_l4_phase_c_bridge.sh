@@ -17,7 +17,7 @@ set -euo pipefail
 : "${FREEZE_PREDICATE_HEAD:=true}"
 : "${PYTHON_BIN:=python3}"
 : "${DATA_ROOT:=datasets}"
-: "${VG150_SOURCE:=local-jsonl}"
+: "${VG150_SOURCE:=hf-map}"
 
 "${PYTHON_BIN}" -m openvocab_rel.train \
   --run_name "${RUN_NAME}" \

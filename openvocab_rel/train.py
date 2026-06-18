@@ -331,6 +331,20 @@ def _pair_retention_metrics(logits: torch.Tensor, pos_mask: torch.Tensor, img_id
     return metrics
 
 
+
+
+def _batch_object_vocab_from_labels(batch: List[Dict[str, Any]]) -> List[str]:
+    labels: List[str] = []
+    seen = set()
+    for ex in batch:
+        for raw in ex.get("obj_labels", []):
+            label = str(raw).strip().lower()
+            if label == "" or label in seen:
+                continue
+            seen.add(label)
+            labels.append(label)
+    return labels
+
 def _object_bridge_loss_and_metrics(
     obj_feats: List[torch.Tensor],
     batch: List[Dict[str, Any]],
@@ -1591,6 +1605,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         epoch_pair_metric_batches = 0
         epoch_object_bridge_top1 = 0.0
         epoch_object_bridge_topk = 0.0
+        epoch_object_bridge_examples = 0
         epoch_object_bridge_batches = 0
         epoch_batches = 0
         epoch_positive_pairs = 0
@@ -2036,16 +2051,28 @@ def main(argv: Optional[List[str]] = None) -> None:
                 text_ce_term = float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) * l_text_predicate_ce
                 relationness_term = float(getattr(cfg, "lambda_relationness", 0.0)) * l_relationness
                 if float(getattr(cfg, "lambda_object_bridge", 0.0)) > 0.0:
+                    bridge_vocab_to_idx = obj_vocab_to_idx
+                    bridge_text_feats = obj_text_feats.detach()
+                    if bridge_text_feats.numel() == 0 or len(bridge_vocab_to_idx) == 0:
+                        batch_object_vocab = _batch_object_vocab_from_labels(batch)
+                        if len(batch_object_vocab) > 0:
+                            batch_object_prompts = [_object_prompt_for_anchor(name) for name in batch_object_vocab]
+                            bridge_text_feats = variant_cache.get_batch(
+                                batch_object_prompts,
+                                fallback_fn=lambda missing: clip_text_features(clip_model, processor, missing, device),
+                            ).detach()
+                            bridge_vocab_to_idx = {name: i for i, name in enumerate(batch_object_vocab)}
                     l_object_bridge, object_bridge_metrics = _object_bridge_loss_and_metrics(
                         regs,
                         batch,
-                        obj_vocab_to_idx,
-                        obj_text_feats.detach(),
+                        bridge_vocab_to_idx,
+                        bridge_text_feats,
                         int(getattr(cfg, "object_bridge_topk", 5)),
                     )
                     if float(object_bridge_metrics.get("object_bridge_examples", 0.0)) > 0.0:
                         epoch_object_bridge_top1 += float(object_bridge_metrics.get("object_bridge_top1", 0.0))
                         epoch_object_bridge_topk += float(object_bridge_metrics.get("object_bridge_topk", 0.0))
+                        epoch_object_bridge_examples += int(object_bridge_metrics.get("object_bridge_examples", 0.0))
                         epoch_object_bridge_batches += 1
                 relationness_rank_term = float(getattr(cfg, "lambda_relationness_rank", 0.0)) * l_relationness_rank
                 object_bridge_term = float(getattr(cfg, "lambda_object_bridge", 0.0)) * l_object_bridge
@@ -2187,6 +2214,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "avg_object_bridge": float(epoch_l_object_bridge / max(1, epoch_batches)),
                 "object_bridge_top1": float(epoch_object_bridge_top1 / max(1, epoch_object_bridge_batches)),
                 "object_bridge_topk": float(epoch_object_bridge_topk / max(1, epoch_object_bridge_batches)),
+                "object_bridge_examples": int(epoch_object_bridge_examples),
+                "object_vocab_size": int(len(obj_vocab_to_idx)),
                 "object_bridge_topk_k": int(getattr(cfg, "object_bridge_topk", 5)),
                 "pair_recall@64": float(epoch_pair_metrics.get("pair_recall@64", 0.0) / max(1, epoch_pair_metric_batches)),
                 "pair_recall@128": float(epoch_pair_metrics.get("pair_recall@128", 0.0) / max(1, epoch_pair_metric_batches)),
