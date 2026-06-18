@@ -15,8 +15,9 @@ set -euo pipefail
 : "${LAMBDA_PAIR_PROPOSAL_RANK:=0.5}"
 : "${LAMBDA_OBJECT_BRIDGE:=0.5}"
 : "${FREEZE_PREDICATE_HEAD:=true}"
+: "${PYTHON_BIN:=python3}"
 
-python -m openvocab_rel.train \
+"${PYTHON_BIN}" -m openvocab_rel.train \
   --run_name "${RUN_NAME}" \
   --save_path "${SAVE_PATH}" \
   --resume_from "${RESUME_FROM}" \
