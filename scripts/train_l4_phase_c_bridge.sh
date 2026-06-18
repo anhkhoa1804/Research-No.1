@@ -16,6 +16,7 @@ set -euo pipefail
 : "${LAMBDA_OBJECT_BRIDGE:=0.5}"
 : "${FREEZE_PREDICATE_HEAD:=true}"
 : "${PYTHON_BIN:=python3}"
+: "${DATA_ROOT:=datasets}"
 : "${VG150_SOURCE:=local-jsonl}"
 
 "${PYTHON_BIN}" -m openvocab_rel.train \
@@ -24,6 +25,7 @@ set -euo pipefail
   --resume_from "${RESUME_FROM}" \
   --reset_epoch "${RESET_EPOCH}" \
   --train_objective pair_object_bridge \
+  --vg150_root "${DATA_ROOT}" \
   --vg150_source "${VG150_SOURCE}" \
   --hf_streaming false \
   --epochs "${EPOCHS}" \
