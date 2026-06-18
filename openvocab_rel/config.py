@@ -74,6 +74,7 @@ class TrainConfig:
     gate_regularizer_weight: float = 0.01
     fusion_gate_temperature: float = 0.7
     predicate_classifier_enabled: bool = True
+    freeze_predicate_head: bool = False
     predicate_classifier_classes: int = 51
     eval_sgg_use_predicate_classifier: bool = True
     eval_sgg_predicate_score_mode: str = "ensemble"  # ensemble, classifier, text, auto
@@ -120,11 +121,14 @@ class TrainConfig:
     lambda_relationness_rank: float = 0.0
     relationness_rank_margin: float = 0.25
     relationness_rank_topk: int = 32
+    lambda_object_bridge: float = 0.0
+    object_bridge_topk: int = 5
     lambda_triplet_rank: float = 0.0
     triplet_rank_margin: float = 0.20
     triplet_rank_topk: int = 64
     triplet_rank_relationness_weight: float = 0.25
     triplet_rank_class_weight_power: float = 0.0
+    triplet_rank_scope: str = "all"
     one_stage_facade_enabled: bool = False
     one_stage_max_pairs: int = 256
     retrieval_index_enabled: bool = False

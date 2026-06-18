@@ -300,6 +300,74 @@ def _relationness_pair_rank_loss(
     return torch.stack(losses).mean()
 
 
+def _pair_retention_metrics(logits: torch.Tensor, pos_mask: torch.Tensor, img_ids: torch.Tensor, ks: Tuple[int, ...] = (64, 128, 256)) -> Dict[str, float]:
+    metrics: Dict[str, float] = {}
+    if logits.numel() == 0 or pos_mask.numel() == 0 or img_ids.numel() == 0:
+        for k in ks:
+            metrics[f"pair_recall@{k}"] = 0.0
+        metrics["pair_pruned_rate@128"] = 0.0
+        return metrics
+    recalls = {int(k): [] for k in ks}
+    pruned_rates: List[float] = []
+    for img_id in torch.unique(img_ids.detach()):
+        local = torch.nonzero(img_ids == img_id, as_tuple=False).squeeze(1)
+        if int(local.numel()) == 0:
+            continue
+        local_pos = pos_mask.index_select(0, local).bool()
+        pos_count = int(local_pos.sum().item())
+        if pos_count <= 0:
+            continue
+        local_scores = logits.index_select(0, local).float()
+        for k in ks:
+            take = min(int(k), int(local_scores.numel()))
+            top_idx = torch.topk(local_scores, k=take, largest=True).indices
+            kept_pos = int(local_pos.index_select(0, top_idx).sum().item())
+            recalls[int(k)].append(float(kept_pos) / float(max(1, pos_count)))
+        pruned_rates.append(1.0 - (float(min(128, int(local_scores.numel()))) / float(max(1, int(local_scores.numel())))))
+    for k in ks:
+        vals = recalls[int(k)]
+        metrics[f"pair_recall@{int(k)}"] = float(sum(vals) / max(1, len(vals)))
+    metrics["pair_pruned_rate@128"] = float(sum(pruned_rates) / max(1, len(pruned_rates)))
+    return metrics
+
+
+def _object_bridge_loss_and_metrics(
+    obj_feats: List[torch.Tensor],
+    batch: List[Dict[str, Any]],
+    obj_vocab_to_idx: Dict[str, int],
+    obj_text_feats: torch.Tensor,
+    topk: int,
+) -> Tuple[torch.Tensor, Dict[str, float]]:
+    chunks: List[torch.Tensor] = []
+    targets: List[int] = []
+    for bi, feats in enumerate(obj_feats):
+        labels = batch[bi].get("obj_labels", []) if bi < len(batch) else []
+        n = min(int(feats.shape[0]), len(labels))
+        for oi in range(n):
+            label = str(labels[oi]).strip().lower()
+            target = obj_vocab_to_idx.get(label, -1)
+            if target >= 0:
+                chunks.append(feats[oi : oi + 1])
+                targets.append(int(target))
+    if len(chunks) == 0 or obj_text_feats.numel() == 0:
+        device = obj_text_feats.device if isinstance(obj_text_feats, torch.Tensor) else torch.device("cpu")
+        zero = torch.tensor(0.0, device=device)
+        return zero, {"object_bridge_top1": 0.0, "object_bridge_topk": 0.0, "object_bridge_examples": 0.0}
+    feats_all = torch.cat(chunks, dim=0)
+    target_t = torch.tensor(targets, dtype=torch.long, device=feats_all.device)
+    logits = F.normalize(feats_all.float(), dim=-1) @ F.normalize(obj_text_feats.to(feats_all.device).float(), dim=-1).t()
+    loss = F.cross_entropy(logits, target_t)
+    pred1 = logits.argmax(dim=-1)
+    k = min(max(1, int(topk)), int(logits.shape[-1]))
+    predk = torch.topk(logits, k=k, dim=-1).indices
+    metrics = {
+        "object_bridge_top1": float((pred1 == target_t).float().mean().item()),
+        "object_bridge_topk": float((predk == target_t.view(-1, 1)).any(dim=-1).float().mean().item()),
+        "object_bridge_examples": float(target_t.numel()),
+    }
+    return loss, metrics
+
+
 def _triplet_allpairs_rank_loss(
     predicate_logits: torch.Tensor,
     targets: torch.Tensor,
@@ -311,6 +379,7 @@ def _triplet_allpairs_rank_loss(
     relationness_weight: float = 0.0,
     class_weights: Optional[torch.Tensor] = None,
     class_weight_power: float = 0.0,
+    positive_mask: Optional[torch.Tensor] = None,
 ) -> torch.Tensor:
     if predicate_logits.numel() == 0 or targets.numel() == 0 or pos_mask.numel() == 0 or img_ids.numel() == 0:
         return predicate_logits.sum() * 0.0
@@ -323,6 +392,9 @@ def _triplet_allpairs_rank_loss(
     pos_mask = pos_mask.bool().view(-1)
     img_ids = img_ids.view(-1)
     valid_pos = pos_mask & (targets >= 0) & (targets < int(scores.shape[-1]))
+    if positive_mask is not None and positive_mask.numel() == scores.shape[-1]:
+        pred_keep = positive_mask.to(device=scores.device, dtype=torch.bool).index_select(0, targets.clamp(min=0, max=int(scores.shape[-1]) - 1))
+        valid_pos = valid_pos & pred_keep
     if not bool(valid_pos.any()):
         return scores.sum() * 0.0
     neg_scores = scores.clone()
@@ -420,6 +492,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--gate_regularizer_weight", type=float, default=TrainConfig.gate_regularizer_weight)
     p.add_argument("--fusion_gate_temperature", type=float, default=getattr(TrainConfig, "fusion_gate_temperature", 0.7))
     p.add_argument("--predicate_classifier_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.predicate_classifier_enabled)
+    p.add_argument("--freeze_predicate_head", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "freeze_predicate_head", False))
     p.add_argument("--predicate_classifier_classes", type=int, default=TrainConfig.predicate_classifier_classes)
     p.add_argument("--eval_sgg_use_predicate_classifier", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_use_predicate_classifier)
     p.add_argument("--eval_sgg_predicate_score_mode", type=str, default=TrainConfig.eval_sgg_predicate_score_mode)
@@ -466,11 +539,14 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--lambda_relationness_rank", type=float, default=getattr(TrainConfig, "lambda_relationness_rank", 0.0))
     p.add_argument("--relationness_rank_margin", type=float, default=getattr(TrainConfig, "relationness_rank_margin", 0.25))
     p.add_argument("--relationness_rank_topk", type=int, default=getattr(TrainConfig, "relationness_rank_topk", 32))
+    p.add_argument("--lambda_object_bridge", type=float, default=getattr(TrainConfig, "lambda_object_bridge", 0.0))
+    p.add_argument("--object_bridge_topk", type=int, default=getattr(TrainConfig, "object_bridge_topk", 5))
     p.add_argument("--lambda_triplet_rank", type=float, default=getattr(TrainConfig, "lambda_triplet_rank", 0.0))
     p.add_argument("--triplet_rank_margin", type=float, default=getattr(TrainConfig, "triplet_rank_margin", 0.20))
     p.add_argument("--triplet_rank_topk", type=int, default=getattr(TrainConfig, "triplet_rank_topk", 64))
     p.add_argument("--triplet_rank_relationness_weight", type=float, default=getattr(TrainConfig, "triplet_rank_relationness_weight", 0.25))
     p.add_argument("--triplet_rank_class_weight_power", type=float, default=getattr(TrainConfig, "triplet_rank_class_weight_power", 0.0))
+    p.add_argument("--triplet_rank_scope", type=str, default=getattr(TrainConfig, "triplet_rank_scope", "all"))
     p.add_argument("--one_stage_facade_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "one_stage_facade_enabled", False))
     p.add_argument("--one_stage_max_pairs", type=int, default=getattr(TrainConfig, "one_stage_max_pairs", 256))
     p.add_argument("--retrieval_index_enabled", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "retrieval_index_enabled", False))
@@ -680,6 +756,7 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "triplet_rank_margin": float(getattr(cfg, "triplet_rank_margin", 0.20)),
             "triplet_rank_topk": int(getattr(cfg, "triplet_rank_topk", 64)),
             "triplet_rank_class_weight_power": float(getattr(cfg, "triplet_rank_class_weight_power", 0.0)),
+            "triplet_rank_scope": str(getattr(cfg, "triplet_rank_scope", "all")),
             "lambda_role_swap_rank": float(getattr(cfg, "lambda_role_swap_rank", 0.0)),
             "tail_logit_adjustment_tau": float(getattr(cfg, "tail_logit_adjustment_tau", 0.0)),
         },
@@ -1039,7 +1116,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         encode_predicate_vocab,
     )
     from .datasets import scan_vg150_predicate_vocab
-    from .datasets.vg150_loader import VG150DataLoader, VG150LoaderConfig
+    from .datasets.vg150_loader import VG150DataLoader, VG150LoaderConfig, _load_vg150_vocab
     from .ddp_utils import ddp_all_gather_tensor, ddp_init, ddp_is_enabled, is_main, seed_all, unwrap_ddp
     from .evals import (
         eval_sgg_standard,
@@ -1122,6 +1199,13 @@ def main(argv: Optional[List[str]] = None) -> None:
     if bool(cfg.freeze_clip):
         for p in clip_model.parameters():
             p.requires_grad_(False)
+    if bool(getattr(cfg, "freeze_predicate_head", False)):
+        mdl_for_freeze = model.module if isinstance(model, DDP) else model
+        for module_name in ("predicate_classifier", "bias_residual_head", "calibration_gate"):
+            module = getattr(mdl_for_freeze, module_name, None)
+            if module is not None and hasattr(module, "parameters"):
+                for p in module.parameters():
+                    p.requires_grad_(False)
     if ddp_is_enabled():
         local_rank = int(os.environ.get("LOCAL_RANK", "0"))
         model = model.to(local_rank) 
@@ -1246,8 +1330,27 @@ def main(argv: Optional[List[str]] = None) -> None:
     )
     pred_to_idx = {p: i for i, p in enumerate(global_pred_pool)}
     pred_metadata = load_predicate_metadata(str(getattr(cfg, "predicate_metadata_path", "")), global_pred_pool)
+    pred_bucket_masks: Dict[str, torch.Tensor] = {}
+    for bucket_name in ("head", "body", "tail"):
+        bucket_values = set(str(p).strip().lower() for p in pred_buckets.get(bucket_name, []))
+        pred_bucket_masks[bucket_name] = torch.tensor(
+            [str(p).strip().lower() in bucket_values for p in global_pred_pool],
+            dtype=torch.bool,
+            device=device,
+        )
+    pred_bucket_masks["body_tail"] = pred_bucket_masks["body"] | pred_bucket_masks["tail"]
+    pred_bucket_masks["all"] = torch.ones((len(global_pred_pool),), dtype=torch.bool, device=device)
     pred_group_matrix = _build_predicate_group_matrix(global_pred_pool, pred_metadata, device)
     pred_ce_weights = _build_predicate_ce_weights(cfg, global_pred_pool, pred_freq, device)
+    label_to_idx, _ = _load_vg150_vocab(str(cfg.vg150_root))
+    object_vocab = [name for name, _ in sorted(label_to_idx.items(), key=lambda kv: int(kv[1]))]
+    object_vocab = [str(x).strip().lower() for x in object_vocab if str(x).strip() != ""]
+    obj_vocab_to_idx = {name: i for i, name in enumerate(object_vocab)}
+    obj_text_feats = (
+        clip_text_features(clip_model, processor, [_object_prompt_for_anchor(name) for name in object_vocab], device).detach()
+        if len(object_vocab) > 0
+        else torch.empty((0, int(cfg.emb_dim)), device=device)
+    )
     pred_freq_tensor = torch.tensor(
         [max(1.0, float(pred_freq.get(str(p), 1))) for p in global_pred_pool],
         dtype=torch.float32,
@@ -1483,6 +1586,12 @@ def main(argv: Optional[List[str]] = None) -> None:
         epoch_l_relationness_rank = 0.0
         epoch_l_triplet_rank = 0.0
         epoch_l_role_swap = 0.0
+        epoch_l_object_bridge = 0.0
+        epoch_pair_metrics = Counter()
+        epoch_pair_metric_batches = 0
+        epoch_object_bridge_top1 = 0.0
+        epoch_object_bridge_topk = 0.0
+        epoch_object_bridge_batches = 0
         epoch_batches = 0
         epoch_positive_pairs = 0
         epoch_candidate_pairs = 0
@@ -1792,6 +1901,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 l_relationness_rank = torch.tensor(0.0, device=device)
                 l_triplet_rank = torch.tensor(0.0, device=device)
                 l_role_swap_rank = torch.tensor(0.0, device=device)
+                l_object_bridge = torch.tensor(0.0, device=device)
                 train_objective = train_objective_name
                 logit_adj_tau = float(getattr(cfg, "logit_adj_tau", 0.0))
                 if float(getattr(cfg, "lambda_predicate_ce", 0.0)) > 0.0:
@@ -1870,14 +1980,19 @@ def main(argv: Optional[List[str]] = None) -> None:
                             role_targets,
                             float(getattr(cfg, "role_swap_rank_margin", 0.20)),
                         )
-                if bool(getattr(cfg, "relationness_enabled", False)) and float(getattr(cfg, "lambda_relationness", 0.0)) > 0.0 and hasattr(out, "relationness_logits"):
+                if bool(getattr(cfg, "relationness_enabled", False)) and hasattr(out, "relationness_logits"):
                     rel_targets = flat_pos_mask.to(device=device, dtype=torch.float32)
                     rel_logits_all = out.relationness_logits(flat_r).float()
                     if rel_logits_all.numel() == rel_targets.numel() and rel_targets.numel() > 0:
-                        pos_count = rel_targets.sum().clamp_min(1.0)
-                        neg_count = (1.0 - rel_targets).sum().clamp_min(1.0)
-                        pos_weight = (neg_count / pos_count).clamp(min=1.0, max=20.0)
-                        l_relationness = F.binary_cross_entropy_with_logits(rel_logits_all, rel_targets, pos_weight=pos_weight)
+                        pair_metrics = _pair_retention_metrics(rel_logits_all.detach(), flat_pos_mask.detach(), flat_img_ids.detach())
+                        for metric_name, metric_value in pair_metrics.items():
+                            epoch_pair_metrics[metric_name] += float(metric_value)
+                        epoch_pair_metric_batches += 1
+                        if float(getattr(cfg, "lambda_relationness", 0.0)) > 0.0:
+                            pos_count = rel_targets.sum().clamp_min(1.0)
+                            neg_count = (1.0 - rel_targets).sum().clamp_min(1.0)
+                            pos_weight = (neg_count / pos_count).clamp(min=1.0, max=20.0)
+                            l_relationness = F.binary_cross_entropy_with_logits(rel_logits_all, rel_targets, pos_weight=pos_weight)
                         if float(getattr(cfg, "lambda_relationness_rank", 0.0)) > 0.0:
                             l_relationness_rank = _relationness_pair_rank_loss(
                                 rel_logits_all,
@@ -1903,8 +2018,9 @@ def main(argv: Optional[List[str]] = None) -> None:
                                 relationness_weight=float(getattr(cfg, "triplet_rank_relationness_weight", 0.25)),
                                 class_weights=pred_ce_weights,
                                 class_weight_power=float(getattr(cfg, "triplet_rank_class_weight_power", 0.0)),
+                                positive_mask=pred_bucket_masks.get(str(getattr(cfg, "triplet_rank_scope", "all")).strip().lower(), pred_bucket_masks["all"]),
                             )
-                if train_objective in {"predicate_warmup", "ce_only", "pred_ce"}:
+                if train_objective in {"predicate_warmup", "ce_only", "pred_ce", "pair_object_bridge", "pair_bridge", "object_bridge"}:
                     spoa_term = l_spoa_alignment * 0.0
                     ground_term = l_dense_grounding * 0.0
                 elif train_objective in {"no_spoa", "ground_ce"}:
@@ -1913,12 +2029,26 @@ def main(argv: Optional[List[str]] = None) -> None:
                 else:
                     spoa_term = float(cfg.lambda_spoa_alignment) * l_spoa_alignment
                     ground_term = float(cfg.lambda_dense_grounding) * l_dense_grounding
-                pred_ce_term = float(getattr(cfg, "lambda_predicate_ce", 0.0)) * l_predicate_ce
+                pred_ce_weight = 0.0 if train_objective in {"pair_object_bridge", "pair_bridge", "object_bridge"} else float(getattr(cfg, "lambda_predicate_ce", 0.0))
+                pred_ce_term = pred_ce_weight * l_predicate_ce
                 cal_kl_term = float(getattr(cfg, "lambda_calibration_kl", 0.0)) * l_calibration_kl
                 cal_rank_term = float(getattr(cfg, "lambda_calibration_rank", 0.0)) * l_calibration_rank
                 text_ce_term = float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) * l_text_predicate_ce
                 relationness_term = float(getattr(cfg, "lambda_relationness", 0.0)) * l_relationness
+                if float(getattr(cfg, "lambda_object_bridge", 0.0)) > 0.0:
+                    l_object_bridge, object_bridge_metrics = _object_bridge_loss_and_metrics(
+                        regs,
+                        batch,
+                        obj_vocab_to_idx,
+                        obj_text_feats.detach(),
+                        int(getattr(cfg, "object_bridge_topk", 5)),
+                    )
+                    if float(object_bridge_metrics.get("object_bridge_examples", 0.0)) > 0.0:
+                        epoch_object_bridge_top1 += float(object_bridge_metrics.get("object_bridge_top1", 0.0))
+                        epoch_object_bridge_topk += float(object_bridge_metrics.get("object_bridge_topk", 0.0))
+                        epoch_object_bridge_batches += 1
                 relationness_rank_term = float(getattr(cfg, "lambda_relationness_rank", 0.0)) * l_relationness_rank
+                object_bridge_term = float(getattr(cfg, "lambda_object_bridge", 0.0)) * l_object_bridge
                 triplet_rank_term = float(getattr(cfg, "lambda_triplet_rank", 0.0)) * l_triplet_rank
                 role_swap_term = float(getattr(cfg, "lambda_role_swap_rank", 0.0)) * l_role_swap_rank
                 gate_reg = None
@@ -1927,7 +2057,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 if hasattr(decoder, "last_gate_reg") and decoder.last_gate_reg is not None:
                     gate_reg = decoder.last_gate_reg
                     gate_val = decoder.last_gate_val
-                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + relationness_rank_term + triplet_rank_term + role_swap_term
+                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + relationness_rank_term + object_bridge_term + triplet_rank_term + role_swap_term
                 calib_reg_weight = float(getattr(cfg, "lambda_calibration_reg", 0.0))
                 if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and calib_reg_weight > 0.0 and hasattr(out, "calibration_regularizer"):
                     calib_reg = out.calibration_regularizer()
@@ -1976,6 +2106,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             epoch_l_relationness_rank += float(l_relationness_rank.item())
             epoch_l_triplet_rank += float(l_triplet_rank.item())
             epoch_l_role_swap += float(l_role_swap_rank.item())
+            epoch_l_object_bridge += float(l_object_bridge.item())
             epoch_batches += 1
             epoch_positive_pairs += int(pos_idx.numel())
             epoch_candidate_pairs += int(flat_r.shape[0])
@@ -2016,7 +2147,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                     f"pred_ce={float(l_predicate_ce.item()):.3f} "
                     f"cal_kl={float(l_calibration_kl.item()):.3f} cal_rank={float(l_calibration_rank.item()):.3f} "
                     f"text_ce={float(l_text_predicate_ce.item()):.3f} relness={float(l_relationness.item()):.3f} "
-                    f"rel_rank={float(l_relationness_rank.item()):.3f} tri_rank={float(l_triplet_rank.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
+                    f"rel_rank={float(l_relationness_rank.item()):.3f} obj_bridge={float(l_object_bridge.item()):.3f} tri_rank={float(l_triplet_rank.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
                     f"[ratio={loss_ratio:.2f}, gate={float(gate_val):.2f}] | lr={float(optim.param_groups[0]['lr']):.2e}"
                     f"{timing_msg}",
                     flush=True,
@@ -2053,6 +2184,14 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "avg_relationness_rank": float(epoch_l_relationness_rank / max(1, epoch_batches)),
                 "avg_triplet_rank": float(epoch_l_triplet_rank / max(1, epoch_batches)),
                 "avg_role_swap_rank": float(epoch_l_role_swap / max(1, epoch_batches)),
+                "avg_object_bridge": float(epoch_l_object_bridge / max(1, epoch_batches)),
+                "object_bridge_top1": float(epoch_object_bridge_top1 / max(1, epoch_object_bridge_batches)),
+                "object_bridge_topk": float(epoch_object_bridge_topk / max(1, epoch_object_bridge_batches)),
+                "object_bridge_topk_k": int(getattr(cfg, "object_bridge_topk", 5)),
+                "pair_recall@64": float(epoch_pair_metrics.get("pair_recall@64", 0.0) / max(1, epoch_pair_metric_batches)),
+                "pair_recall@128": float(epoch_pair_metrics.get("pair_recall@128", 0.0) / max(1, epoch_pair_metric_batches)),
+                "pair_recall@256": float(epoch_pair_metrics.get("pair_recall@256", 0.0) / max(1, epoch_pair_metric_batches)),
+                "pair_pruned_rate@128": float(epoch_pair_metrics.get("pair_pruned_rate@128", 0.0) / max(1, epoch_pair_metric_batches)),
                 "lambda_role_swap_rank": float(getattr(cfg, "lambda_role_swap_rank", 0.0)),
                 "role_swap_rank_margin": float(getattr(cfg, "role_swap_rank_margin", 0.20)),
                 "predicate_group_relaxation_enabled": bool(getattr(cfg, "predicate_group_relaxation_enabled", False)),
@@ -2064,6 +2203,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "lambda_counterfactual_in_spoa": float(getattr(cfg, "lambda_counterfactual", 1.0)),
                 "predicate_ce_loss": str(getattr(cfg, "predicate_ce_loss", "ce")),
                 "predicate_ce_positive_only": bool(getattr(cfg, "predicate_ce_positive_only", True)),
+                "freeze_predicate_head": bool(getattr(cfg, "freeze_predicate_head", False)),
                 "predicate_label_relaxation_enabled": bool(getattr(cfg, "predicate_label_relaxation_enabled", False)),
                 "predicate_label_relaxation_epsilon": float(getattr(cfg, "predicate_label_relaxation_epsilon", 0.0)),
                 "predicate_label_relaxation_threshold": float(getattr(cfg, "predicate_label_relaxation_threshold", 0.0)),
@@ -2073,6 +2213,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "relationness_enabled": bool(getattr(cfg, "relationness_enabled", False)),
                 "lambda_relationness": float(getattr(cfg, "lambda_relationness", 0.0)),
                 "lambda_relationness_rank": float(getattr(cfg, "lambda_relationness_rank", 0.0)),
+                "lambda_object_bridge": float(getattr(cfg, "lambda_object_bridge", 0.0)),
                 "relationness_rank_margin": float(getattr(cfg, "relationness_rank_margin", 0.25)),
                 "relationness_rank_topk": int(getattr(cfg, "relationness_rank_topk", 32)),
                 "predicate_sampler_enabled": bool(getattr(cfg, "predicate_sampler_enabled", False)),
