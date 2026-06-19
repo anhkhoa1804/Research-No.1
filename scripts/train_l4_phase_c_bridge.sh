@@ -14,6 +14,8 @@ set -euo pipefail
 : "${LAMBDA_PAIR_PROPOSAL:=1.0}"
 : "${LAMBDA_PAIR_PROPOSAL_RANK:=0.5}"
 : "${LAMBDA_OBJECT_BRIDGE:=0.5}"
+: "${OBJECT_BRIDGE_VOCAB_MAX_SIZE:=512}"
+: "${OBJECT_BRIDGE_VOCAB_SCAN_ROWS:=20000}"
 : "${FREEZE_PREDICATE_HEAD:=true}"
 : "${PYTHON_BIN:=python3}"
 : "${DATA_ROOT:=datasets}"
@@ -43,6 +45,8 @@ set -euo pipefail
   --relationness_rank_topk 64 \
   --lambda_object_bridge "${LAMBDA_OBJECT_BRIDGE}" \
   --object_bridge_topk 5 \
+  --object_bridge_vocab_max_size "${OBJECT_BRIDGE_VOCAB_MAX_SIZE}" \
+  --object_bridge_vocab_scan_rows "${OBJECT_BRIDGE_VOCAB_SCAN_ROWS}" \
   --lambda_predicate_ce 0.0 \
   --lambda_spoa_alignment 0.0 \
   --lambda_dense_grounding 0.0 \

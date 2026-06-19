@@ -366,15 +366,16 @@ def _object_names_from_any_records(records: Any, max_objects: int) -> List[str]:
     return names
 
 
-def _scan_object_vocab_from_dataset(dataset: Any, max_rows: int, max_objects: int) -> List[str]:
+def _scan_object_vocab_from_dataset(dataset: Any, max_rows: int, max_objects: int, max_vocab: int = 512) -> List[str]:
     base = getattr(dataset, "dataset", dataset)
     try:
         n = len(base)
     except Exception:
         return []
     limit = min(max(0, int(max_rows)), int(n)) if int(max_rows) > 0 else int(n)
-    seen = set()
-    vocab: List[str] = []
+    counts: Counter = Counter()
+    first_seen: Dict[str, int] = {}
+    order = 0
     for idx in range(limit):
         try:
             row = base[int(idx)]
@@ -385,11 +386,16 @@ def _scan_object_vocab_from_dataset(dataset: Any, max_rows: int, max_objects: in
             max_objects,
         )
         for label in labels:
-            if label in seen:
-                continue
-            seen.add(label)
-            vocab.append(label)
-    return vocab
+            if label not in first_seen:
+                first_seen[label] = order
+                order += 1
+            counts[label] += 1
+    if len(counts) == 0:
+        return []
+    items = sorted(counts.items(), key=lambda kv: (-int(kv[1]), int(first_seen.get(kv[0], 0)), kv[0]))
+    if int(max_vocab) > 0:
+        items = items[: int(max_vocab)]
+    return [label for label, _count in items]
 
 def _object_bridge_loss_and_metrics(
     obj_feats: List[torch.Tensor],
@@ -601,6 +607,8 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--relationness_rank_topk", type=int, default=getattr(TrainConfig, "relationness_rank_topk", 32))
     p.add_argument("--lambda_object_bridge", type=float, default=getattr(TrainConfig, "lambda_object_bridge", 0.0))
     p.add_argument("--object_bridge_topk", type=int, default=getattr(TrainConfig, "object_bridge_topk", 5))
+    p.add_argument("--object_bridge_vocab_max_size", type=int, default=getattr(TrainConfig, "object_bridge_vocab_max_size", 512))
+    p.add_argument("--object_bridge_vocab_scan_rows", type=int, default=getattr(TrainConfig, "object_bridge_vocab_scan_rows", 20000))
     p.add_argument("--lambda_triplet_rank", type=float, default=getattr(TrainConfig, "lambda_triplet_rank", 0.0))
     p.add_argument("--triplet_rank_margin", type=float, default=getattr(TrainConfig, "triplet_rank_margin", 0.20))
     p.add_argument("--triplet_rank_topk", type=int, default=getattr(TrainConfig, "triplet_rank_topk", 64))
@@ -1406,13 +1414,20 @@ def main(argv: Optional[List[str]] = None) -> None:
     object_vocab = [name for name, _ in sorted(label_to_idx.items(), key=lambda kv: int(kv[1]))]
     object_vocab = [str(x).strip().lower() for x in object_vocab if str(x).strip() != ""]
     if len(object_vocab) == 0:
+        object_vocab_scan_rows = int(getattr(cfg, "object_bridge_vocab_scan_rows", 20000))
+        object_vocab_max_size = int(getattr(cfg, "object_bridge_vocab_max_size", 512))
         object_vocab = _scan_object_vocab_from_dataset(
             getattr(getattr(joint_loader, "loader", None), "dataset", None),
-            max_rows=max(1000, min(20000, int(getattr(cfg, "samples_per_epoch", 0) or 0) or 5000)),
+            max_rows=max(1000, min(object_vocab_scan_rows, int(getattr(cfg, "samples_per_epoch", 0) or 0) or 5000)),
             max_objects=int(getattr(cfg, "max_objects", 32)),
+            max_vocab=object_vocab_max_size,
         )
         if is_main():
-            print(f"[ObjectBridge] Built fallback object vocab from train dataset: size={len(object_vocab)}", flush=True)
+            print(
+                f"[ObjectBridge] Built fallback object vocab from train dataset: size={len(object_vocab)} "
+                f"scan_rows={object_vocab_scan_rows} max_size={object_vocab_max_size}",
+                flush=True,
+            )
     obj_vocab_to_idx = {name: i for i, name in enumerate(object_vocab)}
     obj_text_feats = (
         clip_text_features(clip_model, processor, [_object_prompt_for_anchor(name) for name in object_vocab], device).detach()
@@ -2270,6 +2285,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "object_bridge_topk": float(epoch_object_bridge_topk / max(1, epoch_object_bridge_batches)),
                 "object_bridge_examples": int(epoch_object_bridge_examples),
                 "object_vocab_size": int(len(obj_vocab_to_idx)),
+                "object_bridge_vocab_max_size": int(getattr(cfg, "object_bridge_vocab_max_size", 512)),
+                "object_bridge_vocab_scan_rows": int(getattr(cfg, "object_bridge_vocab_scan_rows", 20000)),
                 "object_bridge_topk_k": int(getattr(cfg, "object_bridge_topk", 5)),
                 "pair_recall@64": float(epoch_pair_metrics.get("pair_recall@64", 0.0) / max(1, epoch_pair_metric_batches)),
                 "pair_recall@128": float(epoch_pair_metrics.get("pair_recall@128", 0.0) / max(1, epoch_pair_metric_batches)),

@@ -123,6 +123,8 @@ class TrainConfig:
     relationness_rank_topk: int = 32
     lambda_object_bridge: float = 0.0
     object_bridge_topk: int = 5
+    object_bridge_vocab_max_size: int = 512
+    object_bridge_vocab_scan_rows: int = 20000
     lambda_triplet_rank: float = 0.0
     triplet_rank_margin: float = 0.20
     triplet_rank_topk: int = 64
