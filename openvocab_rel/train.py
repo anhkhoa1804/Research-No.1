@@ -345,6 +345,52 @@ def _batch_object_vocab_from_labels(batch: List[Dict[str, Any]]) -> List[str]:
             labels.append(label)
     return labels
 
+
+def _object_names_from_any_records(records: Any, max_objects: int) -> List[str]:
+    names: List[str] = []
+    if not isinstance(records, list):
+        return names
+    for obj in records[: max(0, int(max_objects))]:
+        label = ""
+        if isinstance(obj, dict):
+            raw_names = obj.get("names", obj.get("name", obj.get("label", obj.get("labels", ""))))
+            if isinstance(raw_names, list) and len(raw_names) > 0:
+                label = str(raw_names[0])
+            else:
+                label = str(raw_names)
+        else:
+            label = str(obj)
+        label = label.strip().lower()
+        if label != "":
+            names.append(label)
+    return names
+
+
+def _scan_object_vocab_from_dataset(dataset: Any, max_rows: int, max_objects: int) -> List[str]:
+    base = getattr(dataset, "dataset", dataset)
+    try:
+        n = len(base)
+    except Exception:
+        return []
+    limit = min(max(0, int(max_rows)), int(n)) if int(max_rows) > 0 else int(n)
+    seen = set()
+    vocab: List[str] = []
+    for idx in range(limit):
+        try:
+            row = base[int(idx)]
+        except Exception:
+            continue
+        labels = _object_names_from_any_records(
+            row.get("objects", row.get("obj_labels", [])) if isinstance(row, dict) else [],
+            max_objects,
+        )
+        for label in labels:
+            if label in seen:
+                continue
+            seen.add(label)
+            vocab.append(label)
+    return vocab
+
 def _object_bridge_loss_and_metrics(
     obj_feats: List[torch.Tensor],
     batch: List[Dict[str, Any]],
@@ -1359,6 +1405,14 @@ def main(argv: Optional[List[str]] = None) -> None:
     label_to_idx, _ = _load_vg150_vocab(str(cfg.vg150_root))
     object_vocab = [name for name, _ in sorted(label_to_idx.items(), key=lambda kv: int(kv[1]))]
     object_vocab = [str(x).strip().lower() for x in object_vocab if str(x).strip() != ""]
+    if len(object_vocab) == 0:
+        object_vocab = _scan_object_vocab_from_dataset(
+            getattr(getattr(joint_loader, "loader", None), "dataset", None),
+            max_rows=max(1000, min(20000, int(getattr(cfg, "samples_per_epoch", 0) or 0) or 5000)),
+            max_objects=int(getattr(cfg, "max_objects", 32)),
+        )
+        if is_main():
+            print(f"[ObjectBridge] Built fallback object vocab from train dataset: size={len(object_vocab)}", flush=True)
     obj_vocab_to_idx = {name: i for i, name in enumerate(object_vocab)}
     obj_text_feats = (
         clip_text_features(clip_model, processor, [_object_prompt_for_anchor(name) for name in object_vocab], device).detach()
