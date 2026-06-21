@@ -122,6 +122,9 @@ class TrainConfig:
     lambda_pair_topk_surrogate: float = 0.0
     pair_topk_surrogate_k: int = 96
     pair_topk_surrogate_margin: float = 0.10
+    relationness_hidden_mult: float = 0.25
+    relationness_num_layers: int = 1
+    relationness_dropout: float = 0.0
     freeze_non_relationness: bool = False
     unfreeze_pair_decoder: bool = False
     relationness_rank_margin: float = 0.25

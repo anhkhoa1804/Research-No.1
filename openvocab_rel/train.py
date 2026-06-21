@@ -591,6 +591,9 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--freeze_predicate_head", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "freeze_predicate_head", False))
     p.add_argument("--freeze_non_relationness", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "freeze_non_relationness", False))
     p.add_argument("--unfreeze_pair_decoder", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "unfreeze_pair_decoder", False))
+    p.add_argument("--relationness_hidden_mult", type=float, default=getattr(TrainConfig, "relationness_hidden_mult", 0.25))
+    p.add_argument("--relationness_num_layers", type=int, default=getattr(TrainConfig, "relationness_num_layers", 1))
+    p.add_argument("--relationness_dropout", type=float, default=getattr(TrainConfig, "relationness_dropout", 0.0))
     p.add_argument("--predicate_classifier_classes", type=int, default=TrainConfig.predicate_classifier_classes)
     p.add_argument("--eval_sgg_use_predicate_classifier", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_use_predicate_classifier)
     p.add_argument("--eval_sgg_predicate_score_mode", type=str, default=TrainConfig.eval_sgg_predicate_score_mode)
@@ -857,6 +860,9 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "lambda_pair_topk_surrogate": float(getattr(cfg, "lambda_pair_topk_surrogate", 0.0)),
             "pair_topk_surrogate_k": int(getattr(cfg, "pair_topk_surrogate_k", 96)),
             "pair_topk_surrogate_margin": float(getattr(cfg, "pair_topk_surrogate_margin", 0.10)),
+            "relationness_hidden_mult": float(getattr(cfg, "relationness_hidden_mult", 0.25)),
+            "relationness_num_layers": int(getattr(cfg, "relationness_num_layers", 1)),
+            "relationness_dropout": float(getattr(cfg, "relationness_dropout", 0.0)),
             "freeze_non_relationness": bool(getattr(cfg, "freeze_non_relationness", False)),
             "unfreeze_pair_decoder": bool(getattr(cfg, "unfreeze_pair_decoder", False)),
             "relationness_rank_margin": float(getattr(cfg, "relationness_rank_margin", 0.25)),

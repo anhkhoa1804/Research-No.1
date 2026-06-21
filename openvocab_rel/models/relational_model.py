@@ -612,12 +612,24 @@ class RelationalModel(nn.Module):
             nn.GELU(),
             nn.Linear(self.dim, self.dim),
         )
-        self.relationness_head = nn.Sequential(
-            nn.LayerNorm(self.dim),
-            nn.Linear(self.dim, max(32, self.dim // 4)),
-            nn.GELU(),
-            nn.Linear(max(32, self.dim // 4), 1),
+        relationness_hidden_dim = max(
+            32,
+            int(round(self.dim * float(getattr(cfg, "relationness_hidden_mult", 0.25)))),
         )
+        relationness_num_layers = max(1, int(getattr(cfg, "relationness_num_layers", 1)))
+        relationness_dropout = max(0.0, float(getattr(cfg, "relationness_dropout", 0.0)))
+        relationness_layers = [nn.LayerNorm(self.dim)]
+        input_dim = self.dim
+        for _ in range(relationness_num_layers):
+            relationness_layers.extend([
+                nn.Linear(input_dim, relationness_hidden_dim),
+                nn.GELU(),
+            ])
+            if relationness_dropout > 0.0:
+                relationness_layers.append(nn.Dropout(relationness_dropout))
+            input_dim = relationness_hidden_dim
+        relationness_layers.append(nn.Linear(input_dim, 1))
+        self.relationness_head = nn.Sequential(*relationness_layers)
         self.calibration_gate = nn.Sequential(
             nn.LayerNorm(self.dim),
             nn.Linear(self.dim, max(32, self.dim // 4)),

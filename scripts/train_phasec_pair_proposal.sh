@@ -62,6 +62,9 @@ LAMBDA_CALIBRATION_RANK=0.0 \
 LAMBDA_CALIBRATION_REG=0.0 \
 LAMBDA_RELATIONNESS="${LAMBDA_RELATIONNESS:-1.0}" \
 LAMBDA_RELATIONNESS_RANK="${LAMBDA_RELATIONNESS_RANK:-0.5}" \
+RELATIONNESS_HIDDEN_MULT="${RELATIONNESS_HIDDEN_MULT:-0.25}" \
+RELATIONNESS_NUM_LAYERS="${RELATIONNESS_NUM_LAYERS:-1}" \
+RELATIONNESS_DROPOUT="${RELATIONNESS_DROPOUT:-0.0}" \
 LAMBDA_PAIR_TOPK_SURROGATE="${LAMBDA_PAIR_TOPK_SURROGATE:-1.0}" \
 PAIR_TOPK_SURROGATE_K="${PAIR_TOPK_SURROGATE_K:-96}" \
 PAIR_TOPK_SURROGATE_MARGIN="${PAIR_TOPK_SURROGATE_MARGIN:-0.10}" \
@@ -71,7 +74,10 @@ LAMBDA_ROLE_SWAP_RANK=0.0 \
 bash scripts/train_l4_phase34.sh \
   --freeze_predicate_head true \
   --freeze_non_relationness true \
-  --unfreeze_pair_decoder "${UNFREEZE_PAIR_DECODER:-true}" \
+  --unfreeze_pair_decoder "${UNFREEZE_PAIR_DECODER:-false}" \
+  --relationness_hidden_mult "${RELATIONNESS_HIDDEN_MULT:-0.25}" \
+  --relationness_num_layers "${RELATIONNESS_NUM_LAYERS:-1}" \
+  --relationness_dropout "${RELATIONNESS_DROPOUT:-0.0}" \
   --lambda_pair_topk_surrogate "${LAMBDA_PAIR_TOPK_SURROGATE:-1.0}" \
   --pair_topk_surrogate_k "${PAIR_TOPK_SURROGATE_K:-96}" \
   --pair_topk_surrogate_margin "${PAIR_TOPK_SURROGATE_MARGIN:-0.10}"
