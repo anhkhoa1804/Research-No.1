@@ -330,6 +330,53 @@ def _pair_topk_surrogate_loss(
     return torch.stack(losses).mean()
 
 
+
+
+def _pair_balanced_topk_loss(
+    logits: torch.Tensor,
+    pos_mask: torch.Tensor,
+    img_ids: torch.Tensor,
+    topk: int,
+    margin: float,
+    neg_ratio: float,
+) -> torch.Tensor:
+    if logits.numel() == 0 or pos_mask.numel() == 0 or img_ids.numel() == 0:
+        return logits.sum() * 0.0
+    losses: List[torch.Tensor] = []
+    pos_mask = pos_mask.bool().view(-1)
+    img_ids = img_ids.view(-1)
+    scores = logits.float().view(-1)
+    for img_id in torch.unique(img_ids.detach()):
+        local = torch.nonzero(img_ids == img_id, as_tuple=False).squeeze(1)
+        if int(local.numel()) == 0:
+            continue
+        local_pos = pos_mask.index_select(0, local)
+        local_neg = ~local_pos
+        if not bool(local_pos.any()) or not bool(local_neg.any()):
+            continue
+        local_scores = scores.index_select(0, local)
+        pos_scores = local_scores[local_pos]
+        neg_scores = local_scores[local_neg]
+        hard_neg_count = min(
+            int(neg_scores.numel()),
+            max(1, int(round(float(neg_ratio) * float(pos_scores.numel())))),
+        )
+        hard_neg_scores = torch.topk(neg_scores, k=hard_neg_count, largest=True).values
+        bce_logits = torch.cat([pos_scores, hard_neg_scores], dim=0)
+        bce_targets = torch.cat([torch.ones_like(pos_scores), torch.zeros_like(hard_neg_scores)], dim=0)
+        balanced_bce = F.binary_cross_entropy_with_logits(bce_logits, bce_targets)
+        cutoff_k = min(max(1, int(topk)), int(local_scores.numel()))
+        kth_score = torch.topk(local_scores.detach(), k=cutoff_k, largest=True).values[-1]
+        topk_violation = F.relu(kth_score + float(margin) - pos_scores).mean()
+        hardest_neg = hard_neg_scores.max()
+        min_pos = pos_scores.min()
+        image_margin = F.relu(hardest_neg + float(margin) - min_pos)
+        losses.append(balanced_bce + topk_violation + image_margin)
+    if len(losses) == 0:
+        return logits.sum() * 0.0
+    return torch.stack(losses).mean()
+
+
 def _pair_retention_metrics(logits: torch.Tensor, pos_mask: torch.Tensor, img_ids: torch.Tensor, ks: Tuple[int, ...] = (64, 128, 256)) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
     if logits.numel() == 0 or pos_mask.numel() == 0 or img_ids.numel() == 0:
@@ -641,6 +688,10 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--lambda_pair_topk_surrogate", type=float, default=getattr(TrainConfig, "lambda_pair_topk_surrogate", 0.0))
     p.add_argument("--pair_topk_surrogate_k", type=int, default=getattr(TrainConfig, "pair_topk_surrogate_k", 96))
     p.add_argument("--pair_topk_surrogate_margin", type=float, default=getattr(TrainConfig, "pair_topk_surrogate_margin", 0.10))
+    p.add_argument("--lambda_pair_balanced_topk", type=float, default=getattr(TrainConfig, "lambda_pair_balanced_topk", 0.0))
+    p.add_argument("--pair_balanced_topk_k", type=int, default=getattr(TrainConfig, "pair_balanced_topk_k", 96))
+    p.add_argument("--pair_balanced_topk_margin", type=float, default=getattr(TrainConfig, "pair_balanced_topk_margin", 0.30))
+    p.add_argument("--pair_balanced_neg_ratio", type=float, default=getattr(TrainConfig, "pair_balanced_neg_ratio", 4.0))
     p.add_argument("--relationness_rank_margin", type=float, default=getattr(TrainConfig, "relationness_rank_margin", 0.25))
     p.add_argument("--relationness_rank_topk", type=int, default=getattr(TrainConfig, "relationness_rank_topk", 32))
     p.add_argument("--lambda_object_bridge", type=float, default=getattr(TrainConfig, "lambda_object_bridge", 0.0))
@@ -835,6 +886,7 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "text_predicate_ce": bool(float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) > 0.0),
             "relationness": bool(getattr(cfg, "relationness_enabled", False) and float(getattr(cfg, "lambda_relationness", 0.0)) > 0.0),
             "pair_topk_surrogate": bool(float(getattr(cfg, "lambda_pair_topk_surrogate", 0.0)) > 0.0),
+            "pair_balanced_topk": bool(float(getattr(cfg, "lambda_pair_balanced_topk", 0.0)) > 0.0),
         },
         "ablation_only": {
             "visual_hard_negative": bool(uses_visual_hard),
@@ -860,6 +912,10 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "lambda_pair_topk_surrogate": float(getattr(cfg, "lambda_pair_topk_surrogate", 0.0)),
             "pair_topk_surrogate_k": int(getattr(cfg, "pair_topk_surrogate_k", 96)),
             "pair_topk_surrogate_margin": float(getattr(cfg, "pair_topk_surrogate_margin", 0.10)),
+            "lambda_pair_balanced_topk": float(getattr(cfg, "lambda_pair_balanced_topk", 0.0)),
+            "pair_balanced_topk_k": int(getattr(cfg, "pair_balanced_topk_k", 96)),
+            "pair_balanced_topk_margin": float(getattr(cfg, "pair_balanced_topk_margin", 0.30)),
+            "pair_balanced_neg_ratio": float(getattr(cfg, "pair_balanced_neg_ratio", 4.0)),
             "relationness_hidden_mult": float(getattr(cfg, "relationness_hidden_mult", 0.25)),
             "relationness_num_layers": int(getattr(cfg, "relationness_num_layers", 1)),
             "relationness_dropout": float(getattr(cfg, "relationness_dropout", 0.0)),
@@ -1729,6 +1785,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         epoch_l_relationness = 0.0
         epoch_l_relationness_rank = 0.0
         epoch_l_pair_topk = 0.0
+        epoch_l_pair_balanced_topk = 0.0
         epoch_l_triplet_rank = 0.0
         epoch_l_role_swap = 0.0
         epoch_l_object_bridge = 0.0
@@ -2046,6 +2103,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 l_relationness = torch.tensor(0.0, device=device)
                 l_relationness_rank = torch.tensor(0.0, device=device)
                 l_pair_topk = torch.tensor(0.0, device=device)
+                l_pair_balanced_topk = torch.tensor(0.0, device=device)
                 l_triplet_rank = torch.tensor(0.0, device=device)
                 l_role_swap_rank = torch.tensor(0.0, device=device)
                 l_object_bridge = torch.tensor(0.0, device=device)
@@ -2156,6 +2214,15 @@ def main(argv: Optional[List[str]] = None) -> None:
                                 int(getattr(cfg, "pair_topk_surrogate_k", 96)),
                                 float(getattr(cfg, "pair_topk_surrogate_margin", 0.10)),
                             )
+                        if float(getattr(cfg, "lambda_pair_balanced_topk", 0.0)) > 0.0:
+                            l_pair_balanced_topk = _pair_balanced_topk_loss(
+                                rel_logits_all,
+                                flat_pos_mask,
+                                flat_img_ids,
+                                int(getattr(cfg, "pair_balanced_topk_k", 96)),
+                                float(getattr(cfg, "pair_balanced_topk_margin", 0.30)),
+                                float(getattr(cfg, "pair_balanced_neg_ratio", 4.0)),
+                            )
                 if float(getattr(cfg, "lambda_triplet_rank", 0.0)) > 0.0 and hasattr(out, "predicate_logits"):
                     triplet_valid = (flat_pred_ids >= 0) & (flat_pred_ids < int(pred_emb_s2o.shape[0]))
                     if bool(triplet_valid.any()):
@@ -2216,6 +2283,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                         epoch_object_bridge_batches += 1
                 relationness_rank_term = float(getattr(cfg, "lambda_relationness_rank", 0.0)) * l_relationness_rank
                 pair_topk_term = float(getattr(cfg, "lambda_pair_topk_surrogate", 0.0)) * l_pair_topk
+                pair_balanced_topk_term = float(getattr(cfg, "lambda_pair_balanced_topk", 0.0)) * l_pair_balanced_topk
                 object_bridge_term = float(getattr(cfg, "lambda_object_bridge", 0.0)) * l_object_bridge
                 triplet_rank_term = float(getattr(cfg, "lambda_triplet_rank", 0.0)) * l_triplet_rank
                 role_swap_term = float(getattr(cfg, "lambda_role_swap_rank", 0.0)) * l_role_swap_rank
@@ -2225,7 +2293,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 if hasattr(decoder, "last_gate_reg") and decoder.last_gate_reg is not None:
                     gate_reg = decoder.last_gate_reg
                     gate_val = decoder.last_gate_val
-                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + relationness_rank_term + pair_topk_term + object_bridge_term + triplet_rank_term + role_swap_term
+                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + relationness_rank_term + pair_topk_term + pair_balanced_topk_term + object_bridge_term + triplet_rank_term + role_swap_term
                 calib_reg_weight = float(getattr(cfg, "lambda_calibration_reg", 0.0))
                 if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and calib_reg_weight > 0.0 and hasattr(out, "calibration_regularizer"):
                     calib_reg = out.calibration_regularizer()
@@ -2273,6 +2341,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             epoch_l_relationness += float(l_relationness.item())
             epoch_l_relationness_rank += float(l_relationness_rank.item())
             epoch_l_pair_topk += float(l_pair_topk.item())
+            epoch_l_pair_balanced_topk += float(l_pair_balanced_topk.item())
             epoch_l_triplet_rank += float(l_triplet_rank.item())
             epoch_l_role_swap += float(l_role_swap_rank.item())
             epoch_l_object_bridge += float(l_object_bridge.item())
@@ -2316,7 +2385,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                     f"pred_ce={float(l_predicate_ce.item()):.3f} "
                     f"cal_kl={float(l_calibration_kl.item()):.3f} cal_rank={float(l_calibration_rank.item()):.3f} "
                     f"text_ce={float(l_text_predicate_ce.item()):.3f} relness={float(l_relationness.item()):.3f} "
-                    f"rel_rank={float(l_relationness_rank.item()):.3f} pair_topk={float(l_pair_topk.item()):.3f} obj_bridge={float(l_object_bridge.item()):.3f} tri_rank={float(l_triplet_rank.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
+                    f"rel_rank={float(l_relationness_rank.item()):.3f} pair_topk={float(l_pair_topk.item()):.3f} pair_bal={float(l_pair_balanced_topk.item()):.3f} obj_bridge={float(l_object_bridge.item()):.3f} tri_rank={float(l_triplet_rank.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
                     f"[ratio={loss_ratio:.2f}, gate={float(gate_val):.2f}] | lr={float(optim.param_groups[0]['lr']):.2e}"
                     f"{timing_msg}",
                     flush=True,
@@ -2352,6 +2421,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "avg_relationness": float(epoch_l_relationness / max(1, epoch_batches)),
                 "avg_relationness_rank": float(epoch_l_relationness_rank / max(1, epoch_batches)),
                 "avg_pair_topk_surrogate": float(epoch_l_pair_topk / max(1, epoch_batches)),
+                "avg_pair_balanced_topk": float(epoch_l_pair_balanced_topk / max(1, epoch_batches)),
                 "avg_triplet_rank": float(epoch_l_triplet_rank / max(1, epoch_batches)),
                 "avg_role_swap_rank": float(epoch_l_role_swap / max(1, epoch_batches)),
                 "avg_object_bridge": float(epoch_l_object_bridge / max(1, epoch_batches)),
@@ -2387,6 +2457,10 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "relationness_enabled": bool(getattr(cfg, "relationness_enabled", False)),
                 "lambda_relationness": float(getattr(cfg, "lambda_relationness", 0.0)),
                 "lambda_relationness_rank": float(getattr(cfg, "lambda_relationness_rank", 0.0)),
+                "lambda_pair_balanced_topk": float(getattr(cfg, "lambda_pair_balanced_topk", 0.0)),
+                "pair_balanced_topk_k": int(getattr(cfg, "pair_balanced_topk_k", 96)),
+                "pair_balanced_topk_margin": float(getattr(cfg, "pair_balanced_topk_margin", 0.30)),
+                "pair_balanced_neg_ratio": float(getattr(cfg, "pair_balanced_neg_ratio", 4.0)),
                 "lambda_object_bridge": float(getattr(cfg, "lambda_object_bridge", 0.0)),
                 "relationness_rank_margin": float(getattr(cfg, "relationness_rank_margin", 0.25)),
                 "relationness_rank_topk": int(getattr(cfg, "relationness_rank_topk", 32)),
