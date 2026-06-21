@@ -71,6 +71,7 @@ LAMBDA_ROLE_SWAP_RANK=0.0 \
 bash scripts/train_l4_phase34.sh \
   --freeze_predicate_head true \
   --freeze_non_relationness true \
+  --unfreeze_pair_decoder "${UNFREEZE_PAIR_DECODER:-true}" \
   --lambda_pair_topk_surrogate "${LAMBDA_PAIR_TOPK_SURROGATE:-1.0}" \
   --pair_topk_surrogate_k "${PAIR_TOPK_SURROGATE_K:-96}" \
   --pair_topk_surrogate_margin "${PAIR_TOPK_SURROGATE_MARGIN:-0.10}"

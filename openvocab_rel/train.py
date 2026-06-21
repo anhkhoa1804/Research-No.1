@@ -590,6 +590,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--predicate_classifier_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.predicate_classifier_enabled)
     p.add_argument("--freeze_predicate_head", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "freeze_predicate_head", False))
     p.add_argument("--freeze_non_relationness", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "freeze_non_relationness", False))
+    p.add_argument("--unfreeze_pair_decoder", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "unfreeze_pair_decoder", False))
     p.add_argument("--predicate_classifier_classes", type=int, default=TrainConfig.predicate_classifier_classes)
     p.add_argument("--eval_sgg_use_predicate_classifier", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_use_predicate_classifier)
     p.add_argument("--eval_sgg_predicate_score_mode", type=str, default=TrainConfig.eval_sgg_predicate_score_mode)
@@ -830,6 +831,7 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "tail_logit_adjustment": bool(getattr(cfg, "tail_logit_adjustment_enabled", False)),
             "text_predicate_ce": bool(float(getattr(cfg, "lambda_text_predicate_ce", 0.0)) > 0.0),
             "relationness": bool(getattr(cfg, "relationness_enabled", False) and float(getattr(cfg, "lambda_relationness", 0.0)) > 0.0),
+            "pair_topk_surrogate": bool(float(getattr(cfg, "lambda_pair_topk_surrogate", 0.0)) > 0.0),
         },
         "ablation_only": {
             "visual_hard_negative": bool(uses_visual_hard),
@@ -852,6 +854,11 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "lambda_text_predicate_ce": float(getattr(cfg, "lambda_text_predicate_ce", 0.0)),
             "lambda_relationness": float(getattr(cfg, "lambda_relationness", 0.0)),
             "lambda_relationness_rank": float(getattr(cfg, "lambda_relationness_rank", 0.0)),
+            "lambda_pair_topk_surrogate": float(getattr(cfg, "lambda_pair_topk_surrogate", 0.0)),
+            "pair_topk_surrogate_k": int(getattr(cfg, "pair_topk_surrogate_k", 96)),
+            "pair_topk_surrogate_margin": float(getattr(cfg, "pair_topk_surrogate_margin", 0.10)),
+            "freeze_non_relationness": bool(getattr(cfg, "freeze_non_relationness", False)),
+            "unfreeze_pair_decoder": bool(getattr(cfg, "unfreeze_pair_decoder", False)),
             "relationness_rank_margin": float(getattr(cfg, "relationness_rank_margin", 0.25)),
             "relationness_rank_topk": int(getattr(cfg, "relationness_rank_topk", 32)),
             "lambda_triplet_rank": float(getattr(cfg, "lambda_triplet_rank", 0.0)),
@@ -895,6 +902,7 @@ def _active_branch_report(cfg: TrainConfig, train_objective_name: str) -> Dict[s
             "lambda_calibration_rank": float(getattr(cfg, "lambda_calibration_rank", 0.0)),
             "lambda_text_predicate_ce": float(getattr(cfg, "lambda_text_predicate_ce", 0.0)),
             "lambda_relationness": float(getattr(cfg, "lambda_relationness", 0.0)),
+            "lambda_pair_topk_surrogate": float(getattr(cfg, "lambda_pair_topk_surrogate", 0.0)),
         },
     }
 
@@ -1312,6 +1320,11 @@ def main(argv: Optional[List[str]] = None) -> None:
         mdl_for_freeze = model.module if isinstance(model, DDP) else model
         for p in mdl_for_freeze.parameters():
             p.requires_grad_(False)
+        if bool(getattr(cfg, "unfreeze_pair_decoder", False)):
+            decoder = getattr(mdl_for_freeze, "decoder", None)
+            if decoder is not None and hasattr(decoder, "parameters"):
+                for p in decoder.parameters():
+                    p.requires_grad_(True)
         rel_head = getattr(mdl_for_freeze, "relationness_head", None)
         if rel_head is not None and hasattr(rel_head, "parameters"):
             for p in rel_head.parameters():
