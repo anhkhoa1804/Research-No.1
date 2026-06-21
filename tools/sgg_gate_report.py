@@ -45,6 +45,7 @@ def main() -> None:
             cfg = row.get("config") if isinstance(row.get("config"), dict) else {}
             train = row.get("train") if isinstance(row.get("train"), dict) else {}
             pair = val.get("pair_rank_diag") if isinstance(val.get("pair_rank_diag"), dict) else {}
+            pair_prop = val.get("pair_proposal_diag") if isinstance(val.get("pair_proposal_diag"), dict) else {}
             obj = val.get("object_diag") if isinstance(val.get("object_diag"), dict) else {}
             predcls = _metric_block(row, "predcls")
             allpairs = predcls if not bool(cfg.get("eval_sgg_use_gt_pairs", False)) else {}
@@ -73,6 +74,13 @@ def main() -> None:
                     "pair_pruned_rate": _as_float(pair.get("pruned_pair_rate", 0.0), 0.0),
                     "pair_missing_rate": _as_float(pair.get("missing_pair_rate", 0.0), 0.0),
                     "pair_relationness": _as_float(pair.get("mean_gt_pair_relationness", 0.0), 0.0),
+                    "proposal_n_gt_pairs": int(pair_prop.get("n_gt_pairs", 0) or 0),
+                    "proposal_avg_pairs": _as_float(pair_prop.get("avg_candidate_pairs_per_image", 0.0), 0.0),
+                    "proposal_recall64": _as_float(pair_prop.get("gt_pair_recall@64", 0.0), 0.0),
+                    "proposal_recall96": _as_float(pair_prop.get("gt_pair_recall@96", 0.0), 0.0),
+                    "proposal_recall128": _as_float(pair_prop.get("gt_pair_recall@128", 0.0), 0.0),
+                    "proposal_pruned96": _as_float(pair_prop.get("gt_pair_pruned_rate@96", 0.0), 0.0),
+                    "proposal_triplet_recall96": _as_float(pair_prop.get("gt_triplet_pair_recall@96", 0.0), 0.0),
                     "clip_top1_object_acc": _as_float(obj.get("clip_top1_object_acc", 0.0), 0.0),
                     "clip_topk_object_acc": _as_float(obj.get("clip_topk_object_acc", 0.0), 0.0),
                     "triplet_endpoint_topk_coverage": _as_float(obj.get("triplet_endpoint_topk_coverage", 0.0), 0.0),
@@ -99,15 +107,20 @@ def main() -> None:
         return
 
     print("SGG gate report")
-    header = f"{'run':<36} {'mode':<10} {'prune':<10} {'pairscore':<10} {'alpha':>6} {'rrank':>7} {'trank':>7} {'gt':>3} {'R50':>7} {'mR50':>7} {'tail':>7} {'pair@1':>7} {'pair@5':>7} {'pair@50':>7} {'drop':>7} {'obj@1':>7} {'obj@k':>7}"
+    header = f"{'run':<36} {'mode':<10} {'prune':<10} {'pairscore':<10} {'alpha':>6} {'rrank':>7} {'trank':>7} {'gt':>3} {'R50':>7} {'mR50':>7} {'tail':>7} {'prop@64':>8} {'prop@96':>8} {'prop@128':>8} {'pdrop96':>8} {'pair@50':>7} {'obj@k':>7}"
     print(header)
     for row in summaries:
         print(
             f"{str(row['run_name'])[:36]:<36} {str(row['score_mode'])[:10]:<10} {str(row['prune_score_mode'])[:10]:<10} {str(row['pair_score_mode'])[:10]:<10} {row['alpha']:>6.2f} {row['rel_rank_loss']:>7.4f} {row['triplet_rank_loss']:>7.4f} {str(row['gt_pairs']):>3} "
             f"{row['predcls_R50']:>7.4f} {row['predcls_mR50']:>7.4f} {row['predcls_tail']:>7.4f} "
-            f"{row['pair_top1']:>7.4f} {row['pair_top5']:>7.4f} {row['pair_top50']:>7.4f} {row['pair_pruned_rate']:>7.4f} "
-            f"{row['clip_top1_object_acc']:>7.4f} {row['clip_topk_object_acc']:>7.4f}"
+            f"{row['proposal_recall64']:>8.4f} {row['proposal_recall96']:>8.4f} {row['proposal_recall128']:>8.4f} {row['proposal_pruned96']:>8.4f} "
+            f"{row['pair_top50']:>7.4f} {row['clip_topk_object_acc']:>7.4f}"
         )
+        if row["proposal_n_gt_pairs"]:
+            print(
+                f"  proposal: gt_pairs={row['proposal_n_gt_pairs']} avg_candidates/img={row['proposal_avg_pairs']:.1f} "
+                f"triplet_pair_recall@96={row['proposal_triplet_recall96']:.4f}"
+            )
         if row["top1_confusions"]:
             print(f"  top1 confusions: {_top_pairs(row['top1_confusions'], 'count', args.top)}")
         if row["miss_confusions"]:

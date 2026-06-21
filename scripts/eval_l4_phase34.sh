@@ -5,7 +5,13 @@ export CUDA_VISIBLE_DEVICES="${CUDA_VISIBLE_DEVICES:-0}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 PYTHON="${PYTHON:-python3}"
-DATA_ROOT="${DATA_ROOT:-datasets}"
+if [[ -z "${DATA_ROOT:-}" ]]; then
+  if [[ -f datasets_vg150_clean/train.jsonl && -f datasets_vg150_clean/validation.jsonl ]]; then
+    DATA_ROOT="datasets_vg150_clean"
+  else
+    DATA_ROOT="datasets"
+  fi
+fi
 CKPT="${CKPT:-checkpoints/pure_l4_phase34.pt}"
 RUN_NAME="${RUN_NAME:-eval_l4_phase34}"
 OUT_DIR="${OUT_DIR:-runs/${RUN_NAME}}"

@@ -464,7 +464,7 @@ def apply_stage_config(cfg):
         cfg.eval_latency = False
         cfg.eval_fast_mode = False
         cfg.eval_batches = int(cfg.eval_batches)
-        cfg.eval_every = max(1, int(cfg.eval_every))
+        cfg.eval_every = max(0, int(cfg.eval_every))
         cfg.eval_prune_every = max(2, int(cfg.eval_prune_every))
         cfg.fp8_enabled = False
 

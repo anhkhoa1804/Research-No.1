@@ -1432,6 +1432,61 @@ def eval_sgg_standard(
         "miss_confusions": Counter(),
         "per_predicate": {},
     }
+    pair_proposal_ks = sorted({32, 64, 96, 128, 256, int(getattr(cfg, "eval_sgg_relationness_prune_k", 0))} - {0})
+    pair_proposal_diag: Dict[str, Any] = {
+        "n_images": 0,
+        "n_gt_pairs": 0,
+        "n_gt_triplets": 0,
+        "candidate_pairs": 0,
+        "kept_pairs": Counter(),
+        "kept_triplets": Counter(),
+        "per_predicate": {},
+        "ks": pair_proposal_ks,
+    }
+
+    def _update_pair_proposal_diag(
+        gt_triplets: Dict[str, Any],
+        candidate_pairs: List[Tuple[int, int]],
+        prune_scores: torch.Tensor,
+    ) -> None:
+        n_gt = min(len(gt_triplets.get("subj_idx", [])), len(gt_triplets.get("obj_idx", [])), len(gt_triplets.get("pred_labels", [])))
+        if n_gt <= 0 or len(candidate_pairs) == 0 or int(prune_scores.numel()) == 0:
+            return
+        pair_to_idx = {(int(s_idx), int(o_idx)): idx for idx, (s_idx, o_idx) in enumerate(candidate_pairs)}
+        gt_pairs = set()
+        gt_entries = []
+        for gi in range(n_gt):
+            pred_name = str(gt_triplets["pred_labels"][gi]).strip().lower()
+            pair = (int(gt_triplets["subj_idx"][gi]), int(gt_triplets["obj_idx"][gi]))
+            pair_idx = pair_to_idx.get(pair, None)
+            if pair_idx is None:
+                continue
+            gt_pairs.add(pair)
+            gt_entries.append((pair, pred_name))
+        if len(gt_pairs) == 0:
+            return
+        for _pair, pred_name in gt_entries:
+            per_pred = pair_proposal_diag["per_predicate"].setdefault(pred_name, {"n": 0, "kept": Counter()})
+            per_pred["n"] = int(per_pred.get("n", 0)) + 1
+        pair_proposal_diag["n_images"] = int(pair_proposal_diag.get("n_images", 0)) + 1
+        pair_proposal_diag["n_gt_pairs"] = int(pair_proposal_diag.get("n_gt_pairs", 0)) + int(len(gt_pairs))
+        pair_proposal_diag["n_gt_triplets"] = int(pair_proposal_diag.get("n_gt_triplets", 0)) + int(len(gt_entries))
+        pair_proposal_diag["candidate_pairs"] = int(pair_proposal_diag.get("candidate_pairs", 0)) + int(len(candidate_pairs))
+        scores = prune_scores.detach().float().view(-1)
+        for k in pair_proposal_ks:
+            take = min(int(k), int(scores.numel()))
+            if take <= 0:
+                continue
+            top_idx = set(int(i) for i in torch.topk(scores, k=take, largest=True).indices.detach().cpu().tolist())
+            kept_pairs = {pair for pair in gt_pairs if int(pair_to_idx[pair]) in top_idx}
+            kept_triplets = 0
+            for pair, pred_name in gt_entries:
+                if pair in kept_pairs:
+                    kept_triplets += 1
+                    per_pred = pair_proposal_diag["per_predicate"].setdefault(pred_name, {"n": 0, "kept": Counter()})
+                    per_pred["kept"][int(k)] += 1
+            pair_proposal_diag["kept_pairs"][int(k)] += int(len(kept_pairs))
+            pair_proposal_diag["kept_triplets"][int(k)] += int(kept_triplets)
 
     def _update_pair_rank_diag(
         gt_triplets: Dict[str, Any],
@@ -1605,6 +1660,7 @@ def eval_sgg_standard(
             rel_weight = float(getattr(cfg, "eval_sgg_relationness_weight", 1.0)) if bool(getattr(cfg, "eval_sgg_use_relationness", False)) else 0.0
             pair_base_scores = _pair_triplet_scores(cfg, relationness_scores, pair_pred_scores, rel_weight)
             pair_prune_scores = _pair_prune_scores(cfg, relationness_scores, pair_pred_scores, rel_weight)
+            _update_pair_proposal_diag(gt, pairs_before_prune, pair_prune_scores)
             prune_k_eval = int(getattr(cfg, "eval_sgg_relationness_prune_k", 0))
             if prune_k_eval > 0 and int(pair_prune_scores.numel()) > prune_k_eval:
                 keep_rel = torch.topk(pair_prune_scores, k=prune_k_eval, largest=True).indices
@@ -1919,6 +1975,37 @@ def eval_sgg_standard(
         "top1_confusions": _top_confusions(pair_rank_diag.get("top1_confusions", Counter())),
         "miss_confusions": _top_confusions(pair_rank_diag.get("miss_confusions", Counter())),
         "per_predicate": per_pair_rank,
+    }
+    pair_gt_n = max(1, int(pair_proposal_diag.get("n_gt_pairs", 0)))
+    triplet_gt_n = max(1, int(pair_proposal_diag.get("n_gt_triplets", 0)))
+    per_pair_prop = {}
+    for pred_name, stats in pair_proposal_diag.get("per_predicate", {}).items():
+        pred_n = max(1, int(stats.get("n", 0)))
+        kept = stats.get("kept", Counter())
+        per_pair_prop[pred_name] = {
+            "n": int(stats.get("n", 0)),
+            **{f"recall@{int(k)}": float(kept.get(int(k), 0)) / float(pred_n) for k in pair_proposal_ks},
+        }
+    bucket_retention = {bucket: {int(k): [] for k in pair_proposal_ks} for bucket in ("head", "body", "tail")}
+    for pred_name, stats in per_pair_prop.items():
+        bucket = pred_buckets_eval.get(str(pred_name).strip().lower())
+        if bucket in bucket_retention:
+            for k in pair_proposal_ks:
+                bucket_retention[bucket][int(k)].append(float(stats.get(f"recall@{int(k)}", 0.0)))
+    outm["pair_proposal_diag"] = {
+        "n_images": int(pair_proposal_diag.get("n_images", 0)),
+        "n_gt_pairs": int(pair_proposal_diag.get("n_gt_pairs", 0)),
+        "n_gt_triplets": int(pair_proposal_diag.get("n_gt_triplets", 0)),
+        "candidate_pairs": int(pair_proposal_diag.get("candidate_pairs", 0)),
+        "avg_candidate_pairs_per_image": float(pair_proposal_diag.get("candidate_pairs", 0)) / float(max(1, int(pair_proposal_diag.get("n_images", 0)))),
+        **{f"gt_pair_recall@{int(k)}": float(pair_proposal_diag["kept_pairs"].get(int(k), 0)) / float(pair_gt_n) for k in pair_proposal_ks},
+        **{f"gt_pair_pruned_rate@{int(k)}": 1.0 - (float(pair_proposal_diag["kept_pairs"].get(int(k), 0)) / float(pair_gt_n)) for k in pair_proposal_ks},
+        **{f"gt_triplet_pair_recall@{int(k)}": float(pair_proposal_diag["kept_triplets"].get(int(k), 0)) / float(triplet_gt_n) for k in pair_proposal_ks},
+        "bucket_gt_pair_recall": {
+            bucket: {f"recall@{int(k)}": float(sum(vals) / max(1, len(vals))) for k, vals in by_k.items()}
+            for bucket, by_k in bucket_retention.items()
+        },
+        "per_predicate": per_pair_prop,
     }
     num_objects = max(1, int(object_diag.get("num_objects", 0)))
     num_gt_triplets = max(1, int(object_diag.get("num_gt_triplets", 0)))

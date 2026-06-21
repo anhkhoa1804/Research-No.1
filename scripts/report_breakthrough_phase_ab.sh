@@ -2,7 +2,13 @@
 set -Eeuo pipefail
 shopt -s nullglob
 
-DATA_ROOT="${DATA_ROOT:-datasets}"
+if [[ -z "${DATA_ROOT:-}" ]]; then
+  if [[ -f datasets_vg150_clean/train.jsonl && -f datasets_vg150_clean/validation.jsonl ]]; then
+    DATA_ROOT="datasets_vg150_clean"
+  else
+    DATA_ROOT="datasets"
+  fi
+fi
 GT_CANDIDATES=(runs/eval_p3_best_gt_pairs_final/metrics.jsonl runs/eval_p3_gt_pairs_fa*/metrics.jsonl)
 ALLPAIRS_CANDIDATES=(
   runs/eval_p3_same_as_p5_k256/metrics.jsonl

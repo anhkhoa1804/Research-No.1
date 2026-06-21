@@ -7,6 +7,20 @@ The project currently has two main research components:
 1. **PURE model**: a compact ordered-pair predicate model using dense uncropped visual evidence, box-conditioned routing, geometry-aware relation embeddings, and transparent calibrated evaluation.
 2. **CORE benchmark**: a compositional relation evaluation benchmark for diagnosing role swaps, object swaps, spatial contradictions, predicate confusability, and other relation-level failures.
 
+
+## Breakthrough Branch Direction
+
+The current branch is moving beyond incremental all-pairs P-runs. GT-pair PredCls metrics remain a reference line, but the breakthrough goal is full all-pairs/SGCls/SGDet readiness. Recent all-pairs experiments showed that small pair-rank or triplet-rank losses can increase aggregate R@50 while collapsing mR/tail into head predicates such as `on` and `has`. Those experiments are retained as diagnostics, not as the final path.
+
+The next research path is staged:
+
+1. **Phase A/B — stabilize and freeze evidence:** keep GT-pair reporting reproducible, keep experimental ranking hooks default-off, and summarize all-pairs failures.
+2. **Phase C — pair proposal redesign:** train a dedicated pair proposal objective and gate on GT-pair recall@K before optimizing triplet R@50.
+3. **Phase D — object bridge:** improve object-label top-k accuracy before SGCls/SGDet headline claims.
+4. **Phase E — full graph scoring:** train graph-level triplet scoring only after pair proposal and object bridge gates pass.
+
+See `notes/breakthrough_branch_plan.md` for the active plan.
+
 ## Current Status
 
 The maintained thesis direction is:
@@ -49,7 +63,8 @@ configs/presets.yaml                      GPU/runtime presets
 scripts/run_pure_next.sh                  low-level configurable train/eval entrypoint
 scripts/train_l4_phase34.sh               current L4 Phase 3/4 training runner
 scripts/eval_l4_phase34.sh                current L4 Phase 3/4 checkpoint evaluation runner
-tools/prepare_vg150_subset.py             HF -> local VG150 JSONL/images
+tools/prepare_vg150_drive_clean.py        Drive VG JSONL -> VG150-clean local data
+tools/prepare_vg150_subset.py             HF -> local VG150 JSONL/images smoke subsets
 tools/check_vg150_diagnostics.py          dataset diagnostics guard
 tools/build_vg150_frequency_prior.py      subject-object predicate prior builder
 tools/build_vg150_clean_vocab.py          clean VG150 object/predicate vocab builder
@@ -138,7 +153,35 @@ Do not mix raw and calibrated numbers in the same claim.
 
 ## Dataset Preparation
 
-Prepare a local VG150 subset when needed:
+Preferred VM workflow: download the maintained Google Drive VG JSONL archive and filter it into a VG150-clean local dataset. The raw archive contains 150-object vocab files but raw predicate strings; this helper maps aliases, filters to the 50 VG150 predicates, drops invalid relationships, writes diagnostics, and symlinks/copies images.
+
+```bash
+python3 tools/prepare_vg150_drive_clean.py \
+  --out_dir datasets_vg150_clean
+```
+
+If the archive was already downloaded/extracted, reuse it without another Drive download:
+
+```bash
+python3 tools/prepare_vg150_drive_clean.py \
+  --skip_download \
+  --skip_extract \
+  --jsonl_root datasets/vg_drive_raw \
+  --out_dir datasets_vg150_clean
+```
+
+Check diagnostics:
+
+```bash
+python3 tools/check_vg150_diagnostics.py \
+  --diagnostics datasets_vg150_clean/diagnostics.json \
+  --min_train_rows 50000 \
+  --min_val_rows 5000 \
+  --min_predicate_coverage 50 \
+  --require_no_validation_issues
+```
+
+Alternative HF subset preparation remains available for small smoke datasets:
 
 ```bash
 python3 tools/prepare_vg150_subset.py \
@@ -151,24 +194,13 @@ python3 tools/prepare_vg150_subset.py \
   --min_predicate_coverage 50
 ```
 
-Check diagnostics:
-
-```bash
-python3 tools/check_vg150_diagnostics.py \
-  --diagnostics datasets/diagnostics.json \
-  --min_train_rows 5000 \
-  --min_val_rows 500 \
-  --min_predicate_coverage 50 \
-  --require_no_validation_issues
-```
-
 Build the frequency prior used for calibrated evaluation:
 
 ```bash
 python3 tools/build_vg150_frequency_prior.py \
-  --train_jsonl datasets/train.jsonl \
-  --out_path datasets/frequency_prior.json \
-  --vg150_root datasets \
+  --train_jsonl datasets_vg150_clean/train.jsonl \
+  --out_path datasets_vg150_clean/frequency_prior.json \
+  --vg150_root datasets_vg150_clean \
   --smoothing 1.0
 ```
 
@@ -201,6 +233,47 @@ CKPT=checkpoints/pure_l4_phase34.pt EVAL_BATCHES=500 bash scripts/eval_l4_phase3
 ```
 
 Use `scripts/run_pure_next.sh` only when you need the lower-level configurable entrypoint.
+
+
+### VM Fresh-Start Checklist
+
+On a new VM, first verify the local dataset/checkpoint layout before launching any long run:
+
+```bash
+ls -lh datasets_vg150_clean/train.jsonl datasets_vg150_clean/validation.jsonl
+ls -lh datasets_vg150_clean/frequency_prior.json || python3 tools/build_vg150_frequency_prior.py \
+  --train_jsonl datasets_vg150_clean/train.jsonl \
+  --out_path datasets_vg150_clean/frequency_prior.json \
+  --vg150_root datasets_vg150_clean \
+  --smoothing 1.0
+ls -lh checkpoints/*.pt | tail
+```
+
+The maintained L4 scripts now auto-select `datasets_vg150_clean` when it contains `train.jsonl` and `validation.jsonl`; otherwise they fall back to `datasets`. You can still override this explicitly with `DATA_ROOT=...`.
+
+For budget-safe validation, prefer smoke settings first:
+
+```bash
+MAX_IMAGES=64 EVAL_BATCHES=1 BATCH_SIZE=64 NUM_WORKERS=8
+```
+
+Do not run full `EVAL_BATCHES=300/500` until the smoke report confirms the checkpoint, dataset, and score mode are correct.
+
+### Phase C Pair-Proposal Gate
+
+The active breakthrough direction is Phase C: measure and improve candidate pair retention before optimizing triplet R@50. Run the dedicated smoke gate:
+
+```bash
+bash scripts/eval_phasec_pairgate_smoke.sh
+```
+
+This writes `runs/phasec_pairgate_smoke/metrics.jsonl` and immediately summarizes it with:
+
+```bash
+python3 tools/sgg_gate_report.py runs/phasec_pairgate_smoke/metrics.jsonl
+```
+
+Key Phase C fields are `prop@64`, `prop@96`, `prop@128`, and `pdrop96`. If `prop@96` is low, train or redesign the pair proposal/relationness objective before interpreting all-pairs R@50/mR@50.
 
 
 Create the standard report card after a run:
