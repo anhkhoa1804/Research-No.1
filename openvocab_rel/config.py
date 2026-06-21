@@ -119,6 +119,10 @@ class TrainConfig:
     relationness_threshold: float = 0.0
     lambda_relationness: float = 0.0
     lambda_relationness_rank: float = 0.0
+    lambda_pair_topk_surrogate: float = 0.0
+    pair_topk_surrogate_k: int = 96
+    pair_topk_surrogate_margin: float = 0.10
+    freeze_non_relationness: bool = False
     relationness_rank_margin: float = 0.25
     relationness_rank_topk: int = 32
     lambda_object_bridge: float = 0.0

@@ -275,6 +275,15 @@ python3 tools/sgg_gate_report.py runs/phasec_pairgate_smoke/metrics.jsonl
 
 Key Phase C fields are `prop@64`, `prop@96`, `prop@128`, and `pdrop96`. If `prop@96` is low, train or redesign the pair proposal/relationness objective before interpreting all-pairs R@50/mR@50.
 
+For a budget-safe Phase C pilot, train only the relationness/pair-proposal head from the strongest predicate checkpoint:
+
+```bash
+bash scripts/train_phasec_pair_proposal.sh
+bash scripts/eval_phasec_pairgate_smoke.sh CKPT=checkpoints/phasec_pair_proposal_l4_smoke.pt
+```
+
+The Phase C pilot freezes CLIP and non-relationness model parameters, disables predicate/triplet/object losses, and optimizes BCE relationness, image-wise hard-negative ranking, and a top-K retention surrogate. Increase `SAMPLES_PER_EPOCH`, `EPOCHS`, and `MAX_IMAGES` only after the smoke gate improves `prop@96`.
+
 
 Create the standard report card after a run:
 

@@ -300,6 +300,36 @@ def _relationness_pair_rank_loss(
     return torch.stack(losses).mean()
 
 
+def _pair_topk_surrogate_loss(
+    logits: torch.Tensor,
+    pos_mask: torch.Tensor,
+    img_ids: torch.Tensor,
+    topk: int,
+    margin: float,
+) -> torch.Tensor:
+    if logits.numel() == 0 or pos_mask.numel() == 0 or img_ids.numel() == 0:
+        return logits.sum() * 0.0
+    losses: List[torch.Tensor] = []
+    pos_mask = pos_mask.bool().view(-1)
+    img_ids = img_ids.view(-1)
+    scores = logits.float().view(-1)
+    for img_id in torch.unique(img_ids.detach()):
+        local = torch.nonzero(img_ids == img_id, as_tuple=False).squeeze(1)
+        if int(local.numel()) == 0:
+            continue
+        local_pos = pos_mask.index_select(0, local)
+        if not bool(local_pos.any()):
+            continue
+        local_scores = scores.index_select(0, local)
+        take = min(max(1, int(topk)), int(local_scores.numel()))
+        kth_score = torch.topk(local_scores.detach(), k=take, largest=True).values[-1]
+        pos_scores = local_scores[local_pos]
+        losses.append(F.relu(kth_score + float(margin) - pos_scores).mean())
+    if len(losses) == 0:
+        return logits.sum() * 0.0
+    return torch.stack(losses).mean()
+
+
 def _pair_retention_metrics(logits: torch.Tensor, pos_mask: torch.Tensor, img_ids: torch.Tensor, ks: Tuple[int, ...] = (64, 128, 256)) -> Dict[str, float]:
     metrics: Dict[str, float] = {}
     if logits.numel() == 0 or pos_mask.numel() == 0 or img_ids.numel() == 0:
@@ -559,6 +589,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--fusion_gate_temperature", type=float, default=getattr(TrainConfig, "fusion_gate_temperature", 0.7))
     p.add_argument("--predicate_classifier_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.predicate_classifier_enabled)
     p.add_argument("--freeze_predicate_head", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "freeze_predicate_head", False))
+    p.add_argument("--freeze_non_relationness", type=_str2bool, nargs="?", const=True, default=getattr(TrainConfig, "freeze_non_relationness", False))
     p.add_argument("--predicate_classifier_classes", type=int, default=TrainConfig.predicate_classifier_classes)
     p.add_argument("--eval_sgg_use_predicate_classifier", type=_str2bool, nargs="?", const=True, default=TrainConfig.eval_sgg_use_predicate_classifier)
     p.add_argument("--eval_sgg_predicate_score_mode", type=str, default=TrainConfig.eval_sgg_predicate_score_mode)
@@ -603,6 +634,9 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--relationness_threshold", type=float, default=getattr(TrainConfig, "relationness_threshold", 0.0))
     p.add_argument("--lambda_relationness", type=float, default=getattr(TrainConfig, "lambda_relationness", 0.0))
     p.add_argument("--lambda_relationness_rank", type=float, default=getattr(TrainConfig, "lambda_relationness_rank", 0.0))
+    p.add_argument("--lambda_pair_topk_surrogate", type=float, default=getattr(TrainConfig, "lambda_pair_topk_surrogate", 0.0))
+    p.add_argument("--pair_topk_surrogate_k", type=int, default=getattr(TrainConfig, "pair_topk_surrogate_k", 96))
+    p.add_argument("--pair_topk_surrogate_margin", type=float, default=getattr(TrainConfig, "pair_topk_surrogate_margin", 0.10))
     p.add_argument("--relationness_rank_margin", type=float, default=getattr(TrainConfig, "relationness_rank_margin", 0.25))
     p.add_argument("--relationness_rank_topk", type=int, default=getattr(TrainConfig, "relationness_rank_topk", 32))
     p.add_argument("--lambda_object_bridge", type=float, default=getattr(TrainConfig, "lambda_object_bridge", 0.0))
@@ -1274,6 +1308,14 @@ def main(argv: Optional[List[str]] = None) -> None:
             if module is not None and hasattr(module, "parameters"):
                 for p in module.parameters():
                     p.requires_grad_(False)
+    if bool(getattr(cfg, "freeze_non_relationness", False)):
+        mdl_for_freeze = model.module if isinstance(model, DDP) else model
+        for p in mdl_for_freeze.parameters():
+            p.requires_grad_(False)
+        rel_head = getattr(mdl_for_freeze, "relationness_head", None)
+        if rel_head is not None and hasattr(rel_head, "parameters"):
+            for p in rel_head.parameters():
+                p.requires_grad_(True)
     if ddp_is_enabled():
         local_rank = int(os.environ.get("LOCAL_RANK", "0"))
         model = model.to(local_rank) 
@@ -1667,6 +1709,7 @@ def main(argv: Optional[List[str]] = None) -> None:
         epoch_l_text_ce = 0.0
         epoch_l_relationness = 0.0
         epoch_l_relationness_rank = 0.0
+        epoch_l_pair_topk = 0.0
         epoch_l_triplet_rank = 0.0
         epoch_l_role_swap = 0.0
         epoch_l_object_bridge = 0.0
@@ -1983,6 +2026,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 l_text_predicate_ce = torch.tensor(0.0, device=device)
                 l_relationness = torch.tensor(0.0, device=device)
                 l_relationness_rank = torch.tensor(0.0, device=device)
+                l_pair_topk = torch.tensor(0.0, device=device)
                 l_triplet_rank = torch.tensor(0.0, device=device)
                 l_role_swap_rank = torch.tensor(0.0, device=device)
                 l_object_bridge = torch.tensor(0.0, device=device)
@@ -2085,6 +2129,14 @@ def main(argv: Optional[List[str]] = None) -> None:
                                 float(getattr(cfg, "relationness_rank_margin", 0.25)),
                                 int(getattr(cfg, "relationness_rank_topk", 32)),
                             )
+                        if float(getattr(cfg, "lambda_pair_topk_surrogate", 0.0)) > 0.0:
+                            l_pair_topk = _pair_topk_surrogate_loss(
+                                rel_logits_all,
+                                flat_pos_mask,
+                                flat_img_ids,
+                                int(getattr(cfg, "pair_topk_surrogate_k", 96)),
+                                float(getattr(cfg, "pair_topk_surrogate_margin", 0.10)),
+                            )
                 if float(getattr(cfg, "lambda_triplet_rank", 0.0)) > 0.0 and hasattr(out, "predicate_logits"):
                     triplet_valid = (flat_pred_ids >= 0) & (flat_pred_ids < int(pred_emb_s2o.shape[0]))
                     if bool(triplet_valid.any()):
@@ -2144,6 +2196,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                         epoch_object_bridge_examples += int(object_bridge_metrics.get("object_bridge_examples", 0.0))
                         epoch_object_bridge_batches += 1
                 relationness_rank_term = float(getattr(cfg, "lambda_relationness_rank", 0.0)) * l_relationness_rank
+                pair_topk_term = float(getattr(cfg, "lambda_pair_topk_surrogate", 0.0)) * l_pair_topk
                 object_bridge_term = float(getattr(cfg, "lambda_object_bridge", 0.0)) * l_object_bridge
                 triplet_rank_term = float(getattr(cfg, "lambda_triplet_rank", 0.0)) * l_triplet_rank
                 role_swap_term = float(getattr(cfg, "lambda_role_swap_rank", 0.0)) * l_role_swap_rank
@@ -2153,7 +2206,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 if hasattr(decoder, "last_gate_reg") and decoder.last_gate_reg is not None:
                     gate_reg = decoder.last_gate_reg
                     gate_val = decoder.last_gate_val
-                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + relationness_rank_term + object_bridge_term + triplet_rank_term + role_swap_term
+                loss_total = spoa_term + ground_term + pred_ce_term + cal_kl_term + cal_rank_term + text_ce_term + relationness_term + relationness_rank_term + pair_topk_term + object_bridge_term + triplet_rank_term + role_swap_term
                 calib_reg_weight = float(getattr(cfg, "lambda_calibration_reg", 0.0))
                 if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and calib_reg_weight > 0.0 and hasattr(out, "calibration_regularizer"):
                     calib_reg = out.calibration_regularizer()
@@ -2200,6 +2253,7 @@ def main(argv: Optional[List[str]] = None) -> None:
             epoch_l_text_ce += float(l_text_predicate_ce.item())
             epoch_l_relationness += float(l_relationness.item())
             epoch_l_relationness_rank += float(l_relationness_rank.item())
+            epoch_l_pair_topk += float(l_pair_topk.item())
             epoch_l_triplet_rank += float(l_triplet_rank.item())
             epoch_l_role_swap += float(l_role_swap_rank.item())
             epoch_l_object_bridge += float(l_object_bridge.item())
@@ -2243,7 +2297,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                     f"pred_ce={float(l_predicate_ce.item()):.3f} "
                     f"cal_kl={float(l_calibration_kl.item()):.3f} cal_rank={float(l_calibration_rank.item()):.3f} "
                     f"text_ce={float(l_text_predicate_ce.item()):.3f} relness={float(l_relationness.item()):.3f} "
-                    f"rel_rank={float(l_relationness_rank.item()):.3f} obj_bridge={float(l_object_bridge.item()):.3f} tri_rank={float(l_triplet_rank.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
+                    f"rel_rank={float(l_relationness_rank.item()):.3f} pair_topk={float(l_pair_topk.item()):.3f} obj_bridge={float(l_object_bridge.item()):.3f} tri_rank={float(l_triplet_rank.item()):.3f} role={float(l_role_swap_rank.item()):.3f} "
                     f"[ratio={loss_ratio:.2f}, gate={float(gate_val):.2f}] | lr={float(optim.param_groups[0]['lr']):.2e}"
                     f"{timing_msg}",
                     flush=True,
@@ -2278,6 +2332,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "avg_text_predicate_ce": float(epoch_l_text_ce / max(1, epoch_batches)),
                 "avg_relationness": float(epoch_l_relationness / max(1, epoch_batches)),
                 "avg_relationness_rank": float(epoch_l_relationness_rank / max(1, epoch_batches)),
+                "avg_pair_topk_surrogate": float(epoch_l_pair_topk / max(1, epoch_batches)),
                 "avg_triplet_rank": float(epoch_l_triplet_rank / max(1, epoch_batches)),
                 "avg_role_swap_rank": float(epoch_l_role_swap / max(1, epoch_batches)),
                 "avg_object_bridge": float(epoch_l_object_bridge / max(1, epoch_batches)),

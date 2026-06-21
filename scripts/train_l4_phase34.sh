@@ -131,4 +131,8 @@ else
   ARGS+=(--resume false)
 fi
 
+if [[ "$#" -gt 0 ]]; then
+  ARGS+=("$@")
+fi
+
 PYTHONUNBUFFERED=1 "${PYTHON}" "${ARGS[@]}" 2>&1 | tee "logs/${RUN_NAME}.log"
