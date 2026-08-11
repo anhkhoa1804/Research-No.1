@@ -946,35 +946,79 @@ def _predicate_counts_from_rows(rows: List[Any]) -> Counter:
     return counts
 
 
-def _predicate_log_prior_for_eval(cfg: Any, loader: DataLoader, pred_vocab: List[str], device: torch.device) -> torch.Tensor:
+class MissingTrainStatisticsError(RuntimeError):
+    """Raised when a calibration/logit-adjustment mechanism needs train-split
+    predicate statistics but none can be established from cfg.vg150_root.
+
+    This intentionally does NOT fall back to counting predicates from the
+    loader passed in for evaluation: doing so would let the split currently
+    being scored silently shape the prior added to its own logits. See
+    docs/known_issues.md's "frequency-prior eval-split fallback" entry for
+    the audit that identified this as a leakage risk and
+    tests/test_calibration_prior.py for the regression tests proving both
+    directions (train stats used when available; eval stats never used as a
+    substitute).
+    """
+
+
+def _predicate_counts_from_train_jsonl(vg150_root: str) -> Counter:
+    """Read <vg150_root>/train.jsonl only. Raises MissingTrainStatisticsError
+    (chaining the original exception, if any) rather than returning an empty
+    Counter, so callers cannot mistake "file missing/unparseable" for
+    "file legitimately has zero predicates"."""
+    train_jsonl = os.path.join(str(vg150_root), "train.jsonl")
+    if not os.path.exists(train_jsonl):
+        raise MissingTrainStatisticsError(
+            f"Calibration/logit-adjustment is enabled but no train.jsonl was found at "
+            f"{train_jsonl!r}. Predicate-frequency statistics must come from the training "
+            f"split, never from the split being evaluated. Either point --vg150_root at a "
+            f"directory containing train.jsonl, or disable the mechanism that needs this "
+            f"prior (adaptive_calibration_enabled / logit_adj_tau / eval_logit_adj_tau) if "
+            f"you intend to evaluate without calibration."
+        )
     counts: Counter = Counter()
-    train_jsonl = os.path.join(str(getattr(cfg, "vg150_root", "datasets")), "train.jsonl")
-    if os.path.exists(train_jsonl):
-        try:
-            with open(train_jsonl, "r", encoding="utf-8") as f:
-                for line in f:
-                    if not line.strip():
-                        continue
-                    counts.update(_predicate_counts_from_rows([json.loads(line)]))
-        except Exception:
-            counts = Counter()
-    dataset = getattr(loader, "dataset", None)
-    rows = getattr(dataset, "rows", None)
-    if len(counts) == 0 and isinstance(rows, list):
-        counts.update(_predicate_counts_from_rows(rows))
-    scene_graphs = getattr(dataset, "scene_graphs", None)
-    images = getattr(dataset, "images", None)
-    valid_indices = getattr(dataset, "valid_indices", None)
-    if len(counts) == 0 and isinstance(scene_graphs, dict) and isinstance(images, list) and isinstance(valid_indices, list):
-        for img_idx in valid_indices:
-            if int(img_idx) >= len(images):
-                continue
-            img_id = images[int(img_idx)].get("image_id")
-            sg = scene_graphs.get(img_id, {})
-            for rel in sg.get("relationships", []) if isinstance(sg, dict) else []:
-                pred = str(rel.get("predicate", "")).strip().lower()
-                if pred:
-                    counts[pred] += 1
+    try:
+        with open(train_jsonl, "r", encoding="utf-8") as f:
+            for line in f:
+                if not line.strip():
+                    continue
+                counts.update(_predicate_counts_from_rows([json.loads(line)]))
+    except Exception as exc:
+        raise MissingTrainStatisticsError(
+            f"Failed to read predicate statistics from {train_jsonl!r}: {exc!r}. Refusing to "
+            f"silently fall back to the evaluation split's own statistics -- fix or "
+            f"regenerate train.jsonl, or disable the mechanism that needs this prior."
+        ) from exc
+    if len(counts) == 0:
+        raise MissingTrainStatisticsError(
+            f"{train_jsonl!r} exists and parsed, but contained zero predicate annotations. "
+            f"Refusing to silently fall back to the evaluation split's own statistics."
+        )
+    return counts
+
+
+def _calibration_prior_is_needed(cfg: Any) -> bool:
+    """True iff something will actually consume pred_log_prior this eval run.
+
+    Mirrors the exact gating _relation_predicate_logits/_apply_eval_logit_adjustment
+    use, so a run that has calibration genuinely turned off (a config choice,
+    e.g. --adaptive_calibration_enabled false with logit_adj_tau=0) never
+    requires train.jsonl to exist at all -- only runs that actually ask for
+    calibration do.
+    """
+    if bool(getattr(cfg, "adaptive_calibration_enabled", False)):
+        return True
+    eval_tau = float(getattr(cfg, "eval_logit_adj_tau", -1.0))
+    tau = eval_tau if eval_tau >= 0.0 else float(getattr(cfg, "logit_adj_tau", 0.0))
+    return tau > 0.0
+
+
+def _predicate_log_prior_for_eval(cfg: Any, loader: DataLoader, pred_vocab: List[str], device: torch.device) -> torch.Tensor:
+    """Train-split-only predicate log-prior. `loader` is accepted for call-site
+    compatibility but is never read from -- see MissingTrainStatisticsError's
+    docstring for why the old eval-loader fallback was removed."""
+    del loader
+    counts = _predicate_counts_from_train_jsonl(str(getattr(cfg, "vg150_root", "datasets")))
     freq = torch.tensor([max(1.0, float(counts.get(str(p), 1))) for p in pred_vocab], dtype=torch.float32, device=device)
     return torch.log(freq / freq.sum().clamp_min(1.0)).detach()
 
@@ -1340,7 +1384,11 @@ def eval_sgg_standard(
     pred_vocab = _ensure_eval_predicate_vocab(scan_vg150_predicate_vocab(cfg.vg150_root))
     pred_metadata = load_predicate_metadata(str(getattr(cfg, "predicate_metadata_path", "")), pred_vocab)
     pred_to_idx = {str(pred).strip().lower(): idx for idx, pred in enumerate(pred_vocab)}
-    pred_log_prior = _predicate_log_prior_for_eval(cfg, loader, pred_vocab, device)
+    pred_log_prior = (
+        _predicate_log_prior_for_eval(cfg, loader, pred_vocab, device)
+        if _calibration_prior_is_needed(cfg)
+        else None
+    )
     freq_bias = _load_frequency_bias(cfg, pred_vocab, device)
     obj_vocab = _load_vg150_object_vocab(cfg.vg150_root)
     _, pred_emb = encode_predicate_vocab(clip_model, processor, pred_vocab, device, prompt_fn=pred_prompt_roles, direction="s2o")
