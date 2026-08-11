@@ -41,4 +41,13 @@ data_prep/
 Thumbs.db
 .vscode/
 .idea/
+.claude/
+
+# Ad-hoc analysis scratch output left in the repo root by an assistant/audit
+# session (e.g. field_list.txt from a one-off grep dump). If you generate a
+# throwaway file like this while investigating something, put it under an
+# ignored scratch/ directory or delete it before committing -- don't add a
+# broad root-level glob here, since that would also hide real top-level
+# config/docs files.
+scratch/
 
