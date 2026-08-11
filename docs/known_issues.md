@@ -11,6 +11,75 @@ Severity: **P0** = could invalidate reported results, **P1** = serious
 correctness/behavior gap, **P2** = moderate (drift, missing coverage, dead
 weight), **P3** = minor/cosmetic.
 
+## P0 — Corrects evaluation ground truth or classifier semantics
+
+### GT-triplet extraction index misalignment in the default SGG eval path — FIXED
+- **File/function:** `openvocab_rel/evals.py`, `eval_sgg_standard`'s
+  per-image prep loop + `_collect_gt_triplets`.
+- **What happened:** under the default `eval_sgg_use_gt_pairs=False`, the
+  eval loop overwrote `ex_eval["pairs"]` with a freshly built,
+  differently-ordered candidate list, while leaving `rel_preds`/
+  `rel_pos_mask` in their original ordering. `_collect_gt_triplets` zipped
+  the two positionally, silently misattributing GT predicates to the wrong
+  (subject, object) pair for any image with more than one relationship —
+  corrupting R@K/mR@K for all six SGG tasks plus prop@K and role-swap
+  diagnostics. **Not specific to any one checkpoint or dataset** — present
+  since the repository's first commit (`31e89601`).
+- **Fix:** commit `220c5c2e3ee8eb40f5cc8fcd0d46f376ca4ae4a8`. Snapshots the
+  original `pairs`/`rel_preds`/`rel_pos_mask` under new `_gt_pairs`/
+  `_gt_preds`/`_gt_pos_mask` keys before the overwrite;
+  `_collect_gt_triplets` reads those instead. Verified: 7 new regression
+  tests (`tests/test_eval_gt_extraction.py`), 4/7 failing pre-fix, 7/7
+  passing post-fix; re-verified live on real data during the historical
+  checkpoint evaluation (`docs/HISTORICAL_CHECKPOINT_DIAGNOSTIC.md` Phase B:
+  100% pair-level GT recovery observed post-fix).
+- **Full root-cause writeup:** `docs/GT_EXTRACTION_BUG_TRIAGE.md`.
+
+### Predicate-vocabulary index mismatch in prepared VG150-clean datasets — NOT FIXED
+- **File:** `datasets_vg150_clean/vocabulary/predicates.json` (and its
+  source, `datasets/vg_raw/vocabulary/predicates.json` — not created by
+  any tool in this repo; a pre-existing raw data file), consumed by
+  `openvocab_rel/datasets/vg150_loader.py:_load_vg150_vocab`/
+  `scan_vg150_predicate_vocab`.
+- **What happens:** this vocabulary file's 50-predicate set diverges from
+  `STANDARD_VG150_PREDICATES` (`tools/prepare_vg150_subset.py`) — the set
+  actually used one function away, in the same prep tool, to *filter*
+  which relationships survive into the cleaned data. The vocab file
+  includes `"growing on"`/`"says"` (**zero** occurrences in the actual
+  cleaned data) and excludes `"next to"`/`"wrapped around"` (**23,888**
+  combined occurrences in `train.jsonl`). Because index assignment is
+  positional, this shifts the classifier-index-to-label mapping for a
+  large contiguous range of the vocabulary. Directly corroborated by a
+  second, independently recovered historical artifact
+  (`checkpoints/demo_best/frequency_prior.json`'s `predicate_vocab` field
+  matches `sorted(STANDARD_VG150_PREDICATES)` exactly, not the current
+  vocab file) — see `docs/PREDICATE_VOCAB_HISTORICAL_FORENSICS.md`.
+- **Why it matters:** corrupts classifier-based predicate scoring
+  (`eval_sgg_predicate_score_mode in {"classifier","ensemble"}`, this
+  repo's default combination) for any evaluation run against a
+  `vg150_root` carrying this vocabulary file — observed directly:
+  Experiment A's raw-classifier run against the recovered historical
+  checkpoint showed the model's most-predicted class as a rare tail
+  predicate while the actual majority class ("on", 39% of the sample)
+  never appeared in its top-8 predictions at all
+  (`docs/HISTORICAL_CHECKPOINT_DIAGNOSTIC.md`). **Not proven to be the
+  complete explanation** — an honest, unresolved caveat remains (see that
+  document's Phase I) that could equally reflect the checkpoint's raw,
+  uncalibrated, long-tail-reweighted training objective rather than pure
+  index scrambling; only a corrected-vocab re-test can fully separate the
+  two.
+- **Status:** confirmed, **not fixed** (explicitly out of scope for the
+  diagnostic phase that found it — do not modify `predicates.json` without
+  a dedicated, tested fix phase). Two candidate fixes identified but not
+  chosen: regenerate the vocab file from `STANDARD_VG150_PREDICATES` inside
+  `tools/prepare_vg150_drive_clean.py`'s `_copy_vocab` step, or validate
+  and fail loudly on mismatch at prepare-time. `configs/predicate_metadata_vg150.json`
+  has a related but distinct, non-crashing drift (52 keys, 3 extra/1
+  missing relative to the canonical 50) — flagged in an earlier phase,
+  still unfixed, likely worth resolving in the same pass as this one.
+- **Full writeup:** `docs/PREDICATE_VOCAB_INDEX_BUG_TRIAGE.md`,
+  `docs/PREDICATE_VOCAB_HISTORICAL_FORENSICS.md`.
+
 ## P1 — Dangerous silent fallbacks
 
 ### `eval_swap_consistency` reports a fabricated symmetric/asymmetric split — NOT FIXED (out of scope this pass)
