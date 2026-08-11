@@ -13,7 +13,7 @@ weight), **P3** = minor/cosmetic.
 
 ## P1 — Dangerous silent fallbacks
 
-### `eval_swap_consistency` reports a fabricated symmetric/asymmetric split
+### `eval_swap_consistency` reports a fabricated symmetric/asymmetric split — NOT FIXED (out of scope this pass)
 - **File/function:** `openvocab_rel/evals.py`, `eval_swap_consistency`
 - **What happens:** the function returns `sym_cos`, `asym_cos`, `n_sym`,
   `n_asym` as if it filtered role-swap cosine similarity by predicate
@@ -23,29 +23,66 @@ weight), **P3** = minor/cosmetic.
 - **Why it matters:** any report or downstream tool that reads this
   function's output believing it separates symmetric- from
   asymmetric-predicate consistency is reading a plausible-looking but wrong
-  number.
+  number. It is a standalone diagnostic, not in the R@K/mR@K path.
+- **Status:** CONFIRMED (unchanged since the validity investigation), left
+  unfixed — outside the explicit confirmed-fix list for the current
+  validity-fix pass. The correct pattern (`is_symmetric(pred_metadata,
+  pred_name)`) already exists and is used correctly elsewhere in the same
+  file, inside `eval_sgg_standard`'s own role-swap diagnostic
+  (`role_swap_diag`) — use that mechanism for any real directionality
+  claim in the meantime.
 - **How to test later:** unit test asserting `n_sym + n_asym == n` on a
   synthetic input with a known mix of symmetric/asymmetric predicates, and
   that `sym_cos != asym_cos` when the input is constructed so they should
   differ.
 
-### Conditional eval-label leak in the frequency-prior helper
+### Conditional eval-label leak in the frequency-prior helper — FIXED
 - **File/function:** `openvocab_rel/evals.py`, `_predicate_log_prior_for_eval`
-- **What happens:** the function correctly tries `train.jsonl` under
-  `cfg.vg150_root` first. If that file is missing or fails to parse, it
-  **silently** falls back to counting predicate frequencies from the loader
+- **What happened:** the function correctly tried `train.jsonl` under
+  `cfg.vg150_root` first. If that file was missing or failed to parse, it
+  **silently** fell back to counting predicate frequencies from the loader
   object actually passed into `eval_sgg_standard` — i.e., potentially the
   validation/test split currently being scored — with no warning printed.
-- **Why it matters:** if ever triggered (misconfigured `vg150_root`, or a
-  swallowed JSON parse error), the resulting prior — fed into
-  `logit_adj_tau` adjustment and/or `RelationalModel.calibrated_predicate_logits`
-  — would be fit on the same split's ground-truth labels being evaluated,
-  silently inflating reported numbers.
-- **Not currently active** under the documented, `train.jsonl`-present
-  workflow; this is a latent footgun, not a demonstrated live leak.
-- **How to test later:** point `eval_sgg_standard` at a `vg150_root` that
-  has no `train.jsonl` and assert the function either raises or logs loudly
-  instead of silently falling back to the eval loader.
+  Empirically confirmed via `git show`-extracted pre-fix function + a
+  synthetic reproduction (see the fix commit message).
+- **Fix:** the eval-loader fallback is removed entirely; missing/
+  unreadable/empty train-split statistics now raise
+  `MissingTrainStatisticsError` instead. A new `_calibration_prior_is_needed`
+  gate means eval runs with calibration genuinely disabled never require
+  `train.jsonl` to exist at all. See `tests/test_calibration_prior.py` for
+  the 4-invariant regression suite (A/B/C/D per the validity-fix phase).
+
+### SGDet box-preprocessing failure silently uses un-preprocessed boxes — NOT FIXED (newly found this re-audit pass)
+- **File/function:** `openvocab_rel/evals.py`, `_make_detected_example`
+  (builds the pseudo-example SGDet scores against, from Grounding-DINO
+  detections)
+- **What happens:** `preprocess_boxes_to_clip224(image, det_boxes, ...)` is
+  wrapped in a bare `try/except Exception: boxes_224 = det_boxes.clone()`
+  — if resizing/cropping the detected boxes into CLIP's 224-input
+  coordinate space fails for any reason, the function silently substitutes
+  the **raw, un-preprocessed, wrong-coordinate-space** boxes instead, with
+  no warning.
+- **Why it matters:** unlike the diagnostic-only fallback below, this feeds
+  directly into the SGDet forward pass — a triggered failure would silently
+  corrupt real SGDet geometry/routing with no error surfaced, potentially
+  producing wrong (not just missing) SGDet numbers.
+- **Status:** newly confirmed during this phase's post-fix static re-audit
+  (Phase 9). Not fixed here — out of the explicit confirmed-fix list for
+  this validity-fix pass; flagged for a future controlled fix with its own
+  test (construct an image that reliably fails `preprocess_boxes_to_clip224`
+  and assert the SGDet path either raises or excludes that example, rather
+  than silently scoring it in the wrong coordinate space).
+
+### Routing-diagnostic box-preprocessing failure falls back to raw boxes — lower severity, NOT FIXED
+- **File/function:** `openvocab_rel/evals.py`, `_routing_diag_update`
+- **What happens:** same `preprocess_boxes_to_clip224` failure pattern as
+  above, but this instance only feeds the deformable-routing attention
+  diagnostic (`routing_diag`, printed/logged, not part of R@K/mR@K or the
+  SGDet forward pass itself) — a triggered failure would produce a
+  misleading diagnostic printout, not a corrupted evaluation number.
+- **Status:** newly confirmed during this phase's post-fix static
+  re-audit. Not fixed here (diagnostic-only, lower priority than the
+  SGDet-path instance above).
 
 ## P1 — Architecture vs. stated claim
 
