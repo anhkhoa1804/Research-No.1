@@ -27,6 +27,7 @@ ENV/
 /synthetic_out/
 /datasets/
 /datasets_old/
+/datasets_vg150_clean/
 /third_party_models/
 /data_prep/
 *.log
