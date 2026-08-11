@@ -683,6 +683,16 @@ def apply_stage_config(cfg):
         cfg.fp8_enabled = False
 
     elif int(cfg.stage) == 3:
+        # NOTE: unlike stage 1 (line ~518) and stage 2 (line ~570), this
+        # branch does NOT set cfg.adaptive_calibration_enabled. It stays at
+        # the dataclass default (False) unless something else sets it.
+        # scripts/train/train_l4_phase34.sh and scripts/eval/eval_l4_phase34.sh
+        # both explicitly pass --adaptive_calibration_enabled true -- that
+        # script-level flag, not this preset, is what makes stage-3 runs
+        # calibrated by default under the maintained workflow. If you
+        # construct a stage-3 TrainConfig some other way (a notebook, a
+        # different script), adaptive calibration will silently be OFF
+        # unless you pass the flag yourself. See docs/known_issues.md.
         cfg.clip_input_res = 448
         cfg.freeze_clip = False
         cfg.progressive_unfreeze = False

@@ -211,6 +211,19 @@ def _build_relation_entries(
     return pairs, payload
 
 
+def use_rfs_is_inert(source_mode: str, split: str, use_rfs: bool) -> bool:
+    """True iff use_rfs/rfs_t have zero effect for this loader instance.
+
+    Repeat-factor sampling is implemented only in
+    VG150LocalDataset._build_valid_indices (the raw VG-SGG-format backend),
+    gated on split=="train". VG150JSONLDataset -- the backend every current
+    script actually uses via --vg150_source local-jsonl -- has no RFS logic
+    at all, so use_rfs=True (the dataclass default) silently does nothing
+    under the maintained data path. See docs/known_issues.md.
+    """
+    return bool(use_rfs) and str(split).strip().lower() == "train" and str(source_mode) != "local-files"
+
+
 def negative_pair_ratio_is_inert(use_all_pairs: bool, negative_pair_ratio: float) -> bool:
     """True iff negative_pair_ratio has zero effect on the pairs
     _build_relation_entries constructs, given these two settings.
@@ -1053,6 +1066,16 @@ class VG150DataLoader:
         else:
             raise ValueError(
                 f"Unsupported VG150 source={source!r}. Use auto, local, local-jsonl, local-files, hf-map, or hf-streaming."
+            )
+
+        if use_rfs_is_inert(self.source_mode, self.split, bool(getattr(cfg, "use_rfs", False))):
+            logging.warning(
+                "VG150DataLoader(split=%s, source_mode=%s): use_rfs=True has NO EFFECT -- "
+                "repeat-factor sampling is only implemented for the local-files backend "
+                "(VG150LocalDataset), not %s. See docs/known_issues.md.",
+                self.split,
+                self.source_mode,
+                self.source_mode,
             )
 
         sampler = None

@@ -134,6 +134,35 @@ weight), **P3** = minor/cosmetic.
   current script actually uses via `--vg150_source local-jsonl` — has no
   RFS logic at all. The config fields read as "on by default" but do
   nothing under the maintained path.
+- **Action taken (infrastructure, same pattern as `negative_pair_ratio`
+  above)**: `use_rfs_is_inert(source_mode, split, use_rfs)`
+  (`vg150_loader.py`) makes the condition explicit and testable
+  (`tests/test_pair_construction.py`), and `VG150DataLoader.__init__` now
+  emits a `logging.warning` once per loader construction whenever
+  `use_rfs=True` is configured under a backend where it does nothing.
+  Sampling behavior itself is unchanged — implementing RFS for the JSONL
+  backend, or removing the dead flag, is a follow-up decision (research/
+  data-pipeline scope), not made here.
+
+### `adaptive_calibration_enabled`'s true source of truth is the shipped
+### scripts, not `config.py`'s stage-3 preset
+- `TrainConfig`'s dataclass default is `False`. `apply_stage_config`'s
+  stage-1 and stage-2 branches explicitly set it `True`; the **stage-3**
+  branch does not touch it at all — it silently stays at the dataclass
+  default (`False`) unless something else sets it. That "something else"
+  is `scripts/train/train_l4_phase34.sh:57` and
+  `scripts/eval/eval_l4_phase34.sh:65`, both of which pass
+  `--adaptive_calibration_enabled true` explicitly.
+- Not a bug in the sense of producing wrong behavior under the documented
+  workflow (both scripts agree, and CLI flags always win over stage
+  presets) — but a real discoverability gap: reading `config.py` in
+  isolation, a stage-3 run looks uncalibrated by default. Anyone
+  constructing a stage-3 `TrainConfig` a different way (a notebook, a new
+  script) would silently get `adaptive_calibration_enabled=False` and not
+  notice.
+- **Action taken (documentation only)**: a code comment was added at the
+  stage-3 branch in `apply_stage_config` (`config.py`) pointing at exactly
+  this. No default or behavior changed.
 
 ### `configs/presets.yaml` is documentation only, never loaded
 - See the header comment added to that file in this cleanup pass. Real
@@ -141,6 +170,16 @@ weight), **P3** = minor/cosmetic.
   Python in `openvocab_rel/config.py`; nothing enforces the YAML stays in
   sync with it. Deciding whether to wire it up for real or delete it is a
   follow-up decision, not made in this cleanup pass.
+
+### Config / script drift — summary table
+
+| Setting | Config default | Script override | Effective behavior | Intended behavior | Classification | Action |
+|---|---|---|---|---|---|---|
+| `use_all_pairs` | `True` | `--use_all_pairs false` (train scripts) | `False` under shipped training | Uncertain (no doc states either way) | **SCRIPT BUG or INTENTIONAL — uncertain** | Not fixed — a training-protocol question, not a code bug; see negative_pair_ratio entry and the research bottleneck analysis |
+| `negative_pair_ratio` | `2.0` | `--negative_pair_ratio 2.0` (train scripts) | Inert whenever `use_all_pairs=False` | Reads as "2:1 negatives" per its own doc-comment | **SCRIPT BUG** (added alongside `use_all_pairs=false` in the same commit, evidence of an unintended interaction) | **Fixed**: loud warning added, behavior unchanged |
+| `use_rfs` / `rfs_t` | `True` / `0.001` | not passed by any script | No-op under the `local-jsonl` backend every script uses | Reads as "on by default" | **LEGACY CONFIG** (correct for a backend, `VG150LocalDataset`, that the maintained scripts don't use) | **Fixed**: loud warning added, behavior unchanged |
+| `adaptive_calibration_enabled` | `False` | `--adaptive_calibration_enabled true` (train + eval scripts) | `True` under shipped scripts | `True` (both scripts agree) | **INTENTIONAL OVERRIDE**, documentation gap only | **Fixed**: code comment added, no behavior change |
+| `configs/presets.yaml` | n/a | n/a | Never loaded by any code | Documentation | **DOCUMENTATION ONLY** | Already fixed (header notice) in the cleanup pass |
 
 ### `tools/build_vg150_clean_vocab.py` default scans train+validation together
 - `--splits` defaults to `"train,validation"`. The resulting object

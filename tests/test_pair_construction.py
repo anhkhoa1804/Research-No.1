@@ -1,7 +1,11 @@
 """Pair/negative construction smoke tests, synthetic in-memory data only."""
 import torch
 
-from openvocab_rel.datasets.vg150_loader import _build_relation_entries, negative_pair_ratio_is_inert
+from openvocab_rel.datasets.vg150_loader import (
+    _build_relation_entries,
+    negative_pair_ratio_is_inert,
+    use_rfs_is_inert,
+)
 
 
 def test_build_relation_entries_positives_and_sampled_negatives():
@@ -109,3 +113,27 @@ def test_negative_pair_ratio_inert_regardless_of_use_all_pairs_when_true():
     # (including 0, which _build_relation_entries's `>= 0.0` check treats
     # as "sample zero negatives", still reachable code) is never flagged.
     assert negative_pair_ratio_is_inert(use_all_pairs=True, negative_pair_ratio=0.0) is False
+
+
+# ---- use_rfs inertness: RFS is only implemented for the local-files
+# backend; every current script uses local-jsonl, where use_rfs=True (the
+# dataclass default) silently does nothing. See docs/known_issues.md.
+
+
+def test_use_rfs_is_inert_under_local_jsonl_backend():
+    # This is what every scripts/train/*.sh actually uses (--vg150_source local-jsonl).
+    assert use_rfs_is_inert(source_mode="local-jsonl", split="train", use_rfs=True) is True
+
+
+def test_use_rfs_not_inert_under_local_files_backend():
+    assert use_rfs_is_inert(source_mode="local-files", split="train", use_rfs=True) is False
+
+
+def test_use_rfs_not_flagged_when_disabled():
+    assert use_rfs_is_inert(source_mode="local-jsonl", split="train", use_rfs=False) is False
+
+
+def test_use_rfs_not_flagged_for_validation_split():
+    # RFS only ever applies to the train split even under the backend that
+    # implements it -- validation-split construction should never warn.
+    assert use_rfs_is_inert(source_mode="local-jsonl", split="validation", use_rfs=True) is False
