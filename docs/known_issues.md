@@ -228,20 +228,49 @@ weight), **P3** = minor/cosmetic.
   executed command), left as-is per the "don't fabricate missing files"
   instruction — flagged here rather than silently invented.
 
-## P3 — Dead code (evals.py / train.py)
+## P3 — Dead code (evals.py / train.py) — FIXED
 
-- `openvocab_rel/evals.py`: a duplicated `if __name__ == "__main__":` CLI
-  block appears twice, verbatim, at the end of the file.
+Call-site-verified (repo-wide grep, not just same-file) before removal;
+all four zero-risk deletions confirmed with `ast.parse` afterward and the
+full test suite passing unchanged:
+
+- `openvocab_rel/evals.py`: `_mean_recall_from_matches` (a per-image
+  mean-recall-across-predicate-classes helper, a third variant distinct
+  from both the headline pooled `R@K` and the global `mR@K`) had zero call
+  sites anywhere in the file. **Removed.**
+- `openvocab_rel/evals.py`: the `if __name__ == "__main__":` block's body
+  (standalone CLI: parse args, load checkpoint, load CLIP, build model,
+  run `eval_query_grounding`) was duplicated verbatim in full, back to
+  back, under the same single `if` guard — running the script would parse
+  argv, run the whole evaluation, print metrics, then silently do the
+  entire thing a second time. **Removed the second copy** (confirmed
+  byte-identical logic; the tiny cosmetic difference — the second copy's
+  redundant direct `CLIPModel.from_pretrained` call that gets immediately
+  overwritten by `configure_clip` two lines later — was itself dead
+  within the dead copy).
 - `openvocab_rel/evals.py`: an `_update_object_diag`-style closure
-  (referencing an undefined free variable `object_diag`) is copy-pasted
-  into roughly 10 standalone eval functions, never invoked in any of them
-  (the one real, live copy is inside `eval_sgg_standard`).
-- `openvocab_rel/train.py`: `_cfg_from_args` (a config-construction helper)
-  has zero call sites; `main()` reimplements equivalent but behaviorally
-  different config-merge logic inline instead.
+  (referencing the free variable `object_diag`, which only exists in the
+  one function that actually defines *and calls* it,
+  `eval_sgg_standard`) was copy-pasted into 10 other standalone eval
+  functions and never invoked in any of them. Verified programmatically
+  that all 10 dead copies were byte-for-byte identical to each other
+  before deleting them in one pass; the one real, live copy (defined and
+  called inside `eval_sgg_standard`) is untouched. **Removed the 10 dead
+  copies.**
+- `openvocab_rel/train.py`: `_cfg_from_args` (a config-construction
+  helper) had zero call sites anywhere in the repo; `main()` reimplements
+  equivalent but behaviorally different config-merge logic inline instead
+  (see the CLI-merge logic documented in `docs/architecture/training.md`).
+  **Removed.**
+
+### Not fixed here — out of scope for a dead-code pass
+
 - `openvocab_rel/train.py`: `torch.nn.utils.clip_grad_norm_` is applied to
   `model.parameters()` only — CLIP's gradients are never norm-clipped once
-  CLIP is unfrozen in stage 2/3.
+  CLIP is unfrozen in stage 2/3. This is *not* dead code (the clipping call
+  is live and does something), and changing its scope would change
+  training/optimization behavior — a category-A/C judgment call, not a
+  zero-risk deletion. Left untouched.
 
 ## P2 — README references two files that don't exist in this checkout
 

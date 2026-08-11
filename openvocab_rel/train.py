@@ -841,12 +841,6 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--vg150_root", type=str, default=TrainConfig.vg150_root)
     p.add_argument("--vg150_source", type=str, default=getattr(TrainConfig, "vg150_source", "auto"))
     return p
-def _cfg_from_args(args: argparse.Namespace) -> TrainConfig:
-    cfg = TrainConfig()
-    for k, v in vars(args).items():
-        if hasattr(cfg, k):
-            setattr(cfg, k, v)
-    return cfg
 def _should_use_prompt_aug(cfg: TrainConfig) -> bool:
     return bool(cfg.prompt_aug) and float(cfg.prompt_aug_prob) > 0.0 and int(cfg.prompt_aug_max_paraphrases) > 0
 def _should_run_research_eval(cfg: TrainConfig, epoch: int) -> bool:
