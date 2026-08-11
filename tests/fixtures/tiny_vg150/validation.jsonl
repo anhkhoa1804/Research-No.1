@@ -1,0 +1,2 @@
+{"image_id": "tiny_val_0001", "obj_boxes": [[5, 10, 95, 190], [100, 40, 220, 260]], "objects": ["woman", "umbrella"], "relationships": [{"subject_id": 0, "object_id": 1, "predicate": "holding"}]}
+{"image_id": "tiny_val_0002", "obj_boxes": [[20, 20, 150, 150], [160, 60, 300, 300], [0, 0, 375, 40]], "objects": ["car", "tree", "sky"], "relationships": [{"subject_id": 0, "object_id": 1, "predicate": "near"}, {"subject_id": 1, "object_id": 2, "predicate": "under"}]}

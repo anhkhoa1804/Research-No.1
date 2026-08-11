@@ -9,6 +9,7 @@ __pycache__/
 venv/
 ENV/
 .env
+.pytest_cache/
 
 # Notebook noise
 .ipynb_checkpoints/
