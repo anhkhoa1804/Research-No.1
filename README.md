@@ -7,21 +7,31 @@ The project currently has two main research components:
 1. **PURE model**: a compact ordered-pair predicate model using dense uncropped visual evidence, box-conditioned routing, geometry-aware relation embeddings, and transparent calibrated evaluation.
 2. **CORE benchmark**: a compositional relation evaluation benchmark for diagnosing role swaps, object swaps, spatial contradictions, predicate confusability, and other relation-level failures.
 
+> An infrastructure/documentation cleanup pass reorganized `scripts/` into `scripts/{train,eval,notebooks}/`, and added `data/`, `docs/`, and `tests/`. No research logic changed. See `docs/known_issues.md` for issues found but deliberately left unfixed during that pass, and `docs/reproducibility.md` for the current reproducibility status.
 
-## Breakthrough Branch Direction
+## 1. What this repository is
 
-The current branch is moving beyond incremental all-pairs P-runs. GT-pair PredCls metrics remain a reference line, but the breakthrough goal is full all-pairs/SGCls/SGDet readiness. Recent all-pairs experiments showed that small pair-rank or triplet-rank losses can increase aggregate R@50 while collapsing mR/tail into head predicates such as `on` and `has`. Those experiments are retained as diagnostics, not as the final path.
+A single research codebase, not a package with external contributors: rapid iteration on one architecture (PURE) plus a currently-inactive diagnostic dataset/benchmark (CORE). See `docs/architecture/overview.md` for what the code actually implements, traced from source rather than described aspirationally.
 
-The next research path is staged:
+**Breakthrough branch direction.** The active direction is moving beyond incremental all-pairs runs toward full all-pairs/SGCls/SGDet readiness. Recent all-pairs experiments showed that small pair-rank or triplet-rank losses can increase aggregate R@50 while collapsing mR/tail into head predicates such as `on` and `has` — those experiments are retained as diagnostics, not the final path. The staged plan:
 
-1. **Phase A/B — stabilize and freeze evidence:** keep GT-pair reporting reproducible, keep experimental ranking hooks default-off, and summarize all-pairs failures.
+1. **Phase A/B — stabilize and freeze evidence:** keep GT-pair reporting reproducible, keep experimental ranking hooks default-off, summarize all-pairs failures.
 2. **Phase C — pair proposal redesign:** train a dedicated pair proposal objective and gate on GT-pair recall@K before optimizing triplet R@50.
 3. **Phase D — object bridge:** improve object-label top-k accuracy before SGCls/SGDet headline claims.
 4. **Phase E — full graph scoring:** train graph-level triplet scoring only after pair proposal and object bridge gates pass.
 
-See `notes/breakthrough_branch_plan.md` for the active plan.
+*(A dedicated `notes/breakthrough_branch_plan.md` was referenced here previously but does not exist in this checkout — removed rather than left as a dead link; see `notes/INDEX.md`.)*
 
-## Current Status
+**Problem definition.** The core task is Scene Graph Generation. Given an image and, in the main reported setting, ground-truth object boxes and object labels:
+
+```text
+Input:  image I, boxes B = {b_i}, object labels O = {o_i}
+Output: ranked scene graph G(I) = {(subject, predicate, object, score)}
+```
+
+The main evaluation setting is currently **PredCls / all-pairs over GT boxes**: boxes and object labels are provided, and the model focuses on predicate ranking. SGCls and SGDet diagnostics exist, but they are not the current headline claims.
+
+## 2. Current status
 
 The maintained thesis direction is:
 
@@ -42,60 +52,17 @@ Current local headline PredCls results retained for experiment context:
 | Adapt-light raw e5 | 33.71 | 20.03 | Tail improves across epochs |
 | Prior-only raw e5 | 33.50 | 19.50 | Prior-only reference |
 
-Important reporting rule: calibrated scores are system-level evaluation results. They should not be used as evidence that the raw classifier alone learned all tail predicates.
+**Important reporting rule:** calibrated scores are system-level evaluation results. They should not be used as evidence that the raw classifier alone learned all tail predicates. These numbers also come from external runs not reproducible from this checkout alone — see `docs/reproducibility.md`.
 
-## Repository Map
+## 3. Current supported experiments
 
-```text
-openvocab_rel/train.py                    main train/eval loop
-openvocab_rel/config.py                   TrainConfig and runtime knobs
-openvocab_rel/models/relational_model.py  PURE relation model and decoder
-openvocab_rel/datasets/vg150_loader.py    VG150 JSONL/HF loaders and pair construction
-openvocab_rel/evals.py                    PredCls/SGCls/SGDet-style evaluation utilities
-openvocab_rel/losses.py                   predicate, counterfactual, and grounding losses
-openvocab_rel/clip_utils.py               CLIP setup and image/text helpers
-openvocab_rel/geometry.py                 geometry utilities
-openvocab_rel/prompts.py                  text prompt helpers
-openvocab_rel/text_cache.py               text embedding cache utilities
-openvocab_rel/retrieval.py                triplet retrieval index utilities
-openvocab_rel/phase_audit.py              five-phase readiness audit
-configs/presets.yaml                      GPU/runtime presets
-scripts/run_pure_next.sh                  low-level configurable train/eval entrypoint
-scripts/train_l4_phase34.sh               current L4 Phase 3/4 training runner
-scripts/eval_l4_phase34.sh                current L4 Phase 3/4 checkpoint evaluation runner
-tools/prepare_vg150_drive_clean.py        Drive VG JSONL -> VG150-clean local data
-tools/prepare_vg150_subset.py             HF -> local VG150 JSONL/images smoke subsets
-tools/check_vg150_diagnostics.py          dataset diagnostics guard
-tools/build_vg150_frequency_prior.py      subject-object predicate prior builder
-tools/build_vg150_clean_vocab.py          clean VG150 object/predicate vocab builder
-tools/model_report_card.py               standardized raw/text/ensemble/calibrated report card
-notes/pure_conference_upgrade_roadmap.md current PURE conference roadmap
-```
-
-## Problem Definition
-
-The core task is **Scene Graph Generation**.
-
-Given an image and, in the main reported setting, ground-truth object boxes and object labels:
-
-```text
-Input:  image I, boxes B = {b_i}, object labels O = {o_i}
-Output: ranked scene graph G(I) = {(subject, predicate, object, score)}
-```
-
-The main evaluation setting is currently **PredCls / GT-pair**: boxes and object labels are provided, and the model focuses on predicate ranking. SGCls and SGDet diagnostics exist, but they are not the current headline claims.
-
-## PURE Architecture
-
-The maintained PURE architecture is intentionally compact:
+**PURE architecture** (maintained, compact):
 
 1. **Dense visual field**: encode the uncropped image once with CLIP patch tokens.
 2. **Box-conditioned object routing**: initialize object queries from boxes and sample evidence from the dense visual field.
 3. **Ordered relation embedding**: build subject-object pair features with explicit direction and geometry.
 4. **Predicate scoring head**: predict relation logits for each ordered pair.
 5. **Evaluation-time calibration**: optionally add a fixed frequency-prior term during evaluation.
-
-Default maintained branches:
 
 | Component | Status | Reason |
 | --- | --- | --- |
@@ -107,23 +74,20 @@ Default maintained branches:
 | Relation context / bilinear mixing | Ablation-only | Added complexity without reliable mR gain |
 | Visual hard negatives | Ablation-only | Useful diagnostic, not headline path |
 
-## Training Objective
-
-The maintained PURE objective currently uses **three training losses**:
+**Training objective** — three losses:
 
 ```text
 L_PURE = λ_ce L_PredCE-LA + λ_spoa L_CF-SPOA + λ_g L_Ground
 ```
-
 - **PredCE-LA**: predicate cross-entropy with logit adjustment for long-tail predicate frequency.
 - **Counterfactual-SPOA**: semantic alignment with role/predicate counterfactual negatives.
 - **Dense Grounding**: keeps subject, object, and pair features visually anchored to dense image evidence.
 
-Calibration is not counted as a fourth loss because it is applied at evaluation time.
+Calibration is not counted as a fourth loss because it is applied at evaluation time. Full loss-assembly detail (including 10 additional optional terms, all off by default or ablation-only): `docs/architecture/training.md`.
 
-## Five-Phase Extension Hooks
+**Phase 1/2 upgrades:** `--adaptive_calibration_enabled true` trains bounded pair-conditioned prior gates and bias residuals (optionally regularized via `--lambda_calibration_kl`/`--lambda_calibration_rank`). `--explicit_spoa_enabled true` separates subject/predicate/object/attribute branches with role-asymmetric projections. `--predicate_label_relaxation_enabled true` applies CLIP-lattice soft targets for semantically ambiguous predicate negatives instead of hard-masking them. Stage presets in `openvocab_rel/config.py` turn on Phase 1 for Stage 1, Phase 1+2 for Stage 2, and Stage 3 adds text-conditioned predicate scoring, relationness supervision, relationness-pruned SGDet evaluation, and object-uncertainty-aware triplet scoring. YAML files documenting these knobs: `pure_phase1_calibrated_spoa`, `pure_phase2_spoa_relaxed`, `l4_24gb_phase34`, `a100_40gb_phase34` in `configs/presets.yaml` — **note that file is documentation only and is never loaded by any code**; the actual behavior comes from `openvocab_rel/config.py`.
 
-The repository now exposes implementation hooks for the five directions needed to move beyond the current PredCls / GT-pair headline setting:
+**Five-phase extension hooks:**
 
 | Phase | Status in code | Main entry points |
 | --- | --- | --- |
@@ -131,27 +95,34 @@ The repository now exposes implementation hooks for the five directions needed t
 | SGDet bridge | Available | Grounding-DINO proposal path in `eval_sgg_standard` |
 | One-stage facade | Available | `RelationalModel.forward_one_stage_facade` for detector proposals |
 | Open-vocabulary predicates | Available | `RelationalModel.predicate_scores(..., mode="text")` and `--open_vocab_predicate_primary` |
-| Retrieval index | Available | `TripletRetrievalIndex` and `build_triplet_records` |
+| Retrieval index | Available, **not wired into evals.py** | `TripletRetrievalIndex` and `build_triplet_records` exist in `retrieval.py` but are never called from the evaluation pipeline today |
 
-These hooks do not change the main claim: the maintained and best-validated setting remains PredCls / GT-pair. The SGCls, SGDet, one-stage facade, open-vocabulary predicate scoring, and retrieval index are extension paths that can be enabled and reported separately.
+These hooks do not change the main claim: the maintained and best-validated setting remains PredCls / all-pairs over GT boxes. SGCls, SGDet, the one-stage facade, open-vocabulary predicate scoring, and the retrieval index are extension paths that can be enabled and reported separately.
 
-## Metrics and Reporting Policy
+**Metrics and reporting policy.** Report every serious checkpoint in separate tiers: (1) raw classifier-only — no frequency prior, no text ensemble; (2) fixed-prior calibrated — checkpoint-specific alpha sweep; (3) adaptive-calibrated — only for checkpoints trained with adaptive calibration enabled; (4) CORE diagnostic — relation-composition stress test, not a protocol-matched VG150 SOTA comparison. Core metrics: **R@K** (aggregate recall of ground-truth triplets in the top-K predictions — note the headline field is a dataset-global-pooled recall, not the per-image-averaged variant most VG150 papers report under the same name; see `docs/known_issues.md`) and **mR@K** (mean recall across predicate classes, exposing long-tail behavior). Do not mix raw and calibrated numbers in the same claim.
 
-Report every serious checkpoint in separate tiers:
+**CORE benchmark.** CORE-specific conversion, merge, evaluation, and ablation helpers have been archived from the active workspace. The maintained code path is VG150 training/evaluation through the L4 scripts below. Historical CORE numbers in older notes should be treated as diagnostic context only, not as an active reproducibility path in this checkout.
 
-1. **Raw classifier-only**: no frequency prior and no text ensemble.
-2. **Fixed-prior calibrated**: checkpoint-specific alpha sweep.
-3. **Adaptive-calibrated**: only for checkpoints trained with adaptive calibration enabled.
-4. **CORE diagnostic**: relation-composition stress test, not a protocol-matched VG150 SOTA comparison.
+**SGCls / SGDet diagnostics** are available through the maintained evaluation script; PredCls remains the main reported setting unless a clean SGCls/SGDet rerun is produced:
+```bash
+CKPT=checkpoints/pure_l4_phase34.pt EVAL_SGDET=true EVAL_BATCHES=100 bash scripts/eval/eval_l4_phase34.sh
+```
 
-Core metrics:
+## 4. Installation
 
-- **R@K**: aggregate recall of ground-truth triplets in the top-K predictions.
-- **mR@K**: mean recall across predicate classes; this exposes long-tail behavior.
+```bash
+python3 -m venv .venv && source .venv/bin/activate
+pip install -r requirements.txt
+pip install -r requirements-optional.txt   # only if you need diffusion rendering / VLM filtering
+pip install -r requirements-dev.txt        # only to run tests/
+```
+`requirements.txt`/`requirements-optional.txt` pin lower-bound versions anchored to a known-working environment snapshot — see the header comment in each file and `docs/reproducibility.md` for what's and isn't verified.
 
-Do not mix raw and calibrated numbers in the same claim.
+Do not create new Python virtual environments elsewhere in this workspace.
 
-## Dataset Preparation
+## 5. External data requirements
+
+Only **VG150** is consumed by any code path in this repo (`openvocab_rel/datasets/vg150_loader.py`). Full requirements, expected layout, and vocabulary sizes: **`data/README.md`** and **`data/manifests/vg150.yaml`**.
 
 Preferred VM workflow: download the maintained Google Drive VG JSONL archive and filter it into a VG150-clean local dataset. The raw archive contains 150-object vocab files but raw predicate strings; this helper maps aliases, filters to the 50 VG150 predicates, drops invalid relationships, writes diagnostics, and symlinks/copies images.
 
@@ -204,40 +175,14 @@ python3 tools/build_vg150_frequency_prior.py \
   --smoothing 1.0
 ```
 
-## Training and Evaluation
+## 6. Quick validation
 
-The maintained L4 workflow targets the current Phase 3/4 configuration.
-
-Train with default L4 settings:
+On a new VM, verify the local dataset/checkpoint layout before launching any long run:
 
 ```bash
-bash scripts/train_l4_phase34.sh
+python3 tools/validate_dataset.py --dataset vg150 --vg150_root datasets_vg150_clean
 ```
-
-Resume from a checkpoint:
-
-```bash
-RESUME_FROM=checkpoints/previous.pt RUN_NAME=pure_l4_phase34_resume bash scripts/train_l4_phase34.sh
-```
-
-Run a small pipeline smoke test:
-
-```bash
-EPOCHS=1 SAMPLES_PER_EPOCH=1000 EVAL_BATCHES=20 MAX_IMAGES=1000 bash scripts/train_l4_phase34.sh
-```
-
-Evaluate a checkpoint:
-
-```bash
-CKPT=checkpoints/pure_l4_phase34.pt EVAL_BATCHES=500 bash scripts/eval_l4_phase34.sh
-```
-
-Use `scripts/run_pure_next.sh` only when you need the lower-level configurable entrypoint.
-
-
-### VM Fresh-Start Checklist
-
-On a new VM, first verify the local dataset/checkpoint layout before launching any long run:
+Pre-flight structural check (fails loudly with a specific message on a missing/incomplete root, rather than surfacing confusingly deep into a training run). Then:
 
 ```bash
 ls -lh datasets_vg150_clean/train.jsonl datasets_vg150_clean/validation.jsonl
@@ -249,7 +194,7 @@ ls -lh datasets_vg150_clean/frequency_prior.json || python3 tools/build_vg150_fr
 ls -lh checkpoints/*.pt | tail
 ```
 
-The maintained L4 scripts now auto-select `datasets_vg150_clean` when it contains `train.jsonl` and `validation.jsonl`; otherwise they fall back to `datasets`. You can still override this explicitly with `DATA_ROOT=...`.
+The maintained L4 scripts auto-select `datasets_vg150_clean` when it contains `train.jsonl` and `validation.jsonl`; otherwise they fall back to `datasets`. Override explicitly with `DATA_ROOT=...`.
 
 For budget-safe validation, prefer smoke settings first:
 
@@ -257,14 +202,36 @@ For budget-safe validation, prefer smoke settings first:
 MAX_IMAGES=64 EVAL_BATCHES=1 BATCH_SIZE=64 NUM_WORKERS=8
 ```
 
-Do not run full `EVAL_BATCHES=300/500` until the smoke report confirms the checkpoint, dataset, and score mode are correct.
+Do not run full `EVAL_BATCHES=300/500` until the smoke report confirms the checkpoint, dataset, and score mode are correct. To exercise the code path itself with no external data or GPU access at all, run the smoke-test suite: `pytest tests/`.
 
-### Phase C Pair-Proposal Gate
+## 7. Training
 
-The active breakthrough direction is Phase C: measure and improve candidate pair retention before optimizing triplet R@50. Run the dedicated smoke gate:
+The maintained L4 workflow targets the current Phase 3/4 configuration.
+
+Train with default L4 settings:
 
 ```bash
-bash scripts/eval_phasec_pairgate_smoke.sh
+bash scripts/train/train_l4_phase34.sh
+```
+
+Resume from a checkpoint:
+
+```bash
+RESUME_FROM=checkpoints/previous.pt RUN_NAME=pure_l4_phase34_resume bash scripts/train/train_l4_phase34.sh
+```
+
+Run a small pipeline smoke test:
+
+```bash
+EPOCHS=1 SAMPLES_PER_EPOCH=1000 EVAL_BATCHES=20 MAX_IMAGES=1000 bash scripts/train/train_l4_phase34.sh
+```
+
+Use `scripts/train/run_pure_next.sh` only when you need the lower-level configurable entrypoint. `scripts/notebooks/kaggle-pure-full-train.ipynb` is a Kaggle-specific alternate entrypoint.
+
+**Phase C pair-proposal gate.** The active breakthrough direction is Phase C: measure and improve candidate pair retention before optimizing triplet R@50. Run the dedicated smoke gate:
+
+```bash
+bash scripts/eval/eval_phasec_pairgate_smoke.sh
 ```
 
 This writes `runs/phasec_pairgate_smoke/metrics.jsonl` and immediately summarizes it with:
@@ -278,12 +245,27 @@ Key Phase C fields are `prop@64`, `prop@96`, `prop@128`, and `pdrop96`. If `prop
 For a budget-safe Phase C pilot, train only the relationness/pair-proposal head from the strongest predicate checkpoint:
 
 ```bash
-bash scripts/train_phasec_pair_proposal.sh
-bash scripts/eval_phasec_pairgate_smoke.sh CKPT=checkpoints/phasec_pair_proposal_l4_smoke.pt
+bash scripts/train/train_phasec_pair_proposal.sh
+bash scripts/eval/eval_phasec_pairgate_smoke.sh CKPT=checkpoints/phasec_pair_proposal_l4_smoke.pt
 ```
 
 The Phase C pilot freezes CLIP and non-relationness model parameters, disables predicate/triplet/object losses, and optimizes BCE relationness, image-wise hard-negative ranking, and a top-K retention surrogate. Increase `SAMPLES_PER_EPOCH`, `EPOCHS`, and `MAX_IMAGES` only after the smoke gate improves `prop@96`.
 
+First PURE-next modeling pilot:
+
+```bash
+bash scripts/train/train_l4_phase34.sh --asymmetric_pair_fusion_enabled true --eval_sgg_role_swap_metric_enabled true --eval_sgg_compare_score_modes classifier,text,ensemble
+```
+
+This keeps the protocol PredCls-focused while testing whether asymmetric pair fusion improves role-swap margins and raw/ensemble mR@50.
+
+## 8. Evaluation
+
+Evaluate a checkpoint:
+
+```bash
+CKPT=checkpoints/pure_l4_phase34.pt EVAL_BATCHES=500 bash scripts/eval/eval_l4_phase34.sh
+```
 
 Create the standard report card after a run:
 
@@ -292,41 +274,70 @@ python3 tools/model_report_card.py runs/*/metrics.jsonl \
   --train_jsonl datasets/train.jsonl
 ```
 
-Use this report as the accepted summary format for comparing raw classifier, text-only, ensemble, and calibrated score modes. If the metrics include per-predicate recall, the tool also reports head/body/tail mR@50 and worst predicates.
+Use this report as the accepted summary format for comparing raw classifier, text-only, ensemble, and calibrated score modes. If the metrics include per-predicate recall, the tool also reports head/body/tail mR@50 and worst predicates. `tools/predicate_delta_report.py` compares per-predicate recall between two metric rows.
 
-First PURE-next modeling pilot:
+See §3 above for the SGCls/SGDet diagnostic command and §7 for the Phase C gate. Full evaluation-pipeline detail: `docs/architecture/evaluation.md`.
 
-```bash
-bash scripts/train_l4_phase34.sh   --asymmetric_pair_fusion_enabled true   --eval_sgg_role_swap_metric_enabled true   --eval_sgg_compare_score_modes classifier,text,ensemble
-```
+## 9. Reproducibility
 
-This keeps the protocol PredCls-focused while testing whether asymmetric pair fusion improves role-swap margins and raw/ensemble mR@50.
+Full walkthrough: **`docs/reproducibility.md`**. Status, stated plainly: **not yet reproducible end-to-end** — this checkout ships zero committed checkpoints, run logs, or prepared datasets (see §11). What *is* reproducible: the code path itself (`pytest tests/`, no external data or GPU needed), and, given the external VG150 data and CLIP/Grounding-DINO access described in §5, the training/eval commands run exactly as documented.
 
-## CORE Benchmark Workflow
+Every checkpoint and every `metrics.jsonl` row embeds a git commit hash, a config hash, and a predicate-vocabulary hash, so you can tell after the fact exactly what produced a given number — a genuine existing strength of the training loop, not something added by any cleanup.
 
-CORE-specific conversion, merge, evaluation, and ablation helpers have been archived from the active workspace. The maintained code path is VG150 Phase 3/4 training/evaluation through the L4 scripts above.
+When reporting numbers, include protocol, score mode, checkpoint, alpha/calibration setting, and evaluation batch count. Prefer concise experiment notes under `notes/` (see `notes/INDEX.md` for what's there and its status).
 
-Historical CORE numbers in older notes should be treated as diagnostic context only, not as an active reproducibility path in this checkout.
-
-## SGCls / SGDet Diagnostics
-
-SGCls / SGDet diagnostics are available through the maintained evaluation script. PredCls remains the main reported setting unless a clean SGCls/SGDet rerun is produced.
-
-```bash
-CKPT=checkpoints/pure_l4_phase34.pt EVAL_SGDET=true EVAL_BATCHES=100 bash scripts/eval_l4_phase34.sh
-```
-
-## Notes
-
-The active planning note is:
+## 10. Repository structure
 
 ```text
-notes/pure_conference_upgrade_roadmap.md
+openvocab_rel/train.py                    main train/eval loop
+openvocab_rel/config.py                   TrainConfig and runtime knobs (field-group index at the top of the file)
+openvocab_rel/models/relational_model.py  PURE relation model and decoder
+openvocab_rel/datasets/vg150_loader.py    VG150 JSONL/HF loaders and pair construction
+openvocab_rel/evals.py                    PredCls/SGCls/SGDet-style evaluation utilities
+openvocab_rel/losses.py                   predicate, counterfactual, and grounding losses
+openvocab_rel/clip_utils.py               CLIP setup and image/text helpers
+openvocab_rel/geometry.py                 geometry utilities
+openvocab_rel/prompts.py                  text prompt helpers
+openvocab_rel/text_cache.py               text embedding cache utilities
+openvocab_rel/retrieval.py                triplet retrieval index utilities (not wired into evals.py)
+openvocab_rel/phase_audit.py              five-phase readiness audit
+configs/presets.yaml                      GPU/runtime presets -- documentation only, never loaded by code
+configs/predicate_metadata_vg150.json     the 50 VG150 predicates' {group, symmetric} table (live, used)
+scripts/train/                            training entrypoints (train_l4_phase34.sh, run_pure_next.sh, train_phasec_pair_proposal.sh)
+scripts/eval/                             evaluation entrypoints (eval_l4_phase34.sh, eval_calibration_sweep_l4.sh, eval_phasec_pairgate_smoke.sh, report_breakthrough_phase_ab.sh)
+scripts/notebooks/                        kaggle-pure-full-train.ipynb (Kaggle-specific alternate entrypoint)
+tools/prepare_vg150_drive_clean.py        Drive VG JSONL -> VG150-clean local data
+tools/prepare_vg150_subset.py             HF -> local VG150 JSONL/images smoke subsets
+tools/check_vg150_diagnostics.py          dataset diagnostics guard (validates prepare_* output)
+tools/validate_dataset.py                 dataset pre-flight readiness check (validates input, before a run)
+tools/build_vg150_frequency_prior.py      subject-object predicate prior builder (train-split only)
+tools/build_vg150_clean_vocab.py          clean VG150 object/predicate vocab builder
+tools/model_report_card.py                standardized raw/text/ensemble/calibrated report card
+tools/sgg_gate_report.py                  Phase-C pair-proposal gate summarizer
+tools/predicate_delta_report.py           per-predicate recall delta between two metric rows
+data/README.md, data/manifests/vg150.yaml documentation-only dataset requirements (no data committed)
+docs/architecture/                        overview.md, training.md, evaluation.md, data_flow.md
+docs/reproducibility.md                   environment/dataset/model setup through experiment identity
+docs/known_issues.md                      bugs/drift found during cleanup, deliberately left unfixed
+notes/                                    current architecture/status notes -- see notes/INDEX.md
+tests/                                    smoke-test suite + tiny synthetic fixtures (no real data/CLIP needed)
 ```
 
-Report and presentation folders are intentionally removed from the active workspace. Keep future notes focused on PURE conference experiments, metrics, and reproducibility.
+## 11. What is intentionally excluded from Git
 
-## Paper Table Snippet
+Datasets, pretrained/fine-tuned model weights (CLIP, Grounding-DINO), checkpoints, run outputs, logs, and generated caches/embeddings are all excluded via `.gitignore` (`datasets/`, `runs/`, `checkpoints/`, `*.pt`/`*.pth`/`*.ckpt`, `*.h5`, `*.log`, etc.) — large, regenerable, and would make the repository unusable to clone if committed. Their absence is made explicit instead: `data/README.md` + `data/manifests/vg150.yaml` document what VG150 setup is expected, and `tools/validate_dataset.py`/`tools/check_vg150_diagnostics.py` check for it. Every checkpoint embeds enough metadata (git commit, config hash, predicate-vocab hash) to identify what produced it even though the checkpoint file itself isn't tracked. See `docs/reproducibility.md` §10 for the full artifact-by-artifact policy.
+
+## 12. Known limitations
+
+Full list, with file/function references and severity: **`docs/known_issues.md`**. Headlines:
+
+- This checkout is not independently reproducible end-to-end (§9) — every number above is a claim from an external run.
+- The headline `R@K`/`mR@K` fields are dataset-global-pooled, a different statistic from the per-image-averaged recall most VG150 literature reports under the same name (the literature-standard variant is also computed, as `image_mean_R@K`).
+- The default pair-fusion path (`asymmetric_pair_fusion_enabled=False`) is symmetric/order-invariant, a partial gap against the "ordered relation embedding" architecture claim.
+- `configs/presets.yaml` is documentation only and can drift from the actual hardcoded presets in `openvocab_rel/config.py`.
+- `use_rfs`/`rfs_t` are a silent no-op under the maintained `local-jsonl` data loader.
+
+### Paper table snippet
 
 ```latex
 \begin{table}[h]
@@ -344,33 +355,16 @@ PURE ultra-light raw e2 & 35.22 & 20.35 & best raw mR@50 \\
 \bottomrule
 \end{tabular}%
 }
-\caption{Current local PURE PredCls results. Values are percentages. Raw and calibrated rows should be interpreted separately.}
+\caption{Current local PURE PredCls results. Values are percentages. \textbf{Raw and calibrated rows are not the same measurement and should never be presented as if they were} -- the first row (raw e2) reports the unaided classifier; the other three add a fixed frequency prior at evaluation time. Numbers also reflect this repository's dataset-global-pooled R@K aggregation, not the per-image-averaged variant most VG150 literature reports under the same name -- see docs/known_issues.md before citing these next to external baselines.}
 \end{table}
 ```
 
-## Recommended Final Reporting Order
+### Recommended final reporting order
 
 1. State the thesis as **SGG-first** with retrieval as an application.
-2. Define the SGG input/output and PredCls / GT-pair protocol.
+2. Define the SGG input/output and PredCls / all-pairs protocol.
 3. Explain PURE architecture and the three maintained losses.
 4. Report raw classifier metrics before calibrated scores.
 5. Present calibrated R@50/mR@50 Pareto points.
 6. Use CORE for diagnostic failure analysis and compositional robustness.
 7. Keep SGCls/SGDet as diagnostics unless object-vocabulary collapse is fixed.
-
-## Practical Notes
-
-- Do not create new Python virtual environments in this workspace.
-- Keep generated datasets, checkpoints, and runs out of git unless intentionally archived.
-- Use `requirements.txt` for dependency reference.
-- When reporting numbers, include protocol, score mode, checkpoint, alpha/calibration setting, and evaluation batch count.
-- Prefer concise experiment notes in `notes/pure_conference_upgrade_roadmap.md` or future focused Markdown files under `notes/`.
-## PURE Phase 1/2 Upgrades
-
-The maintained PURE path now includes the first two roadmap upgrades:
-
-- **Phase 1 — constrained learnable calibration:** enable `--adaptive_calibration_enabled true` to train bounded pair-conditioned prior gates and bias residuals. Optional `--lambda_calibration_kl` preserves the raw predicate distribution, while `--lambda_calibration_rank` adds a differentiable positive-vs-hard-negative margin surrogate.
-- **Phase 2 — explicit SPOA and relaxed labels:** `--explicit_spoa_enabled true` separates subject, predicate, object, and auxiliary geometry branches with role-asymmetric subject/object projections. `--predicate_label_relaxation_enabled true` applies CLIP-lattice soft targets for semantically ambiguous predicate negatives instead of hard-masking them.
-
-Stage presets in `openvocab_rel/config.py` now turn on Phase 1 for Stage 1 and Phase 1+2 for Stage 2. YAML presets `pure_phase1_calibrated_spoa` and `pure_phase2_spoa_relaxed` document the standalone knobs.
-Stage presets in `openvocab_rel/config.py` now turn on Phase 1 for Stage 1 and Phase 1+2 for Stage 2. Stage 3 adds Phase 3/4 hooks: text-conditioned predicate scoring, relationness supervision, relationness-pruned SGDet evaluation, and object-uncertainty-aware triplet scoring. YAML presets `pure_phase1_calibrated_spoa`, `pure_phase2_spoa_relaxed`, `l4_24gb_phase34`, and `a100_40gb_phase34` document the standalone knobs for the two target GPUs.
