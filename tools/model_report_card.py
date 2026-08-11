@@ -16,6 +16,16 @@ MetricBlock = Dict[str, Any]
 
 R_KEYS = ("R@50", "recall@50", "r50", "R50")
 MR_KEYS = ("mR@50", "mean_recall@50", "mr50", "mR50")
+# openvocab_rel/evals.py writes "R@50" as a dataset-global-pooled aggregate
+# (see its own settings.recall_aggregation="dataset_global_hits_over_gt")
+# -- a DIFFERENT statistic from the per-image-unweighted-mean most VG150
+# literature reports under the same name. That literature-matching variant
+# is also always written, under this key. R_KEYS is left untouched (still
+# reads the pooled field, matching every existing consumer of this
+# module's "R@50" output key) -- image_mean_R@50 is surfaced as an
+# additional, separately-labeled column so the two are never presented as
+# though they were the same measurement. See docs/known_issues.md.
+IMAGE_MEAN_R_KEYS = ("image_mean_R@50", "image_mean_r50")
 MODE_ALIASES = {
     "raw": ("raw", "classifier", "classifier_only", "pred", "predicate", "logits"),
     "text": ("text", "clip_text", "text_only"),
@@ -326,6 +336,7 @@ def _summaries(rows_by_file: List[Tuple[Path, MetricRow]], buckets: Dict[str, st
                     "freq_bias_enabled": freq_bias_enabled,
                     "freq_bias_alpha": freq_bias_alpha,
                     "R@50": _first_float(enriched, R_KEYS),
+                    "image_mean_R@50": _first_float(enriched, IMAGE_MEAN_R_KEYS),
                     "mR@50": _first_float(enriched, MR_KEYS),
                     "tail_mR@50": _as_float(enriched.get("tail_mR@50", enriched.get("tail_mr50", 0.0)), 0.0),
                     "head_mR@50": _as_float(enriched.get("head_mR@50", enriched.get("head_mr50", 0.0)), 0.0),
@@ -357,32 +368,40 @@ def _print_best(label: str, row: Optional[Dict[str, Any]]) -> None:
         f"protocol={row.get('protocol', 'unknown')} "
         f"calib={row.get('calibration', 'unknown')} "
         f"alpha={row.get('bayes_calibration_weight', 0.0):.3f} "
-        f"R@50={row['R@50']:.4f} mR@50={row['mR@50']:.4f} "
+        f"R@50(pooled)={row['R@50']:.4f} R@50(image_mean)={row.get('image_mean_R@50', 0.0):.4f} mR@50={row['mR@50']:.4f} "
         f"head/body/tail={row['head_mR@50']:.4f}/{row['body_mR@50']:.4f}/{row['tail_mR@50']:.4f} "
         f"role_swap={row.get('role_swap_consistency', 0.0):.4f} "
         f"combined={row['combined']:.4f}"
+    )
+    print(
+        "  NOTE: R@50(pooled) is a dataset-global-pooled aggregate, NOT the "
+        "per-image-averaged recall most VG150 literature reports under the "
+        "same name -- that variant is R@50(image_mean) above. Cite the one "
+        "you mean explicitly; do not call either one just \"R@50\" next to "
+        "a literature number. mR@50's own aggregation already matches the "
+        "standard convention. See docs/known_issues.md."
     )
 
 
 def _print_family_table(rows: List[Dict[str, Any]]) -> None:
     print("\nScore-family best rows:")
-    print(f"{'family':<14} {'protocol':<14} {'calib':<14} {'alpha':>6} {'run/epoch':<34} {'mode':<18} {'R@50':>8} {'mR@50':>8} {'tail':>8} {'role':>8}")
+    print(f"{'family':<14} {'protocol':<14} {'calib':<14} {'alpha':>6} {'run/epoch':<34} {'mode':<18} {'R@50(pool)':>10} {'R@50(img)':>10} {'mR@50':>8} {'tail':>8} {'role':>8}")
     for family in sorted({row["family"] for row in rows}):
         best = _best([row for row in rows if row["family"] == family], "combined")
         if not best:
             continue
-        print(f"{family:<14} {best.get('protocol', 'unknown')[:14]:<14} {best.get('calibration', 'unknown')[:14]:<14} {best.get('bayes_calibration_weight', 0.0):>6.3f} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>8.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f} {best.get('role_swap_consistency', 0.0):>8.4f}")
+        print(f"{family:<14} {best.get('protocol', 'unknown')[:14]:<14} {best.get('calibration', 'unknown')[:14]:<14} {best.get('bayes_calibration_weight', 0.0):>6.3f} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>10.4f} {best.get('image_mean_R@50', 0.0):>10.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f} {best.get('role_swap_consistency', 0.0):>8.4f}")
 
 
 def _print_protocol_table(rows: List[Dict[str, Any]]) -> None:
     print("\nProtocol best rows:")
-    print(f"{'protocol':<14} {'family':<14} {'calib':<14} {'alpha':>6} {'run/epoch':<34} {'mode':<18} {'R@50':>8} {'mR@50':>8} {'tail':>8}")
+    print(f"{'protocol':<14} {'family':<14} {'calib':<14} {'alpha':>6} {'run/epoch':<34} {'mode':<18} {'R@50(pool)':>10} {'R@50(img)':>10} {'mR@50':>8} {'tail':>8}")
     for protocol in sorted({row.get("protocol", "unknown") for row in rows}):
         protocol_rows = [row for row in rows if row.get("protocol", "unknown") == protocol]
         best = _best(protocol_rows, "combined")
         if not best:
             continue
-        print(f"{protocol[:14]:<14} {best['family'][:14]:<14} {best.get('calibration', 'unknown')[:14]:<14} {best.get('bayes_calibration_weight', 0.0):>6.3f} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>8.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f}")
+        print(f"{protocol[:14]:<14} {best['family'][:14]:<14} {best.get('calibration', 'unknown')[:14]:<14} {best.get('bayes_calibration_weight', 0.0):>6.3f} {best['id'][:34]:<34} {best['mode'][:18]:<18} {best['R@50']:>10.4f} {best.get('image_mean_R@50', 0.0):>10.4f} {best['mR@50']:>8.4f} {best['tail_mR@50']:>8.4f}")
 
 
 def _print_worst_predicates(row: Optional[Dict[str, Any]], limit: int) -> None:
