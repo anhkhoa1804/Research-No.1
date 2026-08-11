@@ -516,9 +516,13 @@ def _print_triplet_debug(task_name: str, triplets: Dict[str, Any], gt: Dict[str,
             break
 
 def _collect_gt_triplets(ex: Dict[str, Any], device: torch.device) -> Dict[str, Any]:
-    pairs = ex.get("pairs", [])
-    preds = ex.get("rel_preds", [])
-    pos_mask = ex.get("rel_pos_mask", None)
+    # Prefer the pre-overwrite GT snapshot (see eval_sgg_standard's per-image prep loop)
+    # so this stays correct even after "pairs" has been replaced with an eval-time
+    # candidate set in a different order. Falls back to "pairs"/"rel_preds"/"rel_pos_mask"
+    # for callers that never went through that overwrite (e.g. non-eval_sgg_standard ex dicts).
+    pairs = ex.get("_gt_pairs", ex.get("pairs", []))
+    preds = ex.get("_gt_preds", ex.get("rel_preds", []))
+    pos_mask = ex.get("_gt_pos_mask", ex.get("rel_pos_mask", None))
     obj_labels = [str(x).strip().lower() for x in ex.get("obj_labels", [])]
     obj_boxes = ex.get("obj_boxes", torch.empty((0, 4), dtype=torch.float32))
 
@@ -1589,6 +1593,14 @@ def eval_sgg_standard(
             valid = n_obj > 1 and len(pair_list) > 0
             valid_mask.append(valid)
             ex_eval = dict(ex)
+            # Snapshot the original, mutually-aligned GT structures before "pairs" is
+            # overwritten below with the eval-time candidate set (which uses a different
+            # ordering). _collect_gt_triplets must read the snapshot, not "pairs"/
+            # "rel_preds"/"rel_pos_mask", or GT gets misattributed to the wrong pair
+            # once the orderings diverge -- see docs/GT_EXTRACTION_BUG_TRIAGE.md.
+            ex_eval["_gt_pairs"] = ex.get("pairs", [])
+            ex_eval["_gt_preds"] = ex.get("rel_preds", [])
+            ex_eval["_gt_pos_mask"] = ex.get("rel_pos_mask", None)
             ex_eval["pairs"] = pair_list
             ex_eval["_pred_vocab"] = pred_vocab
             eval_batch.append(ex_eval)
