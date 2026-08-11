@@ -6,6 +6,151 @@ import os
 from dataclasses import dataclass
 
 
+# =============================================================================
+# TrainConfig field index
+# =============================================================================
+# TrainConfig has ~255 fields accumulated over rapid research iteration. This
+# index is navigation only: it groups every field name by rough function and
+# flags the small subset with a known non-default status. It does not change
+# field order, defaults, or behavior -- added during the infrastructure
+# cleanup pass, not a research change. If a field is missing from this index,
+# that's a gap in the index, not evidence the field is unused (see
+# docs/known_issues.md for the one confirmed no-op: use_rfs/rfs_t is a silent
+# no-op under the maintained VG150JSONLDataset loader).
+#
+# Status legend (only applied where the prior repo audit found clear
+# evidence; everything else is unmarked = treat as ACTIVE on its default
+# code path unless the README/notes say otherwise):
+#   [EXPERIMENTAL]  off-by-default, ablation-only per README/notes -- do not
+#                   flip to a maintained default without a new ablation
+#   [DRIFT]         a known default-vs-shipped-script or default-vs-actual-
+#                   behavior mismatch -- see docs/known_issues.md
+#
+# DATA -- dataset source, splits, pair/negative construction, vocab
+#   seed, device, run_name, out_dir, save_metrics_json, stage, gpu_preset,
+#   a100_ddp_preset, hf_dataset_id, hf_train_split, hf_val_split,
+#   hf_streaming, hf_shuffle_buffer_size, samples_per_epoch, vg150_root,
+#   vg150_enabled, vg150_source, max_images, max_objects, max_pairs,
+#   use_all_pairs [DRIFT: dataclass default True, but every shipped training
+#     script passes --use_all_pairs false], negative_pair_ratio, box_noise,
+#   learned_prune_k, use_rfs [DRIFT: no-op under VG150JSONLDataset], rfs_t
+#     [DRIFT: same], predicate_sampler_enabled, predicate_sampler_power,
+#   predicate_sampler_max_weight, predicate_metadata_path
+#
+# MODEL -- RelationalModel/ProgressiveRelationalDecoder architecture
+#   emb_dim, model_name, pure_local_alpha, pure_bridge_layers,
+#   deformable_routing_enabled, deformable_num_points, deformable_offset_scale,
+#   progressive_node_layers, progressive_edge_layers,
+#   progressive_bilinear_layers [EXPERIMENTAL: bilinear mixing, off by default],
+#   bilinear_low_rank, bilinear_rank, bilinear_residual_scale,
+#   explicit_spoa_enabled, spoa_role_dropout, spoa_attr_scale, spoa_aux_scale,
+#   clip_name, clip_input_res, gradient_checkpointing, freeze_clip,
+#   model_diagnostics_enabled, use_geom_bias, vector_fusion_gate,
+#   asymmetric_pair_fusion_enabled [off by default -- see the audit's P1
+#     finding: the default symmetric-sum pair fusion cannot distinguish
+#     (a,pred,b) from (b,pred,a) on its own], asymmetric_pair_fusion_include_reverse_diff,
+#   asymmetric_pair_fusion_hidden_mult, geom_fourier_dim,
+#   object_language_anchor_enabled [EXPERIMENTAL, per README], object_language_anchor_source,
+#   object_language_anchor_alpha,
+#   relation_context_layers [EXPERIMENTAL, off by default per README],
+#   relation_context_heads,
+#   text_conditioned_projection_enabled, text_conditioned_projection_residual,
+#   open_vocab_predicate_primary, open_vocab_classifier_aux_weight,
+#   one_stage_facade_enabled, one_stage_max_pairs, pure_phase, pure_target_phases,
+#   predicate_classifier_enabled, predicate_classifier_classes,
+#   freeze_predicate_head, freeze_non_relationness, unfreeze_pair_decoder,
+#   unfreeze_clip_lora, relationness_enabled, relationness_threshold,
+#   relationness_hidden_mult, relationness_num_layers, relationness_dropout
+#
+# TRAINING -- loop/optimizer/schedule/runtime, not loss math itself
+#   batch_size, num_workers, loader_prefetch_factor, loader_persistent_workers,
+#   epochs, accum_steps, lr, lr_schedule, train_objective, warmup_steps,
+#   warmup_epochs, weight_decay, amp, amp_dtype, grad_clip_norm,
+#   progressive_unfreeze, clip_unfreeze_after_epochs, channels_last,
+#   cudnn_benchmark, torch_compile, torch_compile_mode, resume, resume_from,
+#   reset_epoch, save_path, log_every, timing_breakdown, timing_warmup_steps,
+#   checkpoint_selection_lambda_mr, checkpoint_selection_mu_tail
+#
+# LOSS -- every lambda_* term and its shape knobs (exact summed formula is
+# documented in docs/architecture/training.md, not restated here)
+#   lambda_spoa_alignment, lambda_dense_grounding, lambda_predicate_ce,
+#   lambda_counterfactual, lambda_visual_hard_negative [EXPERIMENTAL],
+#   visual_hard_negative_enabled, predicate_counterfactual_enabled,
+#   gate_regularizer_weight, fusion_gate_temperature, predicate_background_weight,
+#   predicate_ce_loss, predicate_ce_gamma, predicate_ce_weight_power,
+#   predicate_ce_max_weight, predicate_ce_positive_only,
+#   predicate_label_relaxation_enabled, predicate_label_relaxation_epsilon,
+#   predicate_label_relaxation_threshold, predicate_label_relaxation_topk,
+#   predicate_group_relaxation_enabled [EXPERIMENTAL], predicate_group_relaxation_epsilon,
+#   predicate_group_relaxation_max_group_size,
+#   lambda_role_swap_rank [EXPERIMENTAL], role_swap_rank_margin,
+#   role_swap_rank_use_calibrated_logits,
+#   tail_logit_adjustment_enabled [EXPERIMENTAL], tail_logit_adjustment_tau,
+#   lambda_text_predicate_ce, lambda_relationness, lambda_relationness_rank,
+#   relationness_rank_margin, relationness_rank_topk,
+#   lambda_pair_topk_surrogate [EXPERIMENTAL, Phase-C pilot], pair_topk_surrogate_k,
+#   pair_topk_surrogate_margin,
+#   lambda_pair_balanced_topk [EXPERIMENTAL, Phase-C pilot], pair_balanced_topk_k,
+#   pair_balanced_topk_margin, pair_balanced_neg_ratio,
+#   lambda_object_bridge [EXPERIMENTAL, default 0], object_bridge_topk,
+#   object_bridge_vocab_max_size, object_bridge_vocab_scan_rows,
+#   lambda_triplet_rank [EXPERIMENTAL, default 0], triplet_rank_margin,
+#   triplet_rank_topk, triplet_rank_relationness_weight,
+#   triplet_rank_class_weight_power, triplet_rank_scope,
+#   temp, ground_num_queries, rel_queue_size, rel_queue_min_negatives,
+#   lattice_loss_enabled, lattice_min_neg_weight, logit_adj_tau
+#
+# CALIBRATION -- adaptive (trained) calibration + eval-time fixed priors
+#   bayes_calibration_weight, adaptive_calibration_enabled, adaptive_prior_enabled,
+#   bias_residual_enabled, adaptive_prior_scale, adaptive_prior_gate_min,
+#   adaptive_prior_gate_max, bias_residual_scale, lambda_calibration_reg,
+#   lambda_calibration_kl, lambda_calibration_rank, calibration_rank_margin,
+#   calibration_grad_clip_norm, freq_bias_enabled, freq_bias_path,
+#   freq_bias_alpha, freq_bias_smoothing, eval_logit_adj_tau
+#
+# EVALUATION -- PredCls/SGCls/SGDet protocol, metrics, diagnostics
+#   eval_every, eval_batches, eval_fast_mode, eval_on_train_split,
+#   eval_sgg_iou_thresh, eval_sgg_use_gt_pairs, eval_sgg_use_clip_obj_classifier,
+#   eval_sgg_clip_obj_topk, eval_sgg_clip_obj_prompt_ensemble,
+#   eval_sgg_clip_obj_crop_padding, eval_sgg_sgcls_use_obj_scores,
+#   eval_sgg_sgcls_oracle_labels [ground-truth-label cheat switch for SGCls --
+#     always confirm this is False before citing an SGCls number],
+#   eval_sgg_use_relationness, eval_sgg_relationness_weight,
+#   eval_sgg_relationness_threshold, eval_sgg_prune_score_mode,
+#   eval_sgg_pair_score_mode, eval_sgg_relationness_prune_k,
+#   eval_sgg_detector_prune_k, eval_sgg_use_object_uncertainty,
+#   eval_sgg_object_score_power, eval_sgg_report_nograph,
+#   eval_sgg_role_swap_metric_enabled, eval_sgg_role_swap_margin,
+#   eval_sgg_routing_diag_enabled, eval_sgg_use_no_interaction_prior,
+#   eval_sgg_no_interaction_text, eval_sgg_grounding_dino_enabled,
+#   eval_sgg_grounding_dino_model_id, eval_sgg_grounding_dino_box_threshold,
+#   eval_sgg_grounding_dino_text_threshold, eval_sgg_grounding_dino_max_detections,
+#   eval_research_suite, eval_latency, eval_latency_batches, eval_prune_batches,
+#   eval_prune_every, eval_prune_ks, eval_paraphrase, paraphrase_n,
+#   eval_debug_grounding, eval_debug_grounding_max_samples,
+#   eval_sgg_debug_triplets, eval_sgg_debug_triplets_max_samples,
+#   eval_sgg_use_vg_aliases, eval_zs_predicates, eval_sgg_use_predicate_classifier,
+#   eval_sgg_predicate_score_mode, eval_sgg_predicate_ensemble_alpha,
+#   eval_sgg_classifier_temperature, eval_sgg_text_temperature,
+#   eval_sgg_predicate_diag_topk, eval_sgg_compare_score_modes,
+#   prompt_aug, prompt_aug_prob, prompt_aug_max_paraphrases, canon_enabled,
+#   canon_model
+#
+# RETRIEVAL
+#   retrieval_index_enabled, retrieval_triplets_per_image
+#
+# PERFORMANCE / DISTRIBUTED
+#   fp8_enabled [dead weight on every documented GPU target -- every stage/
+#     GPU preset in this file force-disables it; A100/L4 only, FP8 is
+#     Hopper-only], expandable_segments, fp8_recipe
+#
+# CACHE
+#   max_text_cache, paraphrase_cache_path, eval_sgg_clip_obj_cache_enabled,
+#   eval_sgg_clip_obj_cache_dir, eval_sgg_grounding_dino_cache_enabled,
+#   eval_sgg_grounding_dino_cache_dir
+# =============================================================================
+
+
 @dataclass
 class TrainConfig:
     seed: int = 0

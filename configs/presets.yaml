@@ -1,5 +1,15 @@
 # PURE deformable hardware presets aligned with openvocab_rel/config.py.
-# Use via --gpu_preset for single-GPU runs, or --a100_ddp_preset for DDP.
+#
+# NOT LOADED BY ANY CODE. This file is documentation only -- a repo-wide grep
+# confirms nothing in openvocab_rel/ or tools/ reads presets.yaml. The actual
+# --gpu_preset / --a100_ddp_preset / --stage behavior comes from the
+# hardcoded Python logic in openvocab_rel/config.py's apply_gpu_preset(),
+# apply_ddp_a100_preset(), and apply_stage_config() -- nothing here is
+# consumed at runtime, and nothing enforces that the two stay in sync.
+# Treat the values below as a (currently unverified) description of what
+# those functions do, not as something you can edit to change behavior.
+# See docs/known_issues.md for this gap; wiring this file up for real, or
+# deleting it, is a follow-up cleanup decision, not made in this pass.
 
 presets:
   a100_80gb_balanced:
