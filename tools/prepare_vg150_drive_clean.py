@@ -109,15 +109,56 @@ def _copy_or_link_images(jsonl_root: Path, out_dir: Path, mode: str) -> None:
     raise ValueError(f"Unknown image mode: {mode}")
 
 
+def _canonical_predicate_vocab() -> Dict[str, Any]:
+    """Return idx_to_predicate dict derived from STANDARD_VG150_PREDICATES (sorted, 1-indexed).
+
+    The canonical ordering is sorted(STANDARD_VG150_PREDICATES), confirmed by the historical
+    frequency_prior.json predicate_vocab field.  This function is the single source of truth
+    for the on-disk vocabulary representation; it must never diverge from STANDARD_VG150_PREDICATES.
+    """
+    ordered = sorted(STANDARD_VG150_PREDICATES)
+    assert len(ordered) == 50, f"STANDARD_VG150_PREDICATES must have 50 entries, got {len(ordered)}"
+    return {"idx_to_predicate": {str(i + 1): p for i, p in enumerate(ordered)}}
+
+
 def _copy_vocab(jsonl_root: Path, out_dir: Path) -> None:
-    src = jsonl_root / "vocabulary"
-    if not src.exists():
-        return
+    """Write the canonical predicate vocabulary and copy the object vocabulary.
+
+    predicates.json is always derived from STANDARD_VG150_PREDICATES — never blindly
+    copied from the source — so a malformed source file cannot silently corrupt
+    the predicate-index ↔ predicate-label mapping used by the model.
+
+    If a source predicates.json exists, its predicate set is validated against
+    STANDARD_VG150_PREDICATES and a loud error is raised if they differ.
+    """
     dst = out_dir / "vocabulary"
     dst.mkdir(parents=True, exist_ok=True)
-    for name in ("objects.json", "predicates.json"):
-        if (src / name).exists():
-            shutil.copy2(src / name, dst / name)
+    src = jsonl_root / "vocabulary"
+
+    # Validate source predicates.json if present; fail loudly on mismatch.
+    src_pred_path = src / "predicates.json"
+    if src_pred_path.exists():
+        with src_pred_path.open(encoding="utf-8") as fh:
+            src_data = json.load(fh)
+        src_preds = set(src_data.get("idx_to_predicate", {}).values())
+        if src_preds != STANDARD_VG150_PREDICATES:
+            extra = src_preds - STANDARD_VG150_PREDICATES
+            missing = STANDARD_VG150_PREDICATES - src_preds
+            raise SystemExit(
+                f"Source predicates.json is incompatible with STANDARD_VG150_PREDICATES.\n"
+                f"  Extra (in source, not canonical): {sorted(extra)}\n"
+                f"  Missing (canonical, not in source): {sorted(missing)}\n"
+                f"  Fix the source data or remove the source predicates.json."
+            )
+
+    # Always write the canonical vocabulary, never copy from source.
+    canonical = _canonical_predicate_vocab()
+    with (dst / "predicates.json").open("w", encoding="utf-8") as fh:
+        json.dump(canonical, fh, ensure_ascii=False, indent=2)
+
+    # objects.json is copied from source unchanged (no canonical constraint here).
+    if src.exists() and (src / "objects.json").exists():
+        shutil.copy2(src / "objects.json", dst / "objects.json")
 
 
 def _raw_relationship_refs(rel: Dict[str, Any]) -> Tuple[Any, Any]:
