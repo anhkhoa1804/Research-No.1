@@ -44,6 +44,6 @@ EVAL_SGG_USE_RELATIONNESS=true \
 RELATIONNESS_PRUNE_K="${RELATIONNESS_PRUNE_K:-96}" \
 CKPT="${CKPT}" \
 RUN_NAME="${RUN_NAME:-phasec_pairgate_smoke}" \
-bash scripts/eval_l4_phase34.sh
+bash scripts/eval/eval_l4_phase34.sh
 
 python3 tools/sgg_gate_report.py "runs/${RUN_NAME:-phasec_pairgate_smoke}/metrics.jsonl"

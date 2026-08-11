@@ -75,7 +75,7 @@ PAIR_TOPK_SURROGATE_MARGIN="${PAIR_TOPK_SURROGATE_MARGIN:-0.10}" \
 LAMBDA_OBJECT_BRIDGE=0.0 \
 LAMBDA_TRIPLET_RANK=0.0 \
 LAMBDA_ROLE_SWAP_RANK=0.0 \
-bash scripts/train_l4_phase34.sh \
+bash scripts/train/train_l4_phase34.sh \
   --freeze_predicate_head true \
   --freeze_non_relationness true \
   --unfreeze_pair_decoder "${UNFREEZE_PAIR_DECODER:-false}" \
