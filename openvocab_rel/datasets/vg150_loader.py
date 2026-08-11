@@ -6,6 +6,7 @@ Standardized for 150 object classes and 50 predicate classes.
 from __future__ import annotations
 
 import json
+import logging
 import math
 import os
 import io
@@ -208,6 +209,27 @@ def _build_relation_entries(
 
     payload = _prepare_rel_payload(rel_preds, rel_pair_names, pred_to_idx, rel_pos_mask=rel_pos_mask)
     return pairs, payload
+
+
+def negative_pair_ratio_is_inert(use_all_pairs: bool, negative_pair_ratio: float) -> bool:
+    """True iff negative_pair_ratio has zero effect on the pairs
+    _build_relation_entries constructs, given these two settings.
+
+    _build_relation_entries's `if not bool(use_all_pairs):` branch (above)
+    returns positive-only pairs immediately, before negative_pair_ratio is
+    ever read -- so negative_pair_ratio only has any effect when
+    use_all_pairs is truthy. config.py's own field comment
+    ("0 keeps positives only; positive values sample negatives per
+    positive") describes negative_pair_ratio as if IT were the
+    positives-only control; in practice use_all_pairs=False silently
+    overrides that regardless of negative_pair_ratio's value. See
+    docs/known_issues.md's "negative_pair_ratio is a fully inert config
+    flag" entry -- this predicate exists so VG150DataLoader can warn once,
+    loudly, instead of leaving this silent, without changing which pairs
+    actually get constructed (that would be a training-protocol change,
+    out of scope for this fix).
+    """
+    return (not bool(use_all_pairs)) and float(negative_pair_ratio) != 0.0
 
 
 @dataclass
@@ -978,6 +1000,17 @@ class VG150DataLoader:
         self.clip_input_res = int(clip_input_res)
         self.split = str(split).strip().lower()
         self.source_mode = "unknown"
+        if negative_pair_ratio_is_inert(bool(getattr(cfg, "use_all_pairs", True)), float(getattr(cfg, "negative_pair_ratio", -1.0))):
+            logging.warning(
+                "VG150DataLoader(split=%s): negative_pair_ratio=%s has NO EFFECT because "
+                "use_all_pairs=False -- _build_relation_entries returns positive-only pairs "
+                "before negative_pair_ratio is ever read. If you intend to train/evaluate "
+                "with sampled negative pairs, set --use_all_pairs true. If positives-only is "
+                "actually what you want, set --negative_pair_ratio 0 to make that explicit "
+                "and silence this warning. See docs/known_issues.md.",
+                self.split,
+                getattr(cfg, "negative_pair_ratio", None),
+            )
         # Load vocabularies (prefer local dicts if present). Add the background
         # relation class used for sampled non-relation pairs; predicate ids must
         # match the 51-way classifier head used by training/evaluation.

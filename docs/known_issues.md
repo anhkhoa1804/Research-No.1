@@ -76,6 +76,56 @@ weight), **P3** = minor/cosmetic.
   CE supervision at train time (no explicit negative-pair supervision),
   while eval time (`eval_sgg_use_gt_pairs=False` default) scores all
   N·(N−1) pairs including true negatives — a train/eval protocol asymmetry.
+- **Not fixed** — this is a training-protocol question (which candidate
+  pair space to train on), not a code-correctness bug; changing it would
+  change training data distribution, which is a research decision, not a
+  validity fix. Left exactly as the shipped scripts configure it.
+
+### `negative_pair_ratio` is a fully inert config flag under the shipped
+### training script's own defaults — investigated, classified, now WARNS
+- **Intent** (from `config.py:184`'s own field comment, present since the
+  repo's first commit, `31e89601`, and never edited since): "0 keeps
+  positives only; positive values sample negatives per positive" —
+  `negative_pair_ratio` was designed to be *the* control for how many
+  negative (non-relation) pairs get sampled per positive pair at train
+  time, including expressing "positives only" via `0`.
+- **Actual behavior**: `_build_relation_entries`
+  (`openvocab_rel/datasets/vg150_loader.py`) uses a *different* field,
+  `use_all_pairs`, as the real gate — `if not bool(use_all_pairs):` returns
+  positive-only pairs immediately, before `negative_pair_ratio` is ever
+  read. `negative_pair_ratio` only has any effect when `use_all_pairs=True`.
+- **Classification: C — accidentally unreachable**, not obsolete, not an
+  intentional positives-only design. Evidence from `git log
+  -S"use_all_pairs" -- scripts/`: `--use_all_pairs "${USE_ALL_PAIRS:-false}"`
+  and `--negative_pair_ratio "${NEGATIVE_PAIR_RATIO:-2.0}"` were added to
+  `scripts/train/train_l4_phase34.sh` in the *same diff hunk* of the *same
+  commit* (`96160957`, "Modify the codebase to make the research protocol
+  clearer") — i.e. both flags were added together, with no comment or
+  commit message acknowledging that one silently overrides the other. If
+  positives-only training were actually intended, `config.py`'s own
+  documented convention (`negative_pair_ratio=0`) would have been used
+  instead of leaving a non-zero value that looks like it's doing something.
+  The validation-split loader construction (`train.py:1483-1484`) has the
+  same issue doubled: it hardcodes `negative_pair_ratio=-1.0` regardless of
+  `cfg.negative_pair_ratio`, also inert under `use_all_pairs=False`.
+- **Action taken (infrastructure, not a protocol change)**:
+  `negative_pair_ratio_is_inert(use_all_pairs, negative_pair_ratio)`
+  (`vg150_loader.py`) makes the condition explicit and testable
+  (`tests/test_pair_construction.py`), and `VG150DataLoader.__init__` now
+  emits a `logging.warning` once per loader construction whenever the
+  configured `negative_pair_ratio` would silently do nothing — pointing at
+  this entry. **Which pairs actually get constructed is unchanged** — this
+  is a category-B (infrastructure/diagnostics) fix, not a category-C
+  (research) change; per instruction, the shipped script's default was
+  deliberately **not** flipped to activate negative sampling automatically.
+- **If/when this should actually be activated**: the minimal code change
+  would be to `_build_relation_entries`'s branch condition — gate
+  positives-only behavior on `negative_pair_ratio == 0` (matching its own
+  documented semantics) instead of on the separate `use_all_pairs` flag, or
+  simply flip `scripts/train/train_l4_phase34.sh`'s `USE_ALL_PAIRS` default
+  to `true`. Either is a training-data-distribution change and belongs in
+  a research-improvement phase with its own matched-compute ablation (see
+  the research bottleneck analysis), not bundled into this validity pass.
 
 ### `use_rfs` / `rfs_t` are a silent no-op under the maintained data path
 - Repeat-factor sampling is implemented only in

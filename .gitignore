@@ -15,14 +15,20 @@ ENV/
 .ipynb_checkpoints/
 
 # Training / evaluation outputs
-runs/
-checkpoints/
-suite_reports/
-synthetic_out/
-datasets/
-datasets_old/
-third_party_models/
-data_prep/
+# Root-anchored (leading /) so these only match the top-level data/output
+# directories they're meant for -- an earlier, unanchored `datasets/` here
+# also matched openvocab_rel/datasets/ (the tracked Python subpackage),
+# which `git add` warns about (though it doesn't actually block adding an
+# already-tracked file, this was still a real latent footgun for anyone
+# adding a *new* file under that subpackage in the future).
+/runs/
+/checkpoints/
+/suite_reports/
+/synthetic_out/
+/datasets/
+/datasets_old/
+/third_party_models/
+/data_prep/
 *.log
 *.tmp
 *.bak

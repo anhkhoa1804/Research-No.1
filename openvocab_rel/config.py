@@ -32,7 +32,10 @@ from dataclasses import dataclass
 #   hf_streaming, hf_shuffle_buffer_size, samples_per_epoch, vg150_root,
 #   vg150_enabled, vg150_source, max_images, max_objects, max_pairs,
 #   use_all_pairs [DRIFT: dataclass default True, but every shipped training
-#     script passes --use_all_pairs false], negative_pair_ratio, box_noise,
+#     script passes --use_all_pairs false],
+#   negative_pair_ratio [DRIFT: inert whenever use_all_pairs=False, which is
+#     the shipped scripts' default -- VG150DataLoader now warns loudly when
+#     this combination is configured; see docs/known_issues.md], box_noise,
 #   learned_prune_k, use_rfs [DRIFT: no-op under VG150JSONLDataset], rfs_t
 #     [DRIFT: same], predicate_sampler_enabled, predicate_sampler_power,
 #   predicate_sampler_max_weight, predicate_metadata_path
