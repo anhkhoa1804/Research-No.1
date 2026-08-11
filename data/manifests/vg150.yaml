@@ -1,0 +1,75 @@
+# VG150 dataset manifest.
+#
+# Documentation only -- describes what openvocab_rel/datasets/vg150_loader.py
+# expects on disk so tools/validate_dataset.py can check for it before a
+# training/eval run starts. Editing this file does not change what the
+# loader actually reads at runtime (that logic lives in vg150_loader.py);
+# keep the two in sync by hand if the loader's expectations change.
+#
+# `root` is deliberately NOT a machine-specific absolute path -- resolve it
+# from the DATA_ROOT environment variable or the --vg150_root /
+# --vg150_source CLI flags (see openvocab_rel/config.py: vg150_root,
+# vg150_source), matching how every scripts/train/* and scripts/eval/*
+# entrypoint already resolves it.
+
+name: vg150
+version: unspecified  # see data/README.md: no single canonical checksum exists across VG150 mirrors
+root_env_var: DATA_ROOT
+root_default: datasets_vg150_clean
+
+# Two accepted on-disk layouts; a root satisfying EITHER is valid.
+layouts:
+  local-jsonl:
+    description: >
+      Maintained layout, used by every scripts/train/* and scripts/eval/*
+      entrypoint via --vg150_source local-jsonl (see
+      openvocab_rel/datasets/vg150_loader.py:VG150JSONLDataset).
+    required_files:
+      - train.jsonl
+      - validation.jsonl   # val.jsonl also accepted as a fallback name
+    optional_files:
+      - images/             # per-row image paths are resolved relative to this
+      - frequency_prior.json  # built by tools/build_vg150_frequency_prior.py, needed for calibrated eval only
+    required_row_fields:     # per JSONL line, minimum expected keys
+      - image_id
+      - obj_boxes
+      - objects            # or obj_labels
+      - relationships       # list of {subject_id, object_id, predicate} (field-name fallbacks in _build_relation_entries)
+
+  local-files:
+    description: >
+      Raw Visual Genome / VG-SGG format, used via --vg150_source local-files
+      (see vg150_loader.py:VG150LocalDataset, _load_vg150_vocab).
+    required_files:
+      - VG-SGG-dicts-with-attri.json
+      - image_data.json
+      - scene_graphs.json
+      - images/
+
+expected_vocab:
+  num_objects: 150
+  num_predicates: 50   # +1 synthetic "relation" background class added at runtime, not on disk
+  predicate_metadata: configs/predicate_metadata_vg150.json
+
+preprocessing:
+  - tools/prepare_vg150_drive_clean.py   # Google Drive archive -> local-jsonl (preferred)
+  - tools/prepare_vg150_subset.py        # HF dataset anhkhoa1804/VG150-SGG-Standard -> local-jsonl smoke subset
+  - tools/build_vg150_frequency_prior.py # train-split-only calibration prior (optional, eval-time)
+  - tools/build_vg150_clean_vocab.py     # optional clean object vocab builder; default --splits
+                                          # includes validation -- see docs/known_issues.md before
+                                          # relying on this for anything eval-sensitive
+
+diagnostics:
+  tool: tools/check_vg150_diagnostics.py
+  expects: datasets_vg150_clean/diagnostics.json   # written by prepare_vg150_drive_clean.py
+
+optional:
+  - name: gqa
+    status: present on some local machines, not consumed by any loader in this repo
+  - name: open_images_v6
+    status: present on some local machines, not consumed by any loader in this repo
+  - name: core
+    status: >
+      CORE diagnostic benchmark (see notes/paper2_core.tex) -- generated
+      data may exist locally, but per notes/current_status.tex it is not
+      yet wired into any training/eval path in this repo
