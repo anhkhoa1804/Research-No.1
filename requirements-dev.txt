@@ -1,0 +1,9 @@
+# Dev/test-only dependencies. Install on top of requirements.txt:
+#   pip install -r requirements.txt -r requirements-dev.txt
+#
+# The tests/ smoke suite deliberately does not need requirements-optional.txt,
+# real VG150 data, real CLIP weights, or network access -- see tests/README.md
+# (added alongside the suite) and docs/known_issues.md for the coverage this
+# does NOT include.
+
+pytest>=8.0

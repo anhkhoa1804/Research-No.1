@@ -1,10 +1,14 @@
 # Optional deps for synthetic rendering + VLM filtering
 # Install only if you need diffusion rendering or prefer requests over stdlib HTTP.
+#
+# Version lower-bounds are anchored to a known-working local dev environment
+# snapshot (see docs/reproducibility.md) except diffusers, whose pre-existing
+# >=0.25.0 floor is preserved as-is.
 
 # Better HTTP client (used if present)
-requests
+requests>=2.32.5
 
 # Diffusion rendering (optional)
 diffusers>=0.25.0
-accelerate
-safetensors
+accelerate>=1.13.0
+safetensors>=0.7.0
