@@ -52,6 +52,7 @@
     "watching": {"group": "action", "symmetric": false},
     "wearing": {"group": "possession", "symmetric": false},
     "wears": {"group": "possession", "symmetric": false},
-    "with": {"group": "contact", "symmetric": false}
+    "with": {"group": "contact", "symmetric": false},
+    "wrapped around": {"group": "spatial", "symmetric": false}
   }
 }
