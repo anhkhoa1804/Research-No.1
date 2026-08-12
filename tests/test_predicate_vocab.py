@@ -155,6 +155,57 @@ def test_F_correct_source_predicates_json_is_accepted():
 
 
 # ---------------------------------------------------------------------------
+# H. The allow_source_mismatch override is opt-in and never weakens the output
+# ---------------------------------------------------------------------------
+
+def test_H_strict_validation_is_the_default():
+    """_copy_vocab must fail loudly by default; the override has to be asked for
+    explicitly. Guards against the default silently flipping to permissive."""
+    import inspect
+
+    from tools.prepare_vg150_drive_clean import _copy_vocab
+
+    param = inspect.signature(_copy_vocab).parameters["allow_source_mismatch"]
+    assert param.default is False, (
+        "allow_source_mismatch must default to False so a mismatched source vocabulary "
+        "aborts preparation unless the operator explicitly opts out"
+    )
+
+
+def test_H_override_accepts_bad_source_but_still_writes_canonical_vocab():
+    """With allow_source_mismatch=True a bad source vocabulary is tolerated (raw VG150
+    archives ship one), but the *written* vocabulary must still be canonical -- the
+    override controls only whether the mismatch is fatal, never the output content."""
+    from tools.prepare_vg150_drive_clean import _copy_vocab
+
+    bad_vocab = {
+        "idx_to_predicate": {
+            str(i + 1): p
+            for i, p in enumerate(
+                sorted((STANDARD_VG150_PREDICATES - MISSING_FROM_BAD) | BAD_PREDICATES)
+            )
+        }
+    }
+
+    with tempfile.TemporaryDirectory() as tmp:
+        src = Path(tmp) / "src"
+        dst = Path(tmp) / "dst"
+        vocab_src = src / "vocabulary"
+        vocab_src.mkdir(parents=True)
+        with (vocab_src / "predicates.json").open("w") as fh:
+            json.dump(bad_vocab, fh)
+
+        _copy_vocab(src, dst, allow_source_mismatch=True)  # must not raise
+
+        written = json.loads((dst / "vocabulary" / "predicates.json").read_text(encoding="utf-8"))
+        values = [written["idx_to_predicate"][str(i + 1)] for i in range(50)]
+        # The bad source predicates must NOT leak into the output under any flag.
+        assert values == CANONICAL_ORDERED
+        assert not (BAD_PREDICATES & set(values))
+        assert MISSING_FROM_BAD <= set(values)
+
+
+# ---------------------------------------------------------------------------
 # G. Missing source vocab — canonical is written anyway
 # ---------------------------------------------------------------------------
 

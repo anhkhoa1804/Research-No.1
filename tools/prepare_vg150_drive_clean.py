@@ -121,7 +121,7 @@ def _canonical_predicate_vocab() -> Dict[str, Any]:
     return {"idx_to_predicate": {str(i + 1): p for i, p in enumerate(ordered)}}
 
 
-def _copy_vocab(jsonl_root: Path, out_dir: Path) -> None:
+def _copy_vocab(jsonl_root: Path, out_dir: Path, allow_source_mismatch: bool = False) -> None:
     """Write the canonical predicate vocabulary and copy the object vocabulary.
 
     predicates.json is always derived from STANDARD_VG150_PREDICATES — never blindly
@@ -129,13 +129,16 @@ def _copy_vocab(jsonl_root: Path, out_dir: Path) -> None:
     the predicate-index ↔ predicate-label mapping used by the model.
 
     If a source predicates.json exists, its predicate set is validated against
-    STANDARD_VG150_PREDICATES and a loud error is raised if they differ.
+    STANDARD_VG150_PREDICATES.  By default (allow_source_mismatch=False) a mismatch
+    raises SystemExit.  Pass allow_source_mismatch=True when running against raw VG150
+    archives whose vocabulary file is known to differ from the curated 50-class set
+    (the JSONL relationship data is still filtered to STANDARD_VG150_PREDICATES).
     """
     dst = out_dir / "vocabulary"
     dst.mkdir(parents=True, exist_ok=True)
     src = jsonl_root / "vocabulary"
 
-    # Validate source predicates.json if present; fail loudly on mismatch.
+    # Validate source predicates.json if present; fail loudly on mismatch (by default).
     src_pred_path = src / "predicates.json"
     if src_pred_path.exists():
         with src_pred_path.open(encoding="utf-8") as fh:
@@ -144,12 +147,16 @@ def _copy_vocab(jsonl_root: Path, out_dir: Path) -> None:
         if src_preds != STANDARD_VG150_PREDICATES:
             extra = src_preds - STANDARD_VG150_PREDICATES
             missing = STANDARD_VG150_PREDICATES - src_preds
-            raise SystemExit(
+            msg = (
                 f"Source predicates.json is incompatible with STANDARD_VG150_PREDICATES.\n"
                 f"  Extra (in source, not canonical): {sorted(extra)}\n"
                 f"  Missing (canonical, not in source): {sorted(missing)}\n"
-                f"  Fix the source data or remove the source predicates.json."
+                f"  The canonical vocabulary will be written regardless.\n"
+                f"  Pass --allow_source_vocab_mismatch if the source is raw VG150 data."
             )
+            if not allow_source_mismatch:
+                raise SystemExit(msg)
+            print(f"[WARN] {msg}", flush=True)
 
     # Always write the canonical vocabulary, never copy from source.
     canonical = _canonical_predicate_vocab()
@@ -417,7 +424,7 @@ def prepare(args: argparse.Namespace) -> Dict[str, Any]:
 
     jsonl_root = Path(args.jsonl_root) if args.jsonl_root else _find_jsonl_root(raw_dir)
     print(f"[VG150Drive] jsonl_root={jsonl_root}")
-    _copy_vocab(jsonl_root, out_dir)
+    _copy_vocab(jsonl_root, out_dir, allow_source_mismatch=bool(getattr(args, "allow_source_vocab_mismatch", False)))
     _copy_or_link_images(jsonl_root, out_dir, str(args.images))
 
     train_rows, train_diag, train_preds, train_objs, _ = _convert_split(
@@ -470,6 +477,12 @@ def main() -> None:
     parser.add_argument("--min_predicate_coverage", type=int, default=50)
     parser.add_argument("--no_predicate_alias_map", action="store_true")
     parser.add_argument("--allow_validation_warnings", action="store_true")
+    parser.add_argument(
+        "--allow_source_vocab_mismatch", action="store_true",
+        help="Skip strict validation of source predicates.json against STANDARD_VG150_PREDICATES. "
+             "Use this when running against raw VG150 archives whose vocabulary file differs from "
+             "the curated 50-class set (relationship data is still filtered correctly).",
+    )
     args = parser.parse_args()
     prepare(args)
 
