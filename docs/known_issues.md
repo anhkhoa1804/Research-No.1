@@ -35,7 +35,21 @@ weight), **P3** = minor/cosmetic.
   100% pair-level GT recovery observed post-fix).
 - **Full root-cause writeup:** `docs/GT_EXTRACTION_BUG_TRIAGE.md`.
 
-### Predicate-vocabulary index mismatch in prepared VG150-clean datasets — NOT FIXED
+### Predicate-vocabulary index mismatch in prepared VG150-clean datasets — FIXED (`9dc8f45d`, `7d91af49`); causal claim below RETRACTED
+
+> **Correction.** The entry below states this bug was "observed directly" as
+> the cause of Experiment A's collapse. **That is retracted** (`VERIFIED`):
+> `on` (idx 30), `of` (29), `behind` (7) and `flying in` (14) were at
+> *identical* indices in both the broken and canonical orderings, so the bug
+> cannot explain the observed symptom. The real cause was a **scoring-path
+> mismatch** — the run used the untrained `classifier` head instead of the
+> historical `ensemble`/`alpha=0.0` (pure CLIP text-cosine) path. The
+> vocabulary bug was nonetheless real (24/50 indices shifted) and is now
+> fixed: `_copy_vocab` always regenerates the canonical vocabulary, with an
+> opt-in `--allow_source_vocab_mismatch` for raw archives. Regression tests:
+> `tests/test_predicate_vocab.py`. See `docs/PREDICATE_VOCAB_INDEX_BUG_TRIAGE.md`.
+
+### (original entry, retained)
 - **File:** `datasets_vg150_clean/vocabulary/predicates.json` (and its
   source, `datasets/vg_raw/vocabulary/predicates.json` — not created by
   any tool in this repo; a pre-existing raw data file), consumed by

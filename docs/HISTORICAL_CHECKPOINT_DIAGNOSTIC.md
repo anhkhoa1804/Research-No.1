@@ -1,5 +1,49 @@
 # Forensic diagnostic: why Experiment A shows ~0.94% mR@50 vs. the checkpoint's self-reported ~22.64%
 
+> ## ⚠️ QUESTION ANSWERED — PHASE I's CAUSE RANKING IS **SUPERSEDED**
+>
+> **Retained unedited below as the original investigation record.** This
+> document's Phase I ranked cause **B (dataset/vocabulary incompatibility)**
+> as the HIGH-confidence dominant cause. **That ranking is wrong.**
+>
+> **The answer, established after this document was written** (`VERIFIED`):
+> the discrepancy is a **scoring-path mismatch**, not a data, model, or
+> evaluator defect.
+>
+> - The historical run's `demo_config.env` records `EVAL_SCORE_MODE=ensemble`
+>   with `EVAL_ENSEMBLE_ALPHA=0.0`. In `_relation_predicate_logits`
+>   (`evals.py`), that returns `0.0*cls_norm + 1.0*text_norm` — **100% CLIP
+>   text-cosine scoring, 0% classifier**.
+> - Experiment A forced `eval_sgg_predicate_score_mode="classifier"` — the
+>   opposite path.
+> - The checkpoint's `predicate_classifier` head is at/near random init:
+>   row-norms mean **0.5752** vs **0.5796** for a fresh `nn.Linear(768, 51)`,
+>   biases collapsed toward zero (absmean 0.0012 vs 0.0180) under `lr=2e-06`.
+>
+> Experiment A measured the one head this checkpoint never trained. **0.94%
+> is the expected result of that configuration, and implicates neither the
+> model, the dataset, nor the post-`220c5c2e` evaluator.**
+>
+> **Corrections to specific claims below:**
+> - Phase I cause **B → demoted**. The vocabulary bug is real and fixed
+>   (`9dc8f45d`, `7d91af49`), but `on`/`of`/`behind`/`flying in` sat at
+>   *identical* indices in both orderings, so it cannot explain the observed
+>   symptom. See the retraction banner in
+>   `docs/PREDICATE_VOCAB_INDEX_BUG_TRIAGE.md`.
+> - Phase I cause **F ("checkpoint genuinely weak") → withdrawn** for the
+>   classifier path: the head is untrained, not weak — a different claim.
+> - Phase I causes **A, C, E** — unchanged, still correctly ruled out.
+> - **Phase B's core finding stands and is important**: 100% pair-level GT
+>   recovery confirmed the `220c5c2e` GT-extraction fix works on real data.
+> - **Phase H's runtime framing is separately retracted** — the 22,021.6s
+>   figure was an artifact of the host sleeping mid-run. Real cost is ~85s
+>   fixed + ~11s/image (`runs/runtime_benchmark/`).
+>
+> `UNKNOWN` (unchanged): whether the historical 22.64% used pooled or
+> image-mean aggregation, and which split it was measured on.
+>
+> Current state of record: `docs/PROJECT_STATUS.md`.
+
 Status: diagnostic only. No production code changed. No new long-running
 evaluation was run to produce this document — everything below is either
 (a) already-computed output from the completed Experiment A run, reread

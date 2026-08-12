@@ -159,16 +159,35 @@ has been retracted as a throughput estimate.
 
 ## 11. Known blockers
 
-1. **Predicate-vocabulary index mismatch** (P0, `docs/PREDICATE_VOCAB_INDEX_BUG_TRIAGE.md`,
-   `docs/PREDICATE_VOCAB_HISTORICAL_FORENSICS.md`) — blocks any trustworthy
-   classifier-based R@K/mR@K measurement. Not fixed. Two candidate fixes
-   identified, neither chosen.
-2. **`configs/predicate_metadata_vg150.json` drift** (P2, non-crashing,
-   `docs/known_issues.md`) — related, smaller, likely worth fixing
-   alongside #1.
+**RESOLVED since this section was first written:**
+
+- ~~Predicate-vocabulary index mismatch~~ — **fixed** (`9dc8f45d`,
+  `7d91af49`). Also **retracted**: the claim that it caused Experiment A's
+  0.94% collapse. It did not — `on`/`of`/`behind`/`flying in` were at
+  identical indices in both orderings. See the retraction banners in
+  `docs/PREDICATE_VOCAB_INDEX_BUG_TRIAGE.md` and
+  `docs/HISTORICAL_CHECKPOINT_DIAGNOSTIC.md`.
+- ~~`configs/predicate_metadata_vg150.json` drift~~ — **fixed**
+  (`fa8c0c3b`), diagnostic-only impact.
+
+**The real explanation of the 0.94% result** (`VERIFIED`): a **scoring-path
+mismatch**. The historical run used `EVAL_SCORE_MODE=ensemble` with
+`EVAL_ENSEMBLE_ALPHA=0.0` = **100% CLIP text-cosine, 0% classifier**.
+Experiment A forced `score_mode="classifier"`, and this checkpoint's
+`predicate_classifier` head is at/near random initialization (row-norms
+mean 0.5752 vs 0.5796 for fresh `nn.Linear(768,51)`; biases collapsed to
+absmean 0.0012 vs 0.0180, under `lr=2e-06`). Neither the model, the
+dataset, nor the evaluator was at fault.
+
+**Open blockers:**
+
+1. **The text path has not yet been measured** — no run has used the
+   historical scoring configuration. Until it is, no baseline exists.
+2. **Do not use the classifier path with this checkpoint** for any research
+   claim; it measures untrained weights. `RECOMMENDATION`.
 3. Everything in `docs/known_issues.md`'s P1/P2 register (role-swap
    fabricated split, SGDet box-preprocessing silent fallback, `use_all_pairs`
-   script-vs-default drift, etc.) — unchanged this phase, still open.
+   script-vs-default drift, etc.) — unchanged, still open.
 
 ## 12. Known research issues
 
@@ -235,6 +254,8 @@ hypothesis set — see §2.
 | Dataset preparation | Clean, validated | `VERIFIED FROM DATA` | 0 integrity issues found independently; predicate vocab *content* filtering is separately correct, only the *index* file is wrong (§11) |
 | Checkpoint | Loads, compatibility understood | `VERIFIED FROM EXPERIMENT` | 59/0 missing/unexpected, all traced safe |
 | GT extraction | Fixed and verified on real data | `VERIFIED FROM EXPERIMENT` | 100% pair recovery observed post-fix |
-| Predicate vocabulary | **Confirmed wrong, not fixed** | `HIGH` (not `VERIFIED` — one open caveat, §11) | blocks trustworthy R@K/mR@K |
+| Predicate vocabulary | **Fixed** (`9dc8f45d`, `7d91af49`) | `VERIFIED FROM TEST` | canonical vocab always regenerated; was *not* the cause of the 0.94% collapse (see below) |
+| Predicate metadata | **Fixed** (`fa8c0c3b`) | `VERIFIED FROM TEST` | `wrapped around` entry added; diagnostic-only impact |
+| Classifier scoring head | **Untrained in the recovered checkpoint** | `VERIFIED FROM CHECKPOINT` | weight norms match fresh init; use the **text path** for this checkpoint |
 | Evaluation baseline | **None exists yet** | — | do not cite any number produced so far as a baseline |
 | Training reproducibility | Partial | `INFERENCE`/`UNKNOWN` | code yes, checkpoint/dataset/vocab provenance no |

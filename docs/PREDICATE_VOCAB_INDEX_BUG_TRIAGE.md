@@ -1,5 +1,56 @@
 # STOP finding: predicate-vocabulary index mismatch corrupts classifier-based predicate scoring
 
+> ## ⚠️ STATUS: BUG CONFIRMED AND FIXED — BUT THIS DOCUMENT'S CAUSAL CONCLUSION IS **RETRACTED**
+>
+> **Retained unedited below as the original investigation record.** Two things
+> changed after it was written; read this banner before trusting anything in
+> the body.
+>
+> **1. The vocabulary bug itself: CONFIRMED and FIXED.** `VERIFIED`. The
+> mismatch described below is real (24 of 50 indices shifted; `next to` and
+> `wrapped around`, 23,888 combined occurrences, unrepresentable). Fixed in
+> `9dc8f45d` (canonical vocabulary is now always regenerated, never copied)
+> and `7d91af49` (opt-in override for raw sources). Regression tests in
+> `tests/test_predicate_vocab.py`.
+>
+> **2. The claim that this bug CAUSED Experiment A's 0.94% mR@50 collapse:
+> RETRACTED — it is false.** `VERIFIED`. Direct index comparison of the broken
+> vs. canonical orderings shows the four predicates this document's argument
+> rests on were at **identical indices in both**:
+>
+> | predicate | broken idx | canonical idx | |
+> |---|---|---|---|
+> | `on` | 30 | 30 | **SAME** |
+> | `of` | 29 | 29 | **SAME** |
+> | `behind` | 7 | 7 | **SAME** |
+> | `flying in` | 14 | 14 | **SAME** |
+>
+> The bug shifted indices 17–28 and 38–49 only. It therefore **cannot**
+> explain "`on` never predicted / `flying in` top-predicted", which was the
+> entire evidential basis for the causal claim below. The "HIGH confidence"
+> rating in the body is **wrong** and should not be cited.
+>
+> **The actual cause is now established** (`VERIFIED`): Experiment A ran
+> `eval_sgg_predicate_score_mode="classifier"`, but the checkpoint's
+> `predicate_classifier` head is at/near random initialization — its
+> `predicate_classifier.4.weight` row-norms (mean 0.5752) are statistically
+> indistinguishable from a freshly-initialized `nn.Linear(768, 51)`
+> (mean 0.5796), with biases collapsed toward zero by weight decay
+> (absmean 0.0012 vs 0.0180 at init) under `lr=2e-06`. Meanwhile the
+> historical run's own `demo_config.env` records `EVAL_SCORE_MODE=ensemble`
+> with `EVAL_ENSEMBLE_ALPHA=0.0`, which in `_relation_predicate_logits`
+> returns `0.0*cls_norm + 1.0*text_norm` — i.e. **100% CLIP text-cosine
+> scoring, 0% classifier**. Experiment A measured the one head this
+> checkpoint never trained.
+>
+> `INFERENCE` (unverifiable — the predecessor checkpoint
+> `l3_counterfactual_recovery_l4_best_mR50.pt` is not present locally): the
+> head was likely reset by a `strict=False` resume across a change in
+> `predicate_classifier_classes`.
+>
+> Full corrected analysis: `docs/PREDICATE_VOCAB_HISTORICAL_FORENSICS.md`
+> and `docs/PROJECT_STATUS.md`.
+
 Discovered while running Experiment A (PredCls, GT pairs, raw model) against
 the recovered checkpoint. Not fixed — investigation and specification only,
 per the same STOP discipline as `docs/GT_EXTRACTION_BUG_TRIAGE.md`.
