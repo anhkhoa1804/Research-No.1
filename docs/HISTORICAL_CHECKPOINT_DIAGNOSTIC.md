@@ -36,8 +36,13 @@
 > - **Phase B's core finding stands and is important**: 100% pair-level GT
 >   recovery confirmed the `220c5c2e` GT-extraction fix works on real data.
 > - **Phase H's runtime framing is separately retracted** — the 22,021.6s
->   figure was an artifact of the host sleeping mid-run. Real cost is ~85s
->   fixed + ~11s/image (`runs/runtime_benchmark/`).
+>   figure was an artifact of the host sleeping mid-run. ~~Real cost is ~85s
+>   fixed + ~11s/image (`runs/runtime_benchmark/`).~~ **That replacement
+>   figure is ALSO retracted** (pre-GCP stabilization pass): it came from a
+>   2-point 1-vs-2-image linear fit, which is unsound because per-image cost
+>   scales with object count and that sample was object-light. **Current
+>   measured figure: ~36 s/image marginal, CPU** (`runs/text_path_gate/`,
+>   staged 10→50 images, actively monitored). Full split ≈ 104 h on CPU.
 >
 > `UNKNOWN` (unchanged): whether the historical 22.64% used pooled or
 > image-mean aggregation, and which split it was measured on.

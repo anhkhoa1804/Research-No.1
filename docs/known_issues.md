@@ -82,7 +82,7 @@ weight), **P3** = minor/cosmetic.
   uncalibrated, long-tail-reweighted training objective rather than pure
   index scrambling; only a corrected-vocab re-test can fully separate the
   two.
-- **Status:** confirmed, **not fixed** (explicitly out of scope for the
+- **Status:** ~~confirmed, **not fixed** (explicitly out of scope for the
   diagnostic phase that found it — do not modify `predicates.json` without
   a dedicated, tested fix phase). Two candidate fixes identified but not
   chosen: regenerate the vocab file from `STANDARD_VG150_PREDICATES` inside
@@ -90,7 +90,28 @@ weight), **P3** = minor/cosmetic.
   and fail loudly on mismatch at prepare-time. `configs/predicate_metadata_vg150.json`
   has a related but distinct, non-crashing drift (52 keys, 3 extra/1
   missing relative to the canonical 50) — flagged in an earlier phase,
-  still unfixed, likely worth resolving in the same pass as this one.
+  still unfixed, likely worth resolving in the same pass as this one.~~
+
+  **SUPERSEDED — both are fixed.** The line above was accurate when
+  written and is struck rather than deleted so the decision trail stays
+  readable. The dedicated, tested fix phase it asked for happened, and it
+  chose the *first* of the two candidate fixes:
+  - `9dc8f45d` — `_copy_vocab` now always regenerates the canonical
+    vocabulary from `STANDARD_VG150_PREDICATES`.
+  - `7d91af49` — adds an opt-in `--allow_source_vocab_mismatch` escape
+    hatch for raw archives, so the regeneration fails loudly by default
+    rather than silently accepting a divergent source.
+  - `fa8c0c3b` — `configs/predicate_metadata_vg150.json`'s drift fixed
+    (`wrapped around` entry added).
+  - Regression tests: `tests/test_predicate_vocab.py` (11),
+    `tests/test_predicate_metadata_coverage.py` (3).
+
+  **Re-verified at HEAD `140e163f`** (`VERIFIED FROM DATA`): the on-disk
+  `datasets_vg150_clean/vocabulary/predicates.json` `idx_to_predicate[1..50]`
+  equals `sorted(STANDARD_VG150_PREDICATES)` exactly, **and** equals the
+  independently recovered `frequency_prior.json`'s `predicate_vocab`
+  exactly. It is now hash-pinned at `e4e88e87…d4dc5` and enforced by
+  `tools/gcp_preflight.py`.
 - **Full writeup:** `docs/PREDICATE_VOCAB_INDEX_BUG_TRIAGE.md`,
   `docs/PREDICATE_VOCAB_HISTORICAL_FORENSICS.md`.
 
@@ -134,6 +155,87 @@ weight), **P3** = minor/cosmetic.
   gate means eval runs with calibration genuinely disabled never require
   `train.jsonl` to exist at all. See `tests/test_calibration_prior.py` for
   the 4-invariant regression suite (A/B/C/D per the validity-fix phase).
+
+### Frequency-prior loading fails **silently**, producing an uncalibrated run that looks calibrated — NOT FIXED (newly found, pre-GCP stabilization pass)
+- **File/function:** `openvocab_rel/evals.py`, `_load_frequency_bias`
+  (lines ~1008-1063).
+- **What happens:** the function has **six** separate `return None` exits
+  and **none of them warns**:
+  1. `freq_bias_path` is `""` or the file does not exist (line ~1012)
+  2. the file exists but `json.load` raises — bare `except Exception`
+     (line ~1017)
+  3. `predicate_vocab` is empty (line ~1021)
+  4. `global_log_probs` is not a list, or its length ≠ `len(source_vocab)`
+     (via `remap`, line ~1027)
+
+  A `None` return means "no frequency bias applied". The caller does not
+  distinguish "calibration deliberately off" from "calibration requested
+  but the artifact was unusable".
+- **Why it matters — this is the highest-risk item for the GCP run.** The
+  historical reproduction is defined by
+  `--freq_bias_enabled true --freq_bias_path checkpoints/demo_best/frequency_prior.json
+  --freq_bias_alpha 3.75`. If that ~97 MiB file fails to transfer to the
+  GCP instance, or is truncated mid-copy, or lands at a different path,
+  the evaluation **still runs to completion and still emits a full
+  `metrics.jsonl`** — just silently uncalibrated. Given that the raw
+  uncalibrated text path is already known to score mR@50 ≈ 5.84 %
+  (`runs/text_path_gate/`) versus the historical 22.64 %, this failure
+  mode would manifest as an apparently-clean "failed to reproduce"
+  result. **That is a P1 scientific-validity hazard, not a convenience
+  issue.**
+- **Status: NOT FIXED — deliberately.** Making this fail loud means
+  changing `openvocab_rel/evals.py`, which is frozen for this
+  infrastructure phase (`docs/PROJECT_STATUS.md` §15). Changing a silent
+  `return None` into a raise *is* a behavior change in the failure path
+  and belongs in its own tested fix phase.
+- **Mitigated instead, outside the evaluator** (`VERIFIED FROM TEST`):
+  1. `tools/gcp_preflight.py` verifies the prior's SHA256, that it parses,
+     that `predicate_vocab` has exactly 50 canonical entries, and that
+     `global_log_probs` and a sample of `pair`/`subject`/`object` rows are
+     all length-50 — i.e. it independently checks every condition that
+     would make `_load_frequency_bias` return `None`.
+  2. `tests/test_gcp_preflight.py` pins those conditions against the real
+     function's behavior so the two cannot drift apart.
+  3. `scripts/eval/eval_historical_checkpoint.sh` refuses to launch if the
+     prior file is absent.
+- **How to fix properly later:** raise a dedicated
+  `MissingFrequencyPriorError` (mirroring the existing
+  `MissingTrainStatisticsError` pattern already used in the same file for
+  the analogous train-statistics leak) whenever `freq_bias_enabled=True`
+  and `freq_bias_alpha>0` but the prior cannot be loaded. Add a test
+  asserting each of the four failure conditions raises rather than
+  returning `None`.
+
+### Unknown/misspelled CLI flags are silently swallowed — NOT FIXED (newly found, pre-GCP stabilization pass)
+- **File/function:** `openvocab_rel/train.py`, `main()` line ~1252:
+  `args, _unknown = parser.parse_known_args(argv)`.
+- **What happens:** `parse_known_args` (as opposed to `parse_args`) routes
+  any unrecognized `--flag` into `_unknown`, which is discarded with no
+  warning. **Verified by execution this phase**: passing
+  `--totally_bogus_flag true` produces no error and no output.
+  Downstream, `called_args` (built by scanning `argv` for `--`-prefixed
+  tokens) will contain the bogus name, but both the merge loop and
+  `_reapply_explicit_cli_args` guard on `hasattr(args, key)`, so it has no
+  effect at all.
+- **Why it matters:** the safety of every run against the historical
+  checkpoint rests entirely on explicitly passing ~10 compatibility flags
+  to override `--stage 3`'s defaults. A single typo — `--explicit_spoa_enable`
+  for `--explicit_spoa_enabled` — leaves stage 3's `True` in place, loads
+  the checkpoint into an architecture it was never trained for, and
+  **reports nothing**. There is no runtime signal distinguishing this from
+  a correct run.
+- **Status: NOT FIXED — deliberately.** Switching to `parse_args` would
+  make every currently-working script that passes an extra flag start
+  failing, a broad behavior change well outside this phase's scope.
+- **Mitigated instead** (`VERIFIED FROM TEST`):
+  `tests/test_historical_eval_protocol.py` parses
+  `scripts/eval/eval_historical_checkpoint.sh`, extracts every `--flag` it
+  passes, and asserts each one exists in `build_argparser()`'s namespace
+  **and** is a real `TrainConfig` field. A typo in that script becomes a
+  test failure at commit time instead of a silently-wrong GPU run.
+- **How to fix properly later:** keep `parse_known_args` but log a loud
+  warning listing `_unknown` whenever it is non-empty, or add a
+  `--strict_args` flag that promotes it to an error.
 
 ### SGDet box-preprocessing failure silently uses un-preprocessed boxes — NOT FIXED (newly found this re-audit pass)
 - **File/function:** `openvocab_rel/evals.py`, `_make_detected_example`
@@ -187,6 +289,75 @@ weight), **P3** = minor/cosmetic.
   a matched checkpoint.
 
 ## P2 — Config / script drift
+
+### `--stage 3` unconditionally forces four architecture flags on, after any preset — NOT FIXED (documented; this is a research default)
+- **File:** `openvocab_rel/config.py`, `apply_stage_config`, the
+  unconditional `if int(cfg.stage) == 3:` block at lines ~741-747 (note:
+  this is a *second*, separate block that runs after the main
+  `elif stage == 3` branch).
+- **What happens** (`VERIFIED FROM CODE` + verified by execution):
+  constructing a stage-3 config forces
+  `text_conditioned_projection_enabled=True`, `relationness_enabled=True`,
+  `eval_sgg_use_relationness=True`, `eval_sgg_use_object_uncertainty=True`.
+  Combined with dataclass/branch defaults, a bare `--stage 3` resolves to:
+
+  | Flag | stage-3 resolved value | Safe for the historical checkpoint? |
+  |---|---|---|
+  | `explicit_spoa_enabled` | `True` | **NO** — checkpoint predates SPOA |
+  | `text_conditioned_projection_enabled` | `True` | **NO** — untrained |
+  | `relationness_enabled` | `True` | **NO** — untrained/random |
+  | `eval_sgg_use_relationness` | `True` | **NO** — would prune on random scores |
+  | `eval_sgg_use_object_uncertainty` | `True` | questionable |
+  | `clip_input_res` | `448` | **NO** — checkpoint trained at 336 |
+  | `eval_sgg_predicate_ensemble_alpha` | `0.45` | **NO** — historical is `0.0` |
+  | `eval_sgg_use_gt_pairs` | `False` | **NO** — historical is `True` |
+  | `eval_sgg_grounding_dino_enabled` | `True` | **NO** — pulls a detector needlessly |
+
+- **Why it matters:** these are correct, deliberate defaults *for current
+  Phase 3/4 work* and must not be changed. They are simply wrong for a
+  checkpoint that predates the architecture. Explicit CLI flags do
+  override them — `_reapply_explicit_cli_args` (`train.py:1326`) runs
+  after both `apply_stage_config` and `apply_gpu_preset`, so the override
+  order is sound (`VERIFIED FROM CODE`) — but **only if every single flag
+  is passed**, and see the `parse_known_args` entry above for why a typo
+  is undetectable.
+- **Status: NOT FIXED and must not be "fixed".** Changing any of these
+  defaults is a research change. The mitigation is a dedicated
+  entrypoint, not a default change:
+  `scripts/eval/eval_historical_checkpoint.sh` sets every row of the table
+  explicitly and prints the resolved protocol before launching.
+  `scripts/eval/eval_l4_phase34.sh` is deliberately left **untouched** so
+  the current Phase 3/4 workflow is unaffected.
+
+### Re-running a script silently overwrites the previous run's outputs — NOT FIXED for existing scripts
+- **File:** `scripts/eval/eval_l4_phase34.sh:17` (`OUT_DIR="${OUT_DIR:-runs/${RUN_NAME}}"`),
+  and the same pattern in `scripts/train/train_l4_phase34.sh`.
+- **What happens:** `RUN_NAME` defaults to a fixed string
+  (`eval_l4_phase34`). Re-running without setting it overwrites
+  `runs/eval_l4_phase34/metrics.jsonl` and `logs/eval_l4_phase34.log` in
+  place. Prior results are lost with no prompt or backup.
+- **Status:** not fixed for the existing scripts (changing their output
+  paths would break the current workflow's expectations and any tooling
+  pointed at those fixed paths). **The new
+  `scripts/eval/eval_historical_checkpoint.sh` does not have this
+  problem** — it refuses to start if its target run directory already
+  exists, unless `ALLOW_OVERWRITE=1` is set explicitly.
+
+### `eval_calibration_sweep_l4.sh` hardcodes the frequency-prior path to the wrong root
+- **File:** `scripts/eval/eval_calibration_sweep_l4.sh:34` —
+  `FREQ_BIAS_PATH="${FREQ_BIAS_PATH:-datasets/frequency_prior.json}"`.
+- **What happens:** every other script resolves `DATA_ROOT` dynamically and
+  prefers `datasets_vg150_clean` when it exists; this one hardcodes
+  `datasets/`. It also does not define `DATA_ROOT` at all, so the
+  `FREQ_BIAS_ENABLED=auto` resolution inside `eval_l4_phase34.sh` (which
+  requires `-f "${FREQ_BIAS_PATH}"`) will resolve to `false` whenever the
+  prior only exists under `datasets_vg150_clean/`.
+- **Why it matters:** a calibration *sweep* that silently runs with
+  calibration disabled produces a flat, meaningless sweep — every alpha
+  gives the same answer — and nothing says so. Related to, but distinct
+  from, the `_load_frequency_bias` P1 entry above.
+- **Status:** not fixed (out of scope; touching it would alter an existing
+  workflow). Pass `FREQ_BIAS_PATH=` explicitly when using this script.
 
 ### `use_all_pairs` dataclass default vs. shipped-script default
 - `openvocab_rel/config.py`: dataclass default `True`.

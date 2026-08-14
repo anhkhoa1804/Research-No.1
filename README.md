@@ -41,7 +41,13 @@ The maintained thesis direction is:
 - Use VG150 for main PredCls / GT-pair reporting.
 - Use CORE as a diagnostic benchmark and optional robustness-training ablation, not as a replacement for VG150.
 
-Current local headline PredCls results retained for experiment context:
+**Historical PredCls results, retained for experiment context — `HISTORICAL
+EVIDENCE`, NOT a reproduced baseline.** Every row below comes from external
+runs that this checkout has **never independently reproduced**. They are
+single-source, their evaluation split is `UNKNOWN`, and whether they used
+pooled or per-image-averaged R@K aggregation is also `UNKNOWN`. Do not cite
+any of them as a current result. Current state of record:
+`docs/PROJECT_STATUS.md`.
 
 | Setting | R@50 | mR@50 | Notes |
 | --- | ---: | ---: | --- |
@@ -53,6 +59,8 @@ Current local headline PredCls results retained for experiment context:
 | Prior-only raw e5 | 33.50 | 19.50 | Prior-only reference |
 
 **Important reporting rule:** calibrated scores are system-level evaluation results. They should not be used as evidence that the raw classifier alone learned all tail predicates. These numbers also come from external runs not reproducible from this checkout alone — see `docs/reproducibility.md`.
+
+**What *has* been measured against the one recovered checkpoint, on current code** (all small-sample diagnostics, none a baseline — see `docs/PROJECT_STATUS.md` §10 for the full table): the raw CLIP-text scoring path reaches R@50 = 25.26 % / mR@50 = 5.84 % at n=50 (`runs/text_path_gate/`), and the classifier path reaches 1.41 % / 0.94 % at n=16 because that head is untrained in this checkpoint. **The full historical configuration — text path *plus* the frequency prior at α=3.75 — has never been run at any sample size.** Reproducing it is the next experiment; the protocol is `docs/GCP_EXPERIMENT_PROTOCOL.md`.
 
 ## 3. Current supported experiments
 
@@ -267,12 +275,21 @@ Evaluate a checkpoint:
 CKPT=checkpoints/pure_l4_phase34.pt EVAL_BATCHES=500 bash scripts/eval/eval_l4_phase34.sh
 ```
 
+> **⚠ Do not use `eval_l4_phase34.sh` for the recovered historical checkpoint** (`checkpoints/demo_best/pure_best_adapt_light_mR50.pt`). Its `--stage 3` defaults enable SPOA branches, text-conditioned projection, and the relationness head — none of which that checkpoint has trained weights for — and default to `clip_input_res=448`, `ensemble_alpha=0.45` and all-pairs mode, all of which differ from the historical protocol. Use the dedicated, fully-explicit entrypoint instead:
+>
+> ```bash
+> bash scripts/eval/eval_historical_checkpoint.sh --canary
+> ```
+>
+> Full workflow, including the mandatory preflight and canary gates: **`docs/GCP_EXPERIMENT_PROTOCOL.md`**. Artifact freeze: **`docs/HISTORICAL_CHECKPOINT_MANIFEST.md`**.
+
 Create the standard report card after a run:
 
 ```bash
 python3 tools/model_report_card.py runs/*/metrics.jsonl \
-  --train_jsonl datasets/train.jsonl
+  --train_jsonl datasets_vg150_clean/train.jsonl
 ```
+(Use whichever root you actually ran against — `datasets_vg150_clean` is the maintained one; `datasets` is the older smoke-subset layout.)
 
 Use this report as the accepted summary format for comparing raw classifier, text-only, ensemble, and calibrated score modes. If the metrics include per-predicate recall, the tool also reports head/body/tail mR@50 and worst predicates. `tools/predicate_delta_report.py` compares per-predicate recall between two metric rows.
 

@@ -19,7 +19,12 @@ superseded architecture — `git log` (87 commits) shows this is a
 fast-moving but not yet long-lived project, and these six notes are
 consistently the *current* narrative across that history.
 
-## Known gap: two files referenced elsewhere that don't exist here
+## Known gap: two files referenced elsewhere that don't exist here — RESOLVED in `README.md`
+
+**Status at HEAD `140e163f`:** the dead links are gone from `README.md`
+(`grep`-verified — the only remaining mention is `README.md:23`, which
+explicitly documents the removal). This section is retained as the record
+of *why* those files are absent, not as an open issue.
 
 The root `README.md` (before this cleanup pass) referenced two files that
 were never committed to this repository:

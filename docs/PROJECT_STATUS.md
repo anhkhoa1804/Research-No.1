@@ -9,9 +9,30 @@ Evidence labels used throughout: `VERIFIED FROM CODE`, `VERIFIED FROM
 EXPERIMENT`, `HISTORICAL EVIDENCE` (from a recovered artifact, not
 independently reproduced), `INFERENCE`, `RECOMMENDATION`, `UNKNOWN`.
 
-Last updated: this phase (post GT-extraction fix `220c5c2e`, post
-historical-checkpoint recovery and forensic diagnosis, pre any
-vocabulary fix).
+Last updated: **pre-GCP stabilization phase**, at HEAD
+`140e163faa7c82ac4ea5ee060fdd255235148ec9` (`chore: add GCP evaluation
+preflight`). Working tree clean at the time of writing.
+
+State at this HEAD, in one line each — all `VERIFIED FROM TEST` or
+`VERIFIED FROM CODE` unless marked otherwise:
+
+| Item | State |
+|---|---|
+| GT-extraction fix (`220c5c2e`) | **COMPLETE**, 7 regression tests |
+| Predicate-vocabulary fix (`9dc8f45d`, `7d91af49`) | **COMPLETE**, 11 regression tests |
+| Predicate-metadata fix (`fa8c0c3b`) | **COMPLETE**, 3 regression tests |
+| GCP preflight tool (`tools/gcp_preflight.py`) | **EXISTS** at `140e163f` |
+| Test suite | **97 passing** |
+| Historical checkpoint | recovered, SHA256-tracked (§9) |
+| Frequency prior | recovered, SHA256-tracked (§9) |
+| Scientific baseline | **none exists** (§10) |
+
+> **Retraction notice for readers of earlier revisions of this file.** Three
+> claims previously stated here have been falsified by later evidence and are
+> corrected in place below, with the original claim preserved as struck text:
+> the test count (§7), the runtime figure (§10), and "the text path has not
+> been measured" (§11). None of the *fixes* recorded here were retracted —
+> only the status claims about them.
 
 ## 1. Project purpose
 
@@ -29,9 +50,13 @@ proposed a ranked set of candidate bottlenecks (pair proposal recall,
 predicate classification, long-tail calibration) as *untested hypotheses
 only*. **Nothing in this phase changes or tests that ranking** — this
 phase is entirely validity/infrastructure work, per explicit instruction.
-`RECOMMENDATION`, not yet `VERIFIED FROM EXPERIMENT`: the vocabulary fix
-(§11) must land and be verified before that bottleneck analysis can be
-meaningfully re-attempted.
+~~`RECOMMENDATION`: the vocabulary fix (§11) must land and be verified
+before that bottleneck analysis can be meaningfully re-attempted.~~
+**That precondition is now met** — the vocabulary fix landed
+(`9dc8f45d`, `7d91af49`) and is test-verified. The bottleneck analysis is
+nonetheless still **not** unblocked, for a different reason: no
+trustworthy baseline number exists yet (§10, §11). The gate is now the
+historical reproduction, not the vocabulary.
 
 ## 3. Current architecture
 
@@ -52,10 +77,10 @@ Full architecture detail: `docs/architecture/overview.md`.
 
 ```
 openvocab_rel/{models,datasets}/   core package (untouched this phase)
-configs/                            predicate_metadata_vg150.json (has a known drift, §11), presets.yaml (documentation only, not loaded)
-scripts/{train,eval,notebooks}/     entrypoints
-tools/                               dataset prep, validation, diagnostics
-tests/                               83 passing (§7)
+configs/                            predicate_metadata_vg150.json (drift FIXED, fa8c0c3b), presets.yaml (documentation only, not loaded)
+scripts/{train,eval,notebooks}/     entrypoints; eval_historical_checkpoint.sh is the ONLY safe one for the recovered checkpoint (§15)
+tools/                               dataset prep, validation, diagnostics, gcp_preflight.py, verify_canary.py
+tests/                               97 passing (§7)
 docs/
     architecture/                    overview/training/evaluation/data_flow
     reproducibility.md, known_issues.md   living registers
@@ -63,6 +88,8 @@ docs/
     GT_EXTRACTION_BUG_TRIAGE.md, PREDICATE_VOCAB_INDEX_BUG_TRIAGE.md,
     PREDICATE_VOCAB_HISTORICAL_FORENSICS.md, HISTORICAL_CHECKPOINT_DIAGNOSTIC.md,
     HISTORICAL_CHECKPOINT_PROVENANCE.md    audit/diagnostic reports (see §15 note)
+    HISTORICAL_CHECKPOINT_MANIFEST.md      canonical artifact freeze (§9)
+    GCP_EXPERIMENT_PROTOCOL.md             the exact GCP workflow
 notes/                               historical .tex notes + INDEX.md
 data/{README.md,manifests/}          dataset policy + VG150 manifest + validation report
 runs/                                gitignored — see §5
@@ -106,12 +133,39 @@ derived artifact, never overwritten (not yet needed — the current
 
 ## 7. Current test status
 
-**83 tests passing** (`py -3 -m pytest -q`), `VERIFIED FROM TEST`, most
-recently confirmed this engagement. 7 of the 83 are the GT-extraction
-regression suite (`tests/test_eval_gt_extraction.py`, commit `220c5c2e`).
-No test currently exercises the predicate-vocabulary index-mapping bug
-(§11) — a real coverage gap; a regression test for this should accompany
-whatever fix is eventually chosen.
+~~83 tests passing~~ → **97 tests passing** (`py -3 -m pytest -q`),
+`VERIFIED FROM TEST` at HEAD `140e163f`. The 83 figure was correct when
+first written and was **not updated** as the vocabulary/metadata fixes
+landed; it is corrected here.
+
+Per-file breakdown at this HEAD (`pytest --collect-only -q`):
+
+| File | Tests |
+|---|---:|
+| `test_imports.py` | 17 |
+| `test_config.py` | 14 |
+| `test_pair_construction.py` | 12 |
+| `test_predicate_vocab.py` | 11 |
+| `test_calibration_prior.py` | 7 |
+| `test_eval_gt_extraction.py` | 7 |
+| `test_geometry.py` | 7 |
+| `test_losses.py` | 6 |
+| `test_dataset_loader.py` | 5 |
+| `test_model_forward.py` | 4 |
+| `test_predicate_metadata_coverage.py` | 3 |
+| `test_checkpoint_roundtrip.py` | 2 |
+| `test_report_card_metric_semantics.py` | 2 |
+| **Total** | **97** |
+
+The coverage gap noted in the earlier revision ("no test exercises the
+predicate-vocabulary index-mapping bug") is **closed**:
+`tests/test_predicate_vocab.py` (11 tests) accompanied the `9dc8f45d` /
+`7d91af49` fix, and `tests/test_predicate_metadata_coverage.py` (3)
+accompanied `fa8c0c3b`.
+
+**Remaining coverage gap** (`VERIFIED FROM CODE`): no test exercises the
+full `eval_sgg_standard` pipeline end to end — it needs real CLIP weights
+and network/HF-cache access. See `docs/known_issues.md`.
 
 ## 8. Validity fixes already applied
 
@@ -139,23 +193,81 @@ result (mR@50≈22.64%, `demo_config.env`) is `HISTORICAL EVIDENCE` only —
 single-source, unreproduced, protocol partially unrecoverable (§10).
 **Not yet certified usable or discarded** — blocked on §11.
 
+### Tracked artifact hashes (`VERIFIED FROM DATA`, re-verified at this HEAD)
+
+| Artifact | SHA256 | Size |
+|---|---|---:|
+| `checkpoints/demo_best/pure_best_adapt_light_mR50.pt` | `8845c3af7dc39ad7c4c3aa0ba6dfd064a95d182db30be47cccc5f90f7f0ad442` | 931,057,422 B |
+| `checkpoints/demo_best/frequency_prior.json` | `144d9f928ed9cc213acbe081b1a8791488a92ddab0ed885da7fd6bb6058c6e6a` | 101,944,045 B |
+| `checkpoints/demo_best/demo_config.env` | `c73180698b5b5f6d3a58e5e6b78a39fcb8a81b6250478145d0538a5a107226a6` | 355 B |
+| `datasets_vg150_clean/train.jsonl` | `36bc2923b1a3ddb56e331e9b645607606003bd1c8298d1c950b2cdcca7e31ae5` | — |
+| `datasets_vg150_clean/validation.jsonl` | `4348ddbb3ce85160d0ebc7522634c68f197b0c99906794e0e4731156740f3412` | 10,401 rows |
+| `datasets_vg150_clean/vocabulary/predicates.json` | `e4e88e87c3c26bf65426957ae4028b45f03d33643d5520b6ff9b42b7b60d4dc5` | 50 predicates |
+
+**Frequency-prior structural validation** (`VERIFIED FROM DATA`, this
+phase): `predicate_vocab` has exactly 50 entries and equals
+`sorted(STANDARD_VG150_PREDICATES)`; `global_log_probs` has 50 entries;
+all sampled `pair_log_probs` (74,884), `subject_log_probs` (12,030) and
+`object_log_probs` (9,689) rows are length-50. It is therefore loadable by
+`_load_frequency_bias` without silent degradation — a check that matters
+precisely because that function fails **silently** (see
+`docs/known_issues.md`, P1 register).
+
+**Canonical manifest**: `docs/HISTORICAL_CHECKPOINT_MANIFEST.md` (human)
+and `data/manifests/historical_checkpoint_v1.yaml` (machine-readable) are
+the single source of truth for these artifacts.
+**Preflight enforcement**: `tools/gcp_preflight.py` verifies every hash
+above and refuses to pass on any mismatch.
+
 ## 10. Current evaluation status
 
 The GT-extraction fix is `VERIFIED FROM EXPERIMENT` on real data: a raw
 16-image run against the recovered checkpoint showed **100% pair-level GT
 recovery** at every K, for every predicate including the dominant class
 (`pair_proposal_diag`, `docs/HISTORICAL_CHECKPOINT_DIAGNOSTIC.md` Phase
-B). **End-to-end classifier-based R@K/mR@K is not yet trustworthy** —
-confounded by the predicate-vocabulary bug (§11). No number produced this
-engagement (R@50=1.41%, mR@50=0.94%, n=16) should be cited as a baseline —
-explicitly labeled `historical checkpoint smoke-test diagnostic — NOT A
-RESEARCH BASELINE` in `runs/historical_checkpoint_diagnostic/README.md`.
+B). ~~**End-to-end classifier-based R@K/mR@K is not yet trustworthy** —
+confounded by the predicate-vocabulary bug (§11).~~ **Corrected**: the
+classifier path is untrustworthy *for this checkpoint* because its
+`predicate_classifier` head is untrained — **not** because of the
+vocabulary bug, which is fixed and was never the cause (§11).
 
-**Runtime**: real, actively-measured cost is ~11s/image marginal + ~85s
-fixed setup per `eval_sgg_standard` call, CPU-only, this machine
-(`runs/runtime_benchmark/`, `VERIFIED FROM EXPERIMENT`). The earlier
-22,021.6s/16-image figure was an artifact of the host sleeping mid-run and
-has been retracted as a throughput estimate.
+**No number produced to date is a baseline.** The complete list of
+measurements against this checkpoint, so nothing gets promoted by
+accident:
+
+| Run | n | score path | calibration | R@50 | mR@50 | Status |
+|---|---:|---|---|---:|---:|---|
+| `runs/historical_checkpoint_diagnostic/` | 16 | `classifier` (untrained head) | none | 1.41 % | 0.94 % | diagnostic, misconfigured |
+| `runs/text_path_gate/gate_10.json` | 10 | `ensemble` α=0.0 (pure text) | **none** | 19.71 % | 7.94 % | diagnostic, sample far too small |
+| `runs/text_path_gate/gate_50.json` | 50 | `ensemble` α=0.0 (pure text) | **none** | 25.26 % | 5.84 % | diagnostic, sample far too small |
+| `demo_config.env` self-report | ? | `ensemble` α=0.0 | freq prior α=3.75 | 67.09 % | 22.64 % | `HISTORICAL EVIDENCE`, unreproduced |
+
+Every row above is explicitly labeled NOT A RESEARCH BASELINE in its own
+run directory's `README.md`. The historical row is **single-source and
+unreproduced**; its split and its pooled-vs-image-mean aggregation are both
+`UNKNOWN`.
+
+**Runtime** — ~~real, actively-measured cost is ~11s/image marginal + ~85s
+fixed setup (`runs/runtime_benchmark/`)~~ **RETRACTED**. That figure came
+from a 2-point (1-vs-2-image) linear fit, which is unsound: per-image cost
+scales with *object count* (per-object CLIP classification with prompt
+ensembling), and the 2-image sample was object-light.
+
+**Current measured figure** (`VERIFIED FROM EXPERIMENT`,
+`runs/text_path_gate/`, staged 10→50 images, actively monitored, no host
+sleep): **~36 s/image marginal, CPU-only, this machine.**
+
+| Stage | images | `eval_sgg_standard` | s/image |
+|---|---:|---:|---:|
+| 1 | 10 | 687 s | 68.7 (cold CLIP-object cache) |
+| 2 | 50 | 2,121 s | 42.4 |
+| marginal 10→50 | 40 | 1,434 s | **35.8** |
+
+Extrapolated CPU cost: 200 images ≈ 2 h, 1,000 ≈ 10 h, the full
+10,401-image validation split ≈ **104 h (~4.3 days)**. **A GPU is required
+for any full-split run** — this is the single hardest constraint driving
+the GCP decision. The separately-retracted 22,021.6s/16-image figure (host
+slept mid-run) remains retracted.
 
 ## 11. Known blockers
 
@@ -181,13 +293,55 @@ dataset, nor the evaluator was at fault.
 
 **Open blockers:**
 
-1. **The text path has not yet been measured** — no run has used the
-   historical scoring configuration. Until it is, no baseline exists.
-2. **Do not use the classifier path with this checkpoint** for any research
+1. ~~**The text path has not yet been measured** — no run has used the
+   historical scoring configuration.~~ **RETRACTED — the raw text path
+   HAS been measured.** `runs/text_path_gate/` (commit `439d1319`,
+   CPU, `datasets_vg150_clean` validation split) ran
+   `score_mode=ensemble` / `ensemble_alpha=0.0` / `use_gt_pairs=true` at
+   10 and 50 images, and *proved* the text path was actually taken rather
+   than assuming it: `_relation_predicate_logits` was wrapped and compared
+   against a pure text-only reference, giving
+   `max_abs_diff_vs_text_only = 0.0` and `classifier_used = false` at both
+   stages. `VERIFIED FROM EXPERIMENT`.
+
+   | Metric | 10 img | 50 img |
+   |---|---:|---:|
+   | R@50 | 19.71 % | **25.26 %** |
+   | mR@50 | 7.94 % | **5.84 %** |
+   | `image_mean_R@50` | 23.30 % | 22.55 % |
+   | head / body / tail mR@50 | 37.73 / 0 / 0 | 29.22 / 0 / 0 |
+   | `gt_pair_recall@32` | 1.0 | 1.0 |
+
+   Versus the classifier path: R@50 **1.41 % → 25.26 %**, mR@50
+   **0.94 % → 5.84 %**. This corroborates the scoring-path diagnosis above
+   from a second direction.
+
+2. **What remains genuinely unmeasured — this is the real open blocker.**
+   The text-path gate deliberately ran **raw and uncalibrated**
+   (`freq_bias_enabled=false`), but `demo_config.env` records
+   `FREQ_BIAS_ALPHA=3.75` and `MODEL_NOTE=... calibrated with frequency
+   prior alpha 3.75`. **No run has yet used the full historical
+   configuration** (text path **+** pair-conditioned frequency prior at
+   α=3.75), on any sample size. The gate's mR@50 = 5.84 % is therefore
+   **not comparable** to the historical mR@50 = 22.64 %, and neither
+   number is a baseline. Closing this gap is exactly what the GCP run
+   exists to do — see `docs/GCP_EXPERIMENT_PROTOCOL.md`.
+
+   `INFERENCE`, not established: the gate's predicate distribution
+   collapsed onto two classes (`in` 334 + `has` 201 = 93 % of predictions
+   at 50 images) while GT is dominated by `on`/`has`/`in`/`wearing` —
+   consistent with an uncalibrated CLIP text-cosine scorer, and precisely
+   the failure mode a pair-conditioned frequency prior exists to correct.
+   Untested; do **not** treat as established.
+
+3. **Do not use the classifier path with this checkpoint** for any research
    claim; it measures untrained weights. `RECOMMENDATION`.
-3. Everything in `docs/known_issues.md`'s P1/P2 register (role-swap
-   fabricated split, SGDet box-preprocessing silent fallback, `use_all_pairs`
-   script-vs-default drift, etc.) — unchanged, still open.
+4. **Sample size.** Both measured points (10, 50 images) are far too small
+   for a research claim. The full split is 10,401 images.
+5. Everything in `docs/known_issues.md`'s P1/P2 register (role-swap
+   fabricated split, SGDet box-preprocessing silent fallback, the
+   frequency-prior silent-fallback gap, `use_all_pairs` script-vs-default
+   drift, etc.) — unchanged, still open.
 
 ## 12. Known research issues
 
@@ -215,30 +369,62 @@ hypothesis set — see §2.
 
 ## 14. Next recommended experiments (ranked, none executed this phase)
 
-1. **Corrected-vocabulary micro-verification** — regenerate (or override)
-   the predicate vocabulary to match `sorted(STANDARD_VG150_PREDICATES)`
-   (directly corroborated by `frequency_prior.json`, §11) and re-run the
-   *exact same* 1-2 image benchmark shape already proven fast and reliable
-   (`runs/runtime_benchmark/`). Cheapest possible test of the dominant
-   open hypothesis. Not yet authorized/run.
-2. Scale to a larger (but still CPU-tractable, actively-monitored — not
-   unattended-overnight) PredCls+GT-pairs smoke sample once #1 resolves,
-   to get a real, trustworthy raw baseline number.
-3. Only after a trustworthy raw baseline exists: attempt to reproduce
-   (not assume) the historical ensemble+calibrated 22.64% configuration.
-4. Only after both of the above: resume the research-bottleneck analysis
-   with real, current-code measurements instead of the prior phase's
-   untested hypothesis ranking.
+Items 1 and 2 of the earlier revision's list are **DONE** and are struck
+below rather than deleted, so the reasoning chain stays legible:
+
+1. ~~**Corrected-vocabulary micro-verification**~~ — **DONE**. The
+   vocabulary fix landed (`9dc8f45d`, `7d91af49`) and
+   `runs/text_path_gate/` re-ran against it.
+2. ~~Scale to a larger CPU-tractable smoke sample~~ — **DONE** at n=50
+   (`runs/text_path_gate/gate_50.json`). Outcome: the raw *text* path is
+   healthy (R@50 25.26 %) but uncalibrated mR@50 is poor (5.84 %,
+   body/tail both 0).
+
+**Remaining, ranked:**
+
+1. **Historical-configuration canary** — the full historical protocol
+   (text path **+** frequency prior α=3.75) on **2 batches**, on GPU.
+   Cheap, fast, and the only outstanding *configuration* question. Gated by
+   `scripts/eval/eval_historical_checkpoint.sh` +
+   `tools/verify_canary.py`. **This is the immediate next action.**
+2. **Full-split historical reproduction** — same protocol, all 10,401
+   validation images, on GPU. Produces the first number that could
+   legitimately be compared against the historical 67.09 / 22.64. Must not
+   start until the canary passes.
+3. Only after #2: decide whether the historical result **reproduces**,
+   **partially reproduces**, or **fails to reproduce** — and record that
+   verdict here. Each outcome implies a different research path; do not
+   pre-commit to one.
+4. Only after #3: resume the research-bottleneck analysis with real,
+   current-code measurements instead of the prior phase's untested
+   hypothesis ranking.
 
 ## 15. What must NOT be changed casually
 
 - `checkpoints/demo_best/*` — never modify, convert, or delete. Historical
   evidence, not a working artifact.
-- `datasets_vg150_clean/vocabulary/predicates.json` — confirmed wrong
-  (§11), but **do not patch it outside a dedicated, tested fix phase**;
-  it's shared infrastructure and any fix needs its own regression test
-  proving old-broken/new-correct, matching this project's established
-  fix discipline.
+- ~~`datasets_vg150_clean/vocabulary/predicates.json` — confirmed wrong
+  (§11), but **do not patch it outside a dedicated, tested fix phase**~~
+  **SUPERSEDED — the fix landed.** The dedicated, tested fix phase this
+  entry asked for happened (`9dc8f45d`, `7d91af49`, 11 regression tests in
+  `tests/test_predicate_vocab.py`). The on-disk file is now canonical:
+  re-verified this phase that its `idx_to_predicate[1..50]` equals
+  `sorted(STANDARD_VG150_PREDICATES)` exactly, and equals the recovered
+  `frequency_prior.json`'s own `predicate_vocab` exactly
+  (`VERIFIED FROM DATA`). It is now hash-pinned
+  (`e4e88e87…d4dc5`) and checked by `tools/gcp_preflight.py`. **What must
+  not change now is the opposite of the original warning**: do not
+  regenerate this file with a different ordering, or the recovered
+  checkpoint's index mapping and the frequency prior both break.
+- **The historical checkpoint's compatibility overrides** — every flag
+  listed in `docs/HISTORICAL_CHECKPOINT_MANIFEST.md` must be passed
+  explicitly on every run against that checkpoint. `--stage 3` alone
+  silently forces `relationness_enabled`,
+  `text_conditioned_projection_enabled`, `eval_sgg_use_relationness` and
+  `eval_sgg_use_object_uncertainty` to `True`, none of which this
+  checkpoint has trained weights for (`VERIFIED FROM CODE`,
+  `config.py:741-747`). Use `scripts/eval/eval_historical_checkpoint.sh`,
+  which sets all of them explicitly — never `eval_l4_phase34.sh`.
 - The GT-extraction fix (`220c5c2e`) and its 7 regression tests — do not
   revert or weaken; directly verified against real data this phase.
 - `openvocab_rel/**` model/loss/eval-metric logic — frozen for this entire
@@ -250,12 +436,40 @@ hypothesis set — see §2.
 | Area | Status | Confidence | Notes |
 |---|---|---|---|
 | Code imports | Clean | `VERIFIED FROM TEST` | `import openvocab_rel` + full suite pass |
-| Tests | 83 passing | `VERIFIED FROM TEST` | includes 7 GT-extraction regression tests |
-| Dataset preparation | Clean, validated | `VERIFIED FROM DATA` | 0 integrity issues found independently; predicate vocab *content* filtering is separately correct, only the *index* file is wrong (§11) |
+| Tests | **97 passing** | `VERIFIED FROM TEST` | at HEAD `140e163f`; was 83 before the vocab/metadata fix suites landed |
+| Dataset preparation | Clean, validated | `VERIFIED FROM DATA` | 0 integrity issues; predicate vocab file **now canonical and hash-pinned** |
 | Checkpoint | Loads, compatibility understood | `VERIFIED FROM EXPERIMENT` | 59/0 missing/unexpected, all traced safe |
+| Checkpoint integrity | SHA256-pinned | `VERIFIED FROM DATA` | `8845c3af…ad442`, re-verified at this HEAD |
+| Frequency prior | SHA256-pinned + structurally validated | `VERIFIED FROM DATA` | `144d9f92…c6e6a`; 50-predicate vocab == canonical; all arrays length-50 |
 | GT extraction | Fixed and verified on real data | `VERIFIED FROM EXPERIMENT` | 100% pair recovery observed post-fix |
-| Predicate vocabulary | **Fixed** (`9dc8f45d`, `7d91af49`) | `VERIFIED FROM TEST` | canonical vocab always regenerated; was *not* the cause of the 0.94% collapse (see below) |
+| Predicate vocabulary | **Fixed** (`9dc8f45d`, `7d91af49`) | `VERIFIED FROM TEST` | canonical vocab always regenerated; was *not* the cause of the 0.94% collapse |
 | Predicate metadata | **Fixed** (`fa8c0c3b`) | `VERIFIED FROM TEST` | `wrapped around` entry added; diagnostic-only impact |
 | Classifier scoring head | **Untrained in the recovered checkpoint** | `VERIFIED FROM CHECKPOINT` | weight norms match fresh init; use the **text path** for this checkpoint |
+| Raw text scoring path | **Measured** (n=10, n=50) | `VERIFIED FROM EXPERIMENT` | R@50 25.26 % @ n=50, text path *proven* taken; sample far too small for a claim |
+| Full historical protocol (text + α=3.75 prior) | **NOT measured at any n** | `UNKNOWN` | the single outstanding configuration question; what the GCP run exists to answer |
 | Evaluation baseline | **None exists yet** | — | do not cite any number produced so far as a baseline |
+| GCP preflight | Implemented + tested | `VERIFIED FROM TEST` | `tools/gcp_preflight.py` |
+| Canary workflow | Implemented + tested | `VERIFIED FROM TEST` | `scripts/eval/eval_historical_checkpoint.sh` + `tools/verify_canary.py`; **not yet executed on GPU** |
 | Training reproducibility | Partial | `INFERENCE`/`UNKNOWN` | code yes, checkpoint/dataset/vocab provenance no |
+
+### What is verified vs. inferred vs. unknown — explicit split
+
+**`VERIFIED`** (reproducible from this checkout or from a hash check):
+the three fixes and their 97 tests; all six artifact hashes; the
+frequency prior's structure; the checkpoint's 59/0 key delta; the
+classifier head being at/near random init; the text path being the one
+actually taken in `runs/text_path_gate/`; ~36 s/image CPU cost; that
+`--stage 3` forces four architecture flags on.
+
+**`INFERENCE`** (reasoned, not proved): the training commit point estimate
+`2b7ba82f` (the *bounded range* `[5ed4e429, 215fd6d0)` is verified); that
+`frequency_prior.json` is train-derived; that the checkpoint file was
+manually renamed into `demo_best/`; that the gate's two-class predicate
+collapse is a calibration artifact.
+
+**`UNKNOWN`**: whether the historical 22.64 % used pooled or image-mean
+aggregation; which split it was measured on; how many images it covered;
+whether it reproduces at all. **The GCP run resolves the last of these
+and only the last** — the first three may remain permanently unknown, and
+a mismatch on any of them is a legitimate explanation for a failed
+reproduction that must not be mistaken for a model defect.

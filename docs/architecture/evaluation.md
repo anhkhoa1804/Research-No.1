@@ -71,8 +71,26 @@ There is a second, standalone function (`eval_swap_consistency`) with a
 known bug in its symmetric/asymmetric split — see `docs/known_issues.md`,
 not fixed in this pass.
 
+## Frequency-prior calibration loads silently — read before trusting a calibrated number
+
+`_load_frequency_bias` returns `None` (meaning "no calibration applied")
+on **six** distinct failure conditions — missing path, nonexistent file,
+unparseable JSON, empty `predicate_vocab`, and wrong-length probability
+arrays — and **warns on none of them**. A run configured with
+`--freq_bias_enabled true --freq_bias_alpha 3.75` against a missing or
+truncated prior therefore completes normally and emits a full
+`metrics.jsonl` that is silently uncalibrated.
+
+This is a registered **P1** issue (`docs/known_issues.md`), deliberately
+not fixed in the evaluator. Verify the prior *before* the run instead:
+`python tools/gcp_preflight.py` checks its hash and every structural
+condition the loader silently tolerates.
+
 ## Where to read more
 
 - `docs/architecture/overview.md` — model architecture this pipeline scores
 - `docs/architecture/data_flow.md` — end-to-end tensor flow for evaluation
 - `docs/known_issues.md` — every gap/bug found in this pipeline, not fixed here
+- `docs/GCP_EXPERIMENT_PROTOCOL.md` — the safe protocol for evaluating the
+  recovered historical checkpoint, and why `eval_l4_phase34.sh` is unsafe
+  for it
