@@ -572,3 +572,72 @@ files). Fixed in this cleanup pass by removing the dead links from
 `README.md` (see the README changelog note at the top of that file) — the
 underlying content those files were meant to hold was never fabricated or
 recreated, since that would misrepresent what actually exists.
+
+---
+
+# Static safety audit — pre-GCP stabilization pass
+
+Repo-wide audit performed before the first serious GCP experiment, at HEAD
+`140e163f`. Findings are listed with severity; **nothing research-level was
+fixed in that pass**, by instruction. Entries marked *fixed* were
+infrastructure-only.
+
+Severity: **P0** invalid result / scientific correctness · **P1** serious
+correctness or dangerous execution · **P2** reproducibility, config or
+documentation drift · **P3** cosmetic / dead weight.
+
+## Summary table
+
+| # | Severity | Finding | Status |
+|---|:---:|---|---|
+| A1 | **P1** | `_load_frequency_bias` returns `None` on six conditions, silently → run completes **uncalibrated** while reporting normally | **NOT FIXED** (evaluator frozen); gated by preflight + canary + tests |
+| A2 | **P1** | `parse_known_args` silently discards unknown flags → a typo'd compatibility flag leaves a stage-3 default active with no runtime signal | **NOT FIXED** (would break existing scripts); gated by `tests/test_historical_eval_protocol.py` |
+| A3 | **P1** | `--stage 3` forces 4 architecture flags on, plus `clip_input_res=448`, `alpha=0.45`, `gt_pairs=false`, `grounding_dino=true` | **NOT FIXED and must not be** — these are correct research defaults; mitigated by a dedicated entrypoint |
+| A4 | **P1** | `_make_detected_example` silently substitutes un-preprocessed boxes on SGDet preprocessing failure | **NOT FIXED** (pre-existing, registered above) |
+| A5 | **P1** | `eval_swap_consistency` reports a fabricated symmetric/asymmetric split | **NOT FIXED** (pre-existing, registered above) |
+| A6 | **P2** | Fixed `RUN_NAME` defaults → re-running silently overwrites a previous run's `metrics.jsonl` and log | **NOT FIXED** for existing scripts; the new entrypoint refuses to overwrite |
+| A7 | **P2** | `eval_calibration_sweep_l4.sh` hardcodes `FREQ_BIAS_PATH=datasets/frequency_prior.json`, ignoring `DATA_ROOT` → a calibration sweep can silently run uncalibrated | **NOT FIXED** (would alter an existing workflow) |
+| A8 | **P2** | `PROJECT_STATUS.md` test count stale (83 vs 97) | **FIXED** |
+| A9 | **P2** | `~11 s/image` runtime figure was an unsound 2-point fit | **RETRACTED**, replaced with measured ~36 s/image |
+| A10 | **P2** | "text path has not been measured" was false | **RETRACTED**; precise remaining gap documented instead |
+| A11 | **P2** | `predicates.json` described as "confirmed wrong, do not patch" long after the fix landed | **FIXED** (superseded, re-verified from data) |
+| A12 | **P2** | `known_issues.md` P0 vocab entry header said FIXED while its body said "not fixed" | **FIXED** |
+| A13 | **P2** | `README.md` headline table presented historical numbers as "Current" | **FIXED** (relabelled `HISTORICAL EVIDENCE`) |
+| A14 | **P3** | `README.md` report-card example pointed at `datasets/train.jsonl` rather than the maintained root | **FIXED** |
+| A15 | **P3** | Shell wrappers write `logs/<run>.log` outside `runs/` | **NOT FIXED**; harmless (`*.log` is gitignored) and the new entrypoint writes `run.log` inside its run directory |
+| A16 | **P3** | `kaggle-pure-full-train.ipynb` prints a reference to `scripts/run_h200.sh`, which does not exist | **NOT FIXED** (printed text only, registered above) |
+
+## Checks performed that found nothing
+
+Recorded so a future audit knows these were actually looked at, not skipped:
+
+- **Hardcoded absolute/local paths** — repo-wide grep for `[A-Z]:\`,
+  `/home/<user>/`, `/content/`, `/kaggle/`: **no matches** outside the
+  Kaggle notebook, where they are appropriate.
+- **Accidental dataset or checkpoint tracking** — `git ls-files` matched
+  no path under `datasets/`, `checkpoints/`, `runs/`, or `logs/`, and no
+  tracked `*.pt`/`*.pth`/`*.ckpt`/`*.h5`/`*.parquet`. The only tracked
+  `*.jsonl` files are the two tiny synthetic fixtures under
+  `tests/fixtures/tiny_vg150/`.
+- **Tracked large files** — only `openvocab_rel/evals.py` (162 KB) and
+  `openvocab_rel/train.py` (160 KB) exceed 100 KB; both are source.
+- **`.gitignore` correctness** — all output/data patterns are
+  root-anchored (`/runs/`, `/checkpoints/`, `/datasets/`,
+  `/datasets_vg150_clean/`), so they cannot accidentally match the tracked
+  `openvocab_rel/datasets/` subpackage.
+- **Broken file references** — every `scripts/…`, `tools/…`, `docs/…`,
+  `data/…`, `configs/…`, `tests/…` path referenced from `README.md`,
+  `docs/*.md` or any shell script resolves to an existing file. The three
+  apparent exceptions (`notes/breakthrough_branch_plan.md`,
+  `notes/pure_conference_upgrade_roadmap.md`, `scripts/run_h200.sh`) are
+  references *documenting that those files do not exist*, not dead links.
+- **CLI flags parsed but ignored / overridden after parsing** — the
+  merge order in `train.py` `main()` was traced and verified:
+  `apply_stage_config` → explicit-CLI merge → `apply_gpu_preset` →
+  `_reapply_explicit_cli_args` (line ~1326, runs last). Explicit CLI flags
+  therefore win over both stage and GPU presets. Confirmed by replaying
+  the historical protocol through that exact sequence: all 23 checked
+  settings resolve correctly. The one real hazard is flag *names*, not
+  precedence — see A2.
+- **`negative_pair_ratio` / `use_rfs` inertness** — unchanged since the
+  earlier pass; both already warn loudly. No new instances found.

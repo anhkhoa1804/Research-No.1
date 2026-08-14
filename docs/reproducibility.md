@@ -130,6 +130,58 @@ stable across dataset backends). This is a genuine existing strength of the
 codebase, not something added by this cleanup pass — it's documented here,
 not reimplemented.
 
+## 9a. The historical checkpoint reproduction — tracked vs. external
+
+The one experiment this repository is currently organised around is
+reproducing the recovered historical checkpoint's self-reported result.
+Its artifact split is worth stating explicitly, because **`git clone`
+does not give you a runnable experiment**:
+
+**TRACKED (you get these from git):**
+
+| | |
+|---|---|
+| code | `openvocab_rel/**` |
+| tools | `tools/**` — including `gcp_preflight.py`, `verify_canary.py` |
+| tests | `tests/**` — 184 tests, none needing external data |
+| scripts | `scripts/**` — including `eval/eval_historical_checkpoint.sh` |
+| configs | `configs/**` |
+| manifests | `data/manifests/**` — including `historical_checkpoint_v1.yaml` |
+| docs | `docs/**` |
+
+**EXTERNAL (must be transferred out of band — 1.20 GiB plus images):**
+
+| Artifact | Size | Required |
+|---|---:|:---:|
+| `checkpoints/demo_best/pure_best_adapt_light_mR50.pt` | 931,057,422 B | ✅ |
+| `checkpoints/demo_best/frequency_prior.json` | 101,944,045 B | ✅ |
+| `checkpoints/demo_best/demo_config.env` | 355 B | — |
+| `datasets_vg150_clean/train.jsonl` | 230,887,586 B | ✅ |
+| `datasets_vg150_clean/validation.jsonl` | 28,950,612 B | ✅ |
+| `datasets_vg150_clean/vocabulary/predicates.json` | 1,124 B | ✅ |
+| `datasets_vg150_clean/vocabulary/objects.json` | 3,056 B | — |
+| `datasets_vg150_clean/images/` | ~14.6 GB, 108,249 files | ✅ |
+| CLIP `openai/clip-vit-large-patch14-336` | — | fetched from HF at runtime |
+| Grounding-DINO | — | **not needed** (detector disabled) |
+
+Two non-obvious points:
+
+- **`train.jsonl` is required even for an eval-only run.** With
+  `adaptive_calibration_enabled=true`, `_predicate_log_prior_for_eval`
+  reads train-split statistics at evaluation time and (since `65686b5f`)
+  raises `MissingTrainStatisticsError` rather than silently falling back
+  to the split being scored.
+- **`images/` is an NTFS junction on the Windows source machine**, not a
+  copy. An archive that does not follow it yields an empty directory,
+  every image silently degrades to a gray placeholder, and the run
+  completes reporting meaningless numbers. Verify file counts on the
+  target — `tools/gcp_preflight.py` does this.
+
+Every hash and expected count lives in
+`data/manifests/historical_checkpoint_v1.yaml` and is enforced by
+`python tools/gcp_preflight.py --strict`. Full workflow:
+**`docs/GCP_EXPERIMENT_PROTOCOL.md`**.
+
 ## 10. What is intentionally not stored in Git, and why
 
 Datasets, pretrained/fine-tuned weights, checkpoints, caches, run logs, and

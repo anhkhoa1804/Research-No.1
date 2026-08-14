@@ -21,8 +21,9 @@ State at this HEAD, in one line each — all `VERIFIED FROM TEST` or
 | GT-extraction fix (`220c5c2e`) | **COMPLETE**, 7 regression tests |
 | Predicate-vocabulary fix (`9dc8f45d`, `7d91af49`) | **COMPLETE**, 11 regression tests |
 | Predicate-metadata fix (`fa8c0c3b`) | **COMPLETE**, 3 regression tests |
-| GCP preflight tool (`tools/gcp_preflight.py`) | **EXISTS** at `140e163f` |
-| Test suite | **97 passing** |
+| GCP preflight tool (`tools/gcp_preflight.py`) | **EXISTS**, hardened + tested |
+| Canary workflow | **EXISTS**, tested, **not yet executed on GPU** |
+| Test suite | **184 passing** (97 at `140e163f` + 87 infrastructure) |
 | Historical checkpoint | recovered, SHA256-tracked (§9) |
 | Frequency prior | recovered, SHA256-tracked (§9) |
 | Scientific baseline | **none exists** (§10) |
@@ -80,7 +81,7 @@ openvocab_rel/{models,datasets}/   core package (untouched this phase)
 configs/                            predicate_metadata_vg150.json (drift FIXED, fa8c0c3b), presets.yaml (documentation only, not loaded)
 scripts/{train,eval,notebooks}/     entrypoints; eval_historical_checkpoint.sh is the ONLY safe one for the recovered checkpoint (§15)
 tools/                               dataset prep, validation, diagnostics, gcp_preflight.py, verify_canary.py
-tests/                               97 passing (§7)
+tests/                               184 passing (§7)
 docs/
     architecture/                    overview/training/evaluation/data_flow
     reproducibility.md, known_issues.md   living registers
@@ -155,7 +156,20 @@ Per-file breakdown at this HEAD (`pytest --collect-only -q`):
 | `test_predicate_metadata_coverage.py` | 3 |
 | `test_checkpoint_roundtrip.py` | 2 |
 | `test_report_card_metric_semantics.py` | 2 |
-| **Total** | **97** |
+| **Subtotal at `140e163f`** | **97** |
+
+The pre-GCP stabilization pass added 87 infrastructure regression tests
+(no research behavior asserted anywhere in them):
+
+| File | Tests | Guards |
+|---|---:|---|
+| `test_canary_verifier.py` | 39 | every frozen protocol setting is individually enforced; the verifier never judges metric quality |
+| `test_gcp_preflight.py` | 25 | artifact/dataset/vocabulary/prior/image failure modes; no hardcoded hashes; the historical claim is never labelled a baseline |
+| `test_historical_eval_protocol.py` | 23 | every script flag exists in the argparser and resolves correctly through all presets |
+| **Total** | **184** | |
+
+None of the 184 requires the checkpoint, the dataset, a GPU, or network
+access — all of which are absent from a fresh clone.
 
 The coverage gap noted in the earlier revision ("no test exercises the
 predicate-vocabulary index-mapping bug") is **closed**:
@@ -436,7 +450,7 @@ below rather than deleted, so the reasoning chain stays legible:
 | Area | Status | Confidence | Notes |
 |---|---|---|---|
 | Code imports | Clean | `VERIFIED FROM TEST` | `import openvocab_rel` + full suite pass |
-| Tests | **97 passing** | `VERIFIED FROM TEST` | at HEAD `140e163f`; was 83 before the vocab/metadata fix suites landed |
+| Tests | **184 passing** | `VERIFIED FROM TEST` | 97 at `140e163f` (was documented as 83) + 87 infrastructure tests this pass |
 | Dataset preparation | Clean, validated | `VERIFIED FROM DATA` | 0 integrity issues; predicate vocab file **now canonical and hash-pinned** |
 | Checkpoint | Loads, compatibility understood | `VERIFIED FROM EXPERIMENT` | 59/0 missing/unexpected, all traced safe |
 | Checkpoint integrity | SHA256-pinned | `VERIFIED FROM DATA` | `8845c3af…ad442`, re-verified at this HEAD |
