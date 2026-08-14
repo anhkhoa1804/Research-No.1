@@ -110,6 +110,8 @@ artifacts:
   dataset_train:
     path: datasets_vg150_clean/train.jsonl
     sha256: 36bc2923b1a3ddb56e331e9b645607606003bd1c8298d1c950b2cdcca7e31ae5
+    size_bytes: 230887586
+    rows: 83249                    # images, not relationships (1,046,427 of those)
     tracked_in_git: false
     required: true
     required_reason: >
@@ -120,9 +122,25 @@ artifacts:
   dataset_validation:
     path: datasets_vg150_clean/validation.jsonl
     sha256: 4348ddbb3ce85160d0ebc7522634c68f197b0c99906794e0e4731156740f3412
+    size_bytes: 28950612
     rows: 10401
     tracked_in_git: false
     required: true
+
+  images:
+    path: datasets_vg150_clean/images
+    tracked_in_git: false
+    required: true
+    # Standard Visual Genome layout: images live in two subdirectories, not
+    # flat at the root. A flat scan of `images/` sees 2 entries, not 108k.
+    layout: nested
+    subdirs:
+      VG_100K: 64346
+      VG_100K_2: 43903
+    total_files: 108249
+    source_machine_note: >
+      On the local Windows machine this path is an NTFS junction to
+      datasets/vg_raw/images (LinkType=Junction), NOT a copy.
 
   predicate_vocabulary:
     path: datasets_vg150_clean/vocabulary/predicates.json
