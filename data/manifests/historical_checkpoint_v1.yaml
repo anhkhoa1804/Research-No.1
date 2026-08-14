@@ -1,0 +1,375 @@
+# Canonical artifact freeze for the recovered historical checkpoint.
+#
+# Machine-readable counterpart to docs/HISTORICAL_CHECKPOINT_MANIFEST.md.
+# tools/gcp_preflight.py reads this file and enforces every hash, count and
+# structural expectation in it. If you change a value here, the preflight
+# starts demanding the new value -- so treat this file as the single source
+# of truth and never edit it to make a failing check pass.
+#
+# NONE of the artifacts described here are tracked in git. They are all
+# gitignored (/checkpoints/, /datasets_vg150_clean/) and must be transferred
+# to any new machine out of band -- see `transfer` below. `git clone` alone
+# is NOT sufficient to run this experiment.
+
+schema_version: 1
+manifest_id: historical_checkpoint_v1
+
+# ---------------------------------------------------------------------------
+# 1. Provenance -- what this checkpoint is and where it came from
+# ---------------------------------------------------------------------------
+provenance:
+  recovered_from: local filesystem, checkpoints/demo_best/
+  file_mtime_all_three: "2026-05-27 08:30"
+  # VERIFIED FROM GIT HISTORY: bounded, not pinned.
+  training_commit_range: "[5ed4e429, 215fd6d0)"     # 2026-05-23 .. 2026-06-13
+  training_commit_point_estimate: 2b7ba82f          # INFERENCE only, do not treat as fact
+  training_commit_evidence:
+    lower_bound: >
+      5ed4e429 is the commit that ADDS adaptive_calibration_enabled; the
+      checkpoint's embedded cfg has it True, so training is at or after it.
+    upper_bound: >
+      215fd6d0 is the only commit that adds the "experiment" key to saved
+      checkpoints, and it has been present unchanged ever since. This
+      checkpoint has no "experiment" key, so training is strictly before it.
+  embedded_run_name: core_l3_balanced_adapt_light
+  embedded_save_path: checkpoints/core_l3_balanced_adapt_light.pt
+  filename_mismatch_note: >
+    The file is named pure_best_adapt_light_mR50.pt but its embedded cfg
+    says core_l3_balanced_adapt_light.pt. INFERENCE: manually copied and
+    renamed into a curated demo_best/ folder. Content is ground truth,
+    not the filename.
+  lineage_predecessor: checkpoints/l3_counterfactual_recovery_l4_best_mR50.pt
+  lineage_predecessor_status: >
+    Does not exist anywhere on this machine. Only the final adapt_light
+    checkpoint was recovered, not its training lineage. This checkpoint was
+    NOT trained from scratch (resume=True, reset_epoch=True, so epoch=5 is
+    this run's local count).
+  embedded_epoch: 5
+  embedded_config_fields: 174
+  reproducible: false
+  reproducible_reason: >
+    Training commit is bounded not pinned; the original dataset preparation,
+    alias-map version and vg150_root='datasets' corpus no longer exist on
+    this machine. Treat the .pt file as irreplaceable historical evidence,
+    not a regenerable artifact.
+
+# ---------------------------------------------------------------------------
+# 2. Artifacts -- every hash the preflight enforces
+# ---------------------------------------------------------------------------
+artifacts:
+  checkpoint:
+    path: checkpoints/demo_best/pure_best_adapt_light_mR50.pt
+    sha256: 8845c3af7dc39ad7c4c3aa0ba6dfd064a95d182db30be47cccc5f90f7f0ad442
+    size_bytes: 931057422
+    tracked_in_git: false
+    required: true
+    notes: >
+      ~888 MiB: 79.9M-parameter model (192 tensors) plus full AdamW
+      optimizer state (179 entries, 2 param groups) plus AMP GradScaler
+      state. Never modify, convert or delete. If a compatibility conversion
+      is ever needed, preserve this original alongside the derived artifact.
+
+  frequency_prior:
+    path: checkpoints/demo_best/frequency_prior.json
+    sha256: 144d9f928ed9cc213acbe081b1a8791488a92ddab0ed885da7fd6bb6058c6e6a
+    size_bytes: 101944045
+    tracked_in_git: false
+    required: true
+    notes: >
+      ~97 MiB full pair/subject/object-conditioned frequency table, NOT a
+      small 50-entry marginal table. Required for the historical protocol
+      (alpha=3.75). Its absence does NOT fail the run -- see the P1 silent
+      fallback in docs/known_issues.md -- which is exactly why the preflight
+      validates it structurally.
+    structure:                     # every condition _load_frequency_bias silently tolerates
+      predicate_vocab_len: 50
+      predicate_vocab_equals: sorted(STANDARD_VG150_PREDICATES)
+      global_log_probs_len: 50
+      smoothing: 1.0
+      default_log_prob: -3.912023005428146
+      pair_log_probs_count: 74884
+      subject_log_probs_count: 12030
+      object_log_probs_count: 9689
+      object_vocab_len: 25918      # raw pre-canonicalization strings, NOT the 150-word vocab
+      stats_num_relationships: 251126
+    provenance_caveat: >
+      num_relationships=251,126 does NOT match datasets_vg150_clean/train.jsonl
+      (1,046,427). This prior was built from the ORIGINAL run's own
+      datasets/train.jsonl, which no longer exists. INFERENCE: train-derived
+      (the only generator, tools/build_vg150_frequency_prior.py, requires
+      --train_jsonl). Cannot be independently verified as leak-free.
+
+  demo_config:
+    path: checkpoints/demo_best/demo_config.env
+    sha256: c73180698b5b5f6d3a58e5e6b78a39fcb8a81b6250478145d0538a5a107226a6
+    size_bytes: 355
+    tracked_in_git: false
+    required: false
+    notes: The only surviving record of the historical evaluation protocol.
+
+  dataset_train:
+    path: datasets_vg150_clean/train.jsonl
+    sha256: 36bc2923b1a3ddb56e331e9b645607606003bd1c8298d1c950b2cdcca7e31ae5
+    tracked_in_git: false
+    required: true
+    required_reason: >
+      adaptive_calibration_enabled=true reads train-split statistics at eval
+      time via _predicate_log_prior_for_eval, which raises
+      MissingTrainStatisticsError rather than falling back to the eval split.
+
+  dataset_validation:
+    path: datasets_vg150_clean/validation.jsonl
+    sha256: 4348ddbb3ce85160d0ebc7522634c68f197b0c99906794e0e4731156740f3412
+    rows: 10401
+    tracked_in_git: false
+    required: true
+
+  predicate_vocabulary:
+    path: datasets_vg150_clean/vocabulary/predicates.json
+    sha256: e4e88e87c3c26bf65426957ae4028b45f03d33643d5520b6ff9b42b7b60d4dc5
+    num_predicates: 50
+    equals: sorted(STANDARD_VG150_PREDICATES)
+    tracked_in_git: false
+    required: true
+    notes: >
+      Canonical since 9dc8f45d / 7d91af49. Matches frequency_prior.json's
+      predicate_vocab exactly. Do NOT regenerate with a different ordering --
+      the checkpoint's index mapping and the prior both depend on this order.
+
+  object_vocabulary:
+    path: datasets_vg150_clean/vocabulary/objects.json
+    sha256: 9f536376981e758767eab051028568d0ecab0972a7330dc616801878aa359a1b
+    tracked_in_git: false
+    required: false
+
+# ---------------------------------------------------------------------------
+# 3. Load compatibility -- why each override exists
+# ---------------------------------------------------------------------------
+compatibility:
+  state_dict_missing_keys: 59
+  state_dict_unexpected_keys: 0
+  load_mode: strict=False
+  verdict: >
+    All 59 missing keys traced to architecture added AFTER this checkpoint's
+    training window, and confirmed inactive under the overrides below.
+    VERIFIED FROM EXPERIMENT, docs/HISTORICAL_CHECKPOINT_DIAGNOSTIC.md Phase F.
+
+  # Each override answers: what does --stage 3 resolve this to, and why is
+  # that wrong for THIS checkpoint? Verified by execution against
+  # apply_stage_config at HEAD.
+  required_overrides:
+    - flag: explicit_spoa_enabled
+      required_value: false
+      stage3_default: true
+      reason: >
+        The checkpoint predates the explicit-SPOA branches entirely. Leaving
+        this true instantiates untrained subject/predicate/object/attribute
+        projections and is the single override without which the load is not
+        faithful.
+    - flag: text_conditioned_projection_enabled
+      required_value: false
+      stage3_default: true
+      reason: >
+        Forced true by config.py's unconditional stage-3 block (~line 742).
+        No trained weights exist for it in this checkpoint.
+    - flag: relationness_enabled
+      required_value: false
+      stage3_default: true
+      reason: >
+        Forced true by the same block (~line 744). The relationness head
+        would be at random initialization.
+    - flag: eval_sgg_use_relationness
+      required_value: false
+      stage3_default: true
+      reason: >
+        Forced true (~line 746). Would prune candidate pairs using
+        random-weight relationness scores, corrupting pair proposal.
+    - flag: clip_input_res
+      required_value: 336
+      stage3_default: 448
+      reason: >
+        The checkpoint's embedded cfg has
+        clip_name=openai/clip-vit-large-patch14-336. Evaluating at 448 feeds
+        a resolution the model was never trained at.
+    - flag: eval_sgg_predicate_score_mode
+      required_value: ensemble
+      stage3_default: ensemble
+      reason: >
+        Matches demo_config.env EVAL_SCORE_MODE. Same as the stage-3 default,
+        but stated explicitly because it is meaningless without the alpha
+        below.
+    - flag: eval_sgg_predicate_ensemble_alpha
+      required_value: 0.0
+      stage3_default: 0.45
+      reason: >
+        demo_config.env EVAL_ENSEMBLE_ALPHA=0.0. In _relation_predicate_logits
+        this yields 0.0*classifier + 1.0*text = 100% CLIP text-cosine. The
+        checkpoint's predicate_classifier head is at/near random init, so any
+        alpha above 0 mixes in noise. This single value is the difference
+        between mR@50 0.94% and 5.84%.
+    - flag: eval_sgg_use_gt_pairs
+      required_value: true
+      stage3_default: false
+      reason: demo_config.env PROTOCOL=PredCls_GT_pair.
+    - flag: adaptive_calibration_enabled
+      required_value: true
+      stage3_default: false
+      reason: >
+        The checkpoint's own embedded cfg has adaptive_calibration_enabled=True
+        and adaptive_prior_enabled=True; its trained calibration parameters
+        exist and would go unused if this were false. Note stage 3 does NOT
+        set this (stages 1 and 2 do) -- see docs/known_issues.md.
+    - flag: bayes_calibration_weight
+      required_value: 0.0
+      stage3_default: 0.0
+      reason: >
+        Distinct mechanism from freq_bias. Kept at 0.0 so the ONLY calibration
+        applied is the recovered frequency prior.
+    - flag: freq_bias_enabled
+      required_value: true
+      stage3_default: false
+      reason: >
+        NOT recorded in demo_config.env -- this is the documented
+        reconstruction gap. _load_frequency_bias requires both
+        freq_bias_enabled=True AND freq_bias_alpha>0, and the checkpoint's own
+        embedded cfg has freq_bias_enabled=False. INFERENCE: passed as a bare
+        CLI flag in whatever invocation produced the reported numbers.
+    - flag: freq_bias_alpha
+      required_value: 3.75
+      stage3_default: 0.5
+      reason: demo_config.env FREQ_BIAS_ALPHA=3.75.
+    - flag: eval_sgg_grounding_dino_enabled
+      required_value: false
+      stage3_default: true
+      reason: >
+        PredCls over GT boxes needs no detector. Leaving it true downloads
+        Grounding-DINO and runs an irrelevant SGDet path that carries its own
+        registered P1 silent fallback (_make_detected_example).
+
+  override_mechanism_note: >
+    Explicit CLI flags DO win. train.py main() applies apply_stage_config,
+    then merges explicit CLI args, then apply_gpu_preset, then calls
+    _reapply_explicit_cli_args LAST (train.py:1326). VERIFIED FROM CODE.
+    BUT: parse_known_args silently discards unknown flags, so a typo in any
+    flag name above is undetectable at runtime. See docs/known_issues.md.
+
+# ---------------------------------------------------------------------------
+# 4. Historical claim -- kept strictly separate from anything verified
+# ---------------------------------------------------------------------------
+historical_claim:
+  status: HISTORICAL_EVIDENCE / UNREPRODUCED / SINGLE_SOURCE
+  # Deliberately NOT called: baseline, verified, reproduced, reference,
+  # target-to-beat, or SOTA. It is a self-report from a config file.
+  source: checkpoints/demo_best/demo_config.env
+  source_type: self-reported by the run that produced it, never independently checked
+  metrics:
+    R@50: 0.6709      # 67.09%
+    mR@50: 0.2264     # 22.64%
+  protocol_recorded:
+    EVAL_SCORE_MODE: ensemble
+    EVAL_ENSEMBLE_ALPHA: 0.0
+    FREQ_BIAS_ALPHA: 3.75
+    PROTOCOL: PredCls_GT_pair
+  protocol_unrecorded:            # UNKNOWN -- may permanently remain so
+    - FREQ_BIAS_ENABLED           # inferred true; not in the file
+    - evaluation split            # validation? test? unknown
+    - number of images evaluated
+    - pooled vs image-mean R@K aggregation
+    - clip_input_res used at eval time
+  corroboration: >
+    NONE. Neither number, nor the run name core_l3_balanced_adapt_light,
+    appears anywhere in notes/, README.md, or any script (grep-verified).
+    notes/current_status.tex, last edited 4 days before the checkpoint was
+    written, documents a LOWER best mR@50 of 18.80. This is an experiment
+    that was run but never written up.
+
+current_verified_behavior:
+  status: VERIFIED FROM EXPERIMENT, current code, current data
+  runs:
+    - id: runs/historical_checkpoint_diagnostic
+      n_images: 16
+      score_path: classifier
+      calibration: none
+      R@50: 0.0141
+      mR@50: 0.0094
+      verdict: misconfigured -- measured an untrained head. Not a baseline.
+    - id: runs/text_path_gate/gate_10.json
+      n_images: 10
+      score_path: ensemble alpha=0.0 (pure text, PROVEN)
+      calibration: none
+      R@50: 0.1971
+      mR@50: 0.0794
+      verdict: diagnostic; sample far too small. Not a baseline.
+    - id: runs/text_path_gate/gate_50.json
+      n_images: 50
+      score_path: ensemble alpha=0.0 (pure text, PROVEN)
+      calibration: none
+      R@50: 0.2526
+      mR@50: 0.0584
+      image_mean_R@50: 0.2255
+      head_body_tail_mR50: [0.2922, 0.0, 0.0]
+      verdict: diagnostic; sample far too small. Not a baseline.
+  text_path_proof:
+    method: >
+      _relation_predicate_logits was wrapped and its live output compared
+      against a pure text-only reference computed from the same inputs.
+    max_abs_diff_vs_text_only: 0.0
+    classifier_used: false
+    conclusion: The classifier head contributed exactly nothing. Confirmed, not assumed.
+
+current_reproduction_target:
+  status: NOT YET ATTEMPTED AT ANY SAMPLE SIZE
+  what_is_missing: >
+    Every measurement so far ran with freq_bias_enabled=false. The full
+    historical configuration is the text path PLUS the pair-conditioned
+    frequency prior at alpha=3.75. That combination has never been executed.
+  target_run: runs/gcp_historical_reproduction_v1
+  entrypoint: scripts/eval/eval_historical_checkpoint.sh
+  gate: canary must pass before the full run starts
+  acceptance: >
+    There is NO pass/fail threshold on the metric itself. The run is a
+    measurement, not a test. Reproduces / partially reproduces / fails to
+    reproduce are all valid, publishable outcomes, and a mismatch on any
+    protocol_unrecorded field above is a legitimate explanation for a gap
+    that must not be mistaken for a model defect.
+
+# ---------------------------------------------------------------------------
+# 5. Transfer -- git clone is NOT sufficient
+# ---------------------------------------------------------------------------
+transfer:
+  tracked_by_git:
+    - openvocab_rel/**
+    - tools/**
+    - tests/**
+    - scripts/**
+    - configs/**
+    - data/manifests/**
+    - docs/**
+  must_be_transferred_out_of_band:
+    - path: checkpoints/demo_best/pure_best_adapt_light_mR50.pt
+      size_bytes: 931057422
+    - path: checkpoints/demo_best/frequency_prior.json
+      size_bytes: 101944045
+    - path: checkpoints/demo_best/demo_config.env
+      size_bytes: 355
+    - path: datasets_vg150_clean/train.jsonl
+      size_bytes: 230887586
+    - path: datasets_vg150_clean/validation.jsonl
+      size_bytes: 28950612
+    - path: datasets_vg150_clean/vocabulary/predicates.json
+      size_bytes: 1124
+    - path: datasets_vg150_clean/vocabulary/objects.json
+      size_bytes: 3056
+    - path: datasets_vg150_clean/images/
+      note: >
+        ~14.6 GB. On the local Windows machine this is an NTFS JUNCTION to
+        D:\Research No.1\datasets\vg_raw\images, NOT a copy (verified:
+        LinkType=Junction). A naive archive of datasets_vg150_clean/ may or
+        may not follow it depending on the tool -- tar/7-zip defaults differ.
+        Verify the image count on the target machine after transfer rather
+        than assuming the directory came across.
+  fetched_at_runtime_from_hugging_face:
+    - openai/clip-vit-large-patch14-336
+  not_needed:
+    - IDEA-Research/grounding-dino-tiny   # grounding-dino disabled in this protocol
+  total_out_of_band_bytes_excluding_images: 1292844200   # 1.20 GiB, measured
