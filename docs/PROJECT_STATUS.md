@@ -245,6 +245,57 @@ classifier path is untrustworthy *for this checkpoint* because its
 `predicate_classifier` head is untrained — **not** because of the
 vocabulary bug, which is fixed and was never the cause (§11).
 
+### ⚠️ The frequency-prior control — read this before citing any number
+
+`VERIFIED FROM EXPERIMENT` (pre-training architecture review, full 10,401-image
+validation split, GT-pairs protocol, CPU, no model and no CLIP loaded):
+
+**The pair-conditioned frequency prior, scoring alone with the model
+contributing exactly zero, reaches R@50 = 64.37 % / mR@50 = 20.30 %**
+(`image_mean_R@50 = 64.19 %`).
+
+| System | R@50 | mR@50 |
+|---|---:|---:|
+| Frequency prior alone (model = 0) | **64.37 %** | **20.30 %** |
+| Historical claim (model + same prior) | 67.09 % | 22.64 % |
+| **Implied model contribution** | **+2.72** | **+2.34** |
+
+Reproduce with `python tools/frequency_prior_baseline.py`.
+
+The +2.72 / +2.34 is an **upper bound** on what the 79.9M-parameter model
+adds: the historical figure is single-source and unreproduced, while the
+prior-only figure is measured on the exact data any current run would use.
+
+Supporting controls (same run):
+
+| Control | R@50 | mR@50 | Reading |
+|---|---:|---:|---|
+| Global predicate marginal only | 36.29 % | 2.00 % | ≈ always predict `on` |
+| Pair-conditioned prior | 64.37 % | 20.30 % | +28.09 / +18.30 from `(subj,obj)` conditioning |
+| Protocol ceiling (1 predicate/pair) | 96.74 % | — | the protocol is **not** the limiter |
+
+Placing the README's raw-model rows (`HISTORICAL EVIDENCE`, protocol not
+fully specified) beside these: raw R@50 33.71–35.22 sits **at or below** the
+always-`on` baseline of 36.29, and raw mR@50 20.03–20.35 is
+**indistinguishable** from the lookup table's 20.30.
+
+**Interpretation** (`INFERENCE`, and the central open research question):
+the system as measured has learned approximately the label co-occurrence
+statistics and little beyond them. Calibration is not correcting model bias
+— it is substituting for the model.
+
+**α = 3.75 is inert in the prior-only limit** (`VERIFIED FROM EXPERIMENT`):
+R@50 and mR@50 are identical at α ∈ {0.5, 1.0, 3.75, 10.0}, because
+monotonic scaling cannot move an argmax and every candidate is already
+inside top-K. When the model *is* present, α controls the model:prior blend
+— and since `_relation_predicate_logits` layer-norms model logits to ±2
+while `3.75 × log-prior` spans ≈ 34, the prior outweighs the model by
+roughly 17:1.
+
+**Consequence for the GCP run**: the historical reproduction must be run
+**with the prior-only control alongside**, and the delta reported as the
+headline. Confirming 67.09/22.64 on its own confirms a lookup table.
+
 **No number produced to date is a baseline.** The complete list of
 measurements against this checkpoint, so nothing gets promoted by
 accident:

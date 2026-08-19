@@ -60,6 +60,16 @@ any of them as a current result. Current state of record:
 
 **Important reporting rule:** calibrated scores are system-level evaluation results. They should not be used as evidence that the raw classifier alone learned all tail predicates. These numbers also come from external runs not reproducible from this checkout alone — see `docs/reproducibility.md`.
 
+> **⚠ Control you must read before citing any row above.** The
+> pair-conditioned frequency prior, scoring **alone with the model
+> contributing exactly zero**, reaches **R@50 = 64.37 % / mR@50 = 20.30 %**
+> on the full validation split (`VERIFIED FROM EXPERIMENT`; reproduce with
+> `python tools/frequency_prior_baseline.py`). Against that control the
+> calibrated rows above imply a model contribution of roughly **+2.7 R@50 /
+> +2.3 mR@50**, and the raw rows sit *at or below* an always-predict-`on`
+> baseline (36.29 %). Report the delta against the prior, never the
+> calibrated number alone. Full analysis: `docs/PROJECT_STATUS.md` §10.
+
 **What *has* been measured against the one recovered checkpoint, on current code** (all small-sample diagnostics, none a baseline — see `docs/PROJECT_STATUS.md` §10 for the full table): the raw CLIP-text scoring path reaches R@50 = 25.26 % / mR@50 = 5.84 % at n=50 (`runs/text_path_gate/`), and the classifier path reaches 1.41 % / 0.94 % at n=16 because that head is untrained in this checkpoint. **The full historical configuration — text path *plus* the frequency prior at α=3.75 — has never been run at any sample size.** Reproducing it is the next experiment; the protocol is `docs/GCP_EXPERIMENT_PROTOCOL.md`.
 
 ## 3. Current supported experiments

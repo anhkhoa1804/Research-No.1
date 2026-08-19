@@ -271,7 +271,31 @@ weight), **P3** = minor/cosmetic.
 
 ## P1 — Architecture vs. stated claim
 
-### Default pair fusion is symmetric, not directional
+### Default pair fusion is symmetric, not directional — **PARTIALLY RETRACTED**
+
+> **Correction (pre-training architecture review), `VERIFIED FROM CODE`.**
+> The heading overstates the problem. Only the *semantic* term is symmetric.
+> Three other paths in the default configuration are order-dependent, so the
+> shipped model **is** directional:
+>
+> 1. **Geometry** (`geometry.py:geom_feats`): `dx`, `dy`, `rw`, `rh` all flip
+>    sign under subject/object swap, and `ar1/ar2`, `a1/a2` swap positions.
+>    Fully asymmetric.
+> 2. **The fusion gate**: `cat([sub_norm, obj_norm, geom_norm])` is a fixed
+>    positional concat, so the gate itself is order-dependent — meaning
+>    `fused_feat` is asymmetric even when `sem_feat` is not.
+> 3. **SPOA** (`explicit_spoa_enabled`, **`True` by default**): separate
+>    `subject_branch` / `object_branch` MLPs with independent
+>    initialisations, plus a fixed-order 5-way concat in `spoa_state`.
+>    Strongly order-dependent.
+>
+> One caveat worth keeping: `subject_role_embedding` and
+> `object_role_embedding` are **zero-initialised**, so at init they are
+> identical and contribute nothing. Directionality at initialisation comes
+> from the distinct MLP weights, not the role embeddings.
+>
+> The original entry below is retained as the record of what was believed.
+
 - **File:** `openvocab_rel/models/relational_model.py`,
   `ProgressiveRelationalDecoder._semantic_pair_feature`
 - **What happens:** the active branch under the dataclass default
@@ -280,10 +304,11 @@ weight), **P3** = minor/cosmetic.
   combination. The README's architecture claim ("ordered relation
   embedding... explicit direction") is only fully true when
   `asymmetric_pair_fusion_enabled=True`, which is off by default.
-- **Why it matters:** directionality under the default config depends
+- **Why it matters:** ~~directionality under the default config depends
   entirely on the role-embedding/SPOA branches and geometry asymmetry, not
-  this term — a real (if partial) gap between the stated design and the
-  shipped default.
+  this term~~ — that sentence is accurate as written, but the conclusion
+  drawn from it in the heading is not: those branches are **on by default**
+  and they *do* make the model directional.
 - **How to test later:** role-swap consistency metric (already implemented,
   `eval_sgg_role_swap_metric_enabled`) compared with the flag on vs. off, on
   a matched checkpoint.
@@ -481,6 +506,56 @@ weight), **P3** = minor/cosmetic.
   vocabulary file is present.
 - Likely low real-world impact (VG150's 150-object vocabulary is a
   well-known fixed list), but a real methodological objection until fixed.
+
+## P1 — Evaluation metric semantics
+
+### Under `eval_sgg_use_gt_pairs=true`, `R@K` is top-1 predicate accuracy, not recall@K — NOT FIXED
+- **File/function:** `openvocab_rel/evals.py`, `eval_sgg_standard`, the line
+  `pair_pred_scores, pair_pred_idx = rel_probs.max(dim=-1)`.
+- **What happens** (`VERIFIED FROM CODE` + `VERIFIED FROM EXPERIMENT`): the
+  evaluator emits **exactly one predicate per candidate pair** — the argmax.
+  Standard VG150 PredCls instead ranks all (pair × predicate) hypotheses, so
+  one pair may occupy several of the top-K slots with different predicates.
+- **Consequences:**
+  1. With GT pairs the candidate pool is ~12/image, far below K=20, so
+     **every candidate is always inside top-K** and `R@20 == R@50 == R@100`
+     identically. K is inert. This is visible in
+     `runs/text_path_gate/gate_50.json` and reproduces exactly in the
+     frequency-prior control.
+  2. The metric being reported is therefore **top-1 predicate accuracy over
+     GT pairs**, which is a different statistic from literature R@K and is
+     not comparable to it — a *second*, independent incomparability on top
+     of the pooled-vs-image-mean issue below.
+  3. The measured ceiling for this protocol is **96.74 %** (a pair carrying
+     several GT predicates can only ever score one hit), so the protocol is
+     not what limits the current numbers.
+- **Status:** NOT FIXED — changing the existing fields would break
+  comparability with every historical number. The correct fix is
+  **additive**: compute the literature-style multi-predicate-per-pair
+  ranking under new field names and report both. Tracked as the
+  objective/eval-alignment work.
+
+## P2 — Config
+
+### `--emb_dim` is parsed but silently overwritten — NOT FIXED
+- **File:** `openvocab_rel/train.py` — `_reapply_explicit_cli_args` runs at
+  line ~1326, then line ~1351 executes `cfg.emb_dim = int(clip_proj_dim)`,
+  unconditionally overwriting it from CLIP's projection dim.
+- **What happens:** `--emb_dim` has **no effect whatsoever** under the
+  shipped entrypoints. `VERIFIED FROM CODE`.
+- **Why it mostly does not bite:** the override is what makes the text path
+  work at all. The dataclass default is `512`, while CLIP ViT-L/14-336's
+  text dim is `768`; constructing `RelationalModel` directly with the
+  dataclass default and calling `text_predicate_logits` raises
+  `RuntimeError: mat1 and mat2 shapes cannot be multiplied (7x512 and
+  768x51)` at every stage (`VERIFIED FROM EXPERIMENT`). `train.py` repairs
+  this at runtime; notebooks and ad-hoc scripts that build the model
+  directly do not.
+- **Status:** NOT FIXED. Two defensible fixes — drop the flag, or make the
+  dataclass default derive from `clip_name` — both touch config resolution
+  and belong in their own commit. Until then: do not pass `--emb_dim`
+  expecting it to work, and do not construct `RelationalModel` outside
+  `train.py` without setting `emb_dim` to the CLIP projection dim yourself.
 
 ## P2 — Evaluation metric naming
 
