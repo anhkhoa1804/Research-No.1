@@ -230,6 +230,23 @@ class TrainConfig:
     eval_sgg_classifier_temperature: float = 1.0
     eval_sgg_text_temperature: float = 1.0
     eval_sgg_predicate_diag_topk: int = 8
+    # Literature-comparable ranking, reported ALONGSIDE the existing metrics.
+    #
+    # The existing R@K/mR@K fields emit exactly ONE predicate per candidate
+    # pair (evals.py: rel_probs.max(-1)). Under eval_sgg_use_gt_pairs=true the
+    # candidate pool is ~12 pairs/image, far below K=20, so every candidate is
+    # always inside top-K: R@20 == R@50 == R@100 identically and K is inert.
+    # What those fields actually measure is top-1 predicate accuracy over GT
+    # pairs -- a different statistic from the R@K reported in VG150 papers,
+    # which rank all (pair x predicate) hypotheses.
+    #
+    # Setting this > 0 additionally emits the top-M predicates per pair as a
+    # separate ranked hypothesis set, scored with the SAME matching and recall
+    # functions, under `multi_R@K` / `multi_mR@K` / `multi_image_mean_R@K`.
+    # The original fields are left byte-identical -- this is purely additive,
+    # so historical comparability is preserved. 0 disables it entirely.
+    # See docs/known_issues.md, P1 "R@K is top-1 predicate accuracy".
+    eval_sgg_multi_predicate_topk: int = 10
     eval_sgg_compare_score_modes: str = ""  # comma list, e.g. classifier,text,ensemble
     checkpoint_selection_lambda_mr: float = 1.0
     checkpoint_selection_mu_tail: float = 1.0

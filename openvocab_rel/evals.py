@@ -623,6 +623,84 @@ def _recall_from_matches(matches: torch.Tensor, pred_scores: torch.Tensor, ks: L
     return out
 
 
+def _make_multi_triplet_predictions(
+    ex: Dict[str, Any],
+    pair_list: List[Tuple[int, int]],
+    pair_scores: torch.Tensor,
+    rel_probs: torch.Tensor,
+    object_labels: List[str],
+    object_scores: torch.Tensor,
+    device: torch.device,
+    topk: int,
+) -> Dict[str, Any]:
+    """Literature-style ranking: top-`topk` predicates per pair, not just the argmax.
+
+    ``_make_triplet_predictions`` emits exactly one triplet per candidate pair
+    (the argmax predicate), which under GT-pairs mode makes R@K equal to top-1
+    predicate accuracy and makes K inert -- see docs/known_issues.md. VG150
+    papers instead rank all (pair x predicate) hypotheses, letting a single
+    pair occupy several top-K slots with different predicates.
+
+    This builds that second hypothesis set. It is scored by exactly the same
+    ``_compute_pred_matches`` / ``_recall_from_matches`` functions, so the
+    metric definitions are unchanged -- only the candidate set differs. The
+    original single-predicate predictions are untouched and still drive the
+    existing R@K/mR@K fields.
+    """
+    boxes = ex.get("obj_boxes", torch.empty((0, 4), dtype=torch.float32)).to(device)
+    pred_vocab = ex.get("_pred_vocab", [])
+    subj_labels: List[str] = []
+    pred_labels: List[str] = []
+    obj_labels: List[str] = []
+    subj_boxes: List[torch.Tensor] = []
+    obj_boxes: List[torch.Tensor] = []
+    scores: List[float] = []
+
+    if int(rel_probs.numel()) == 0 or len(pair_list) == 0 or int(topk) <= 0:
+        return {
+            "subj_labels": [], "pred_labels": [], "obj_labels": [],
+            "subj_boxes": torch.empty((0, 4), device=device),
+            "obj_boxes": torch.empty((0, 4), device=device),
+            "scores": torch.empty((0,), device=device),
+        }
+
+    k = min(int(topk), int(rel_probs.shape[-1]))
+    top_scores, top_idx = torch.topk(rel_probs, k=k, dim=-1)
+    obj_power = float(ex.get("_object_score_power", 1.0))
+
+    for idx, pair in enumerate(pair_list):
+        s_idx, o_idx = int(pair[0]), int(pair[1])
+        if s_idx >= len(object_labels) or o_idx >= len(object_labels):
+            continue
+        if s_idx >= int(boxes.shape[0]) or o_idx >= int(boxes.shape[0]):
+            continue
+        if idx >= int(top_idx.shape[0]) or idx >= int(pair_scores.numel()):
+            continue
+        base = float(pair_scores[idx].item())
+        if int(object_scores.numel()) > 0:
+            base *= float(object_scores[s_idx].item()) ** obj_power
+            base *= float(object_scores[o_idx].item()) ** obj_power
+        for rank in range(k):
+            pred_id = int(top_idx[idx, rank].item())
+            if not (0 <= pred_id < len(pred_vocab)):
+                continue
+            subj_labels.append(str(object_labels[s_idx]).strip().lower())
+            pred_labels.append(str(pred_vocab[pred_id]).strip().lower())
+            obj_labels.append(str(object_labels[o_idx]).strip().lower())
+            subj_boxes.append(boxes[s_idx])
+            obj_boxes.append(boxes[o_idx])
+            scores.append(base * float(top_scores[idx, rank].item()))
+
+    return {
+        "subj_labels": subj_labels,
+        "pred_labels": pred_labels,
+        "obj_labels": obj_labels,
+        "subj_boxes": torch.stack(subj_boxes) if subj_boxes else torch.empty((0, 4), device=device),
+        "obj_boxes": torch.stack(obj_boxes) if obj_boxes else torch.empty((0, 4), device=device),
+        "scores": torch.tensor(scores, dtype=torch.float32, device=device) if scores else torch.empty((0,), device=device),
+    }
+
+
 def _make_triplet_predictions(
     ex: Dict[str, Any],
     pair_list: List[Tuple[int, int]],
@@ -1401,6 +1479,19 @@ def eval_sgg_standard(
         if str(x).strip() != ""
     }
     
+    # Additive, literature-comparable ranking (top-M predicates per pair).
+    # Accumulated in parallel; never mixed into `accum`/`global_hits`, so the
+    # existing R@K/mR@K fields stay byte-identical. See config.py:
+    # eval_sgg_multi_predicate_topk and docs/known_issues.md.
+    multi_topk = int(max(0, getattr(cfg, "eval_sgg_multi_predicate_topk", 0)))
+    multi_accum: Dict[str, Any] = {
+        "image_r": {k: 0.0 for k in ks},
+        "global_hits": {k: 0 for k in ks},
+        "global_gt": 0,
+        "n": 0,
+    }
+    multi_pred_hits = {k: {p: 0 for p in pred_vocab} for k in ks}
+
     global_gt_counts = {p: 0 for p in pred_vocab}
     global_hits = {t: {k: {p: 0 for p in pred_vocab} for k in ks} for t in tasks}
     zs_gt_counts = {p: 0 for p in pred_vocab}
@@ -1757,6 +1848,29 @@ def eval_sgg_standard(
             pred_triplets = _make_triplet_predictions(ex, pair_list, pair_base_scores, pair_pred_idx, pair_pred_scores, gt_labels, gt_obj_scores, device)
             _process_task("predcls", pred_triplets)
 
+            if multi_topk > 0:
+                multi_triplets = _normalize_triplet_labels(
+                    _make_multi_triplet_predictions(
+                        ex, pair_list, pair_base_scores, rel_probs,
+                        gt_labels, gt_obj_scores, device, multi_topk,
+                    ),
+                    label_aliases,
+                )
+                multi_matches = _compute_pred_matches(multi_triplets, gt, iou_thresh=iou_thresh)
+                multi_recalls = _recall_from_matches(multi_matches, multi_triplets["scores"], ks)
+                multi_hit_dict = _get_hit_gt_indices(multi_matches, multi_triplets["scores"], ks)
+                for k in ks:
+                    multi_accum["image_r"][k] += float(multi_recalls[k])
+                    hits_at_k = multi_hit_dict[k].cpu().tolist()
+                    multi_accum["global_hits"][k] += int(sum(1 for h in hits_at_k if bool(h)))
+                    for gi, is_hit in enumerate(hits_at_k):
+                        if is_hit:
+                            p = gt["pred_labels"][gi]
+                            if p in multi_pred_hits[k]:
+                                multi_pred_hits[k][p] += 1
+                multi_accum["global_gt"] += int(len(gt["pred_labels"]))
+                multi_accum["n"] += 1
+
             if bool(getattr(cfg, "eval_sgg_report_nograph", True)):
                 pred_triplets_ng = _make_triplet_predictions_nogc(ex, pair_list, rel_probs, gt_labels, gt_obj_scores, pred_vocab, device)
                 _process_task("predcls_nogc", pred_triplets_ng)
@@ -1906,6 +2020,41 @@ def eval_sgg_standard(
     }
     
     pred_buckets_eval = _predicate_buckets_from_counts(global_gt_counts)
+
+    # Literature-comparable ranking, reported alongside (never instead of) the
+    # single-predicate-per-pair fields above. Same matching and recall
+    # functions; only the candidate set differs.
+    if multi_topk > 0 and int(multi_accum["n"]) > 0:
+        multi_n = int(multi_accum["n"])
+        multi_gt = int(multi_accum["global_gt"])
+        multi_buckets = _bucket_mean_recall(multi_pred_hits[50], global_gt_counts, pred_buckets_eval)
+        outm["predcls_multi"] = {
+            "available": True,
+            "predicates_per_pair": multi_topk,
+            "note": (
+                "Literature-style ranking over (pair x predicate) hypotheses. "
+                "The headline predcls R@K emits one predicate per pair, which "
+                "under GT-pairs mode is top-1 predicate accuracy and makes K "
+                "inert. Compare THESE fields with published VG150 numbers, and "
+                "compare either against tools/frequency_prior_baseline.py."
+            ),
+            "multi_R@20": _compute_global_recall(multi_accum["global_hits"][20], multi_gt),
+            "multi_R@50": _compute_global_recall(multi_accum["global_hits"][50], multi_gt),
+            "multi_R@100": _compute_global_recall(multi_accum["global_hits"][100], multi_gt),
+            "multi_mR@20": _compute_global_mr(multi_pred_hits[20], global_gt_counts),
+            "multi_mR@50": _compute_global_mr(multi_pred_hits[50], global_gt_counts),
+            "multi_mR@100": _compute_global_mr(multi_pred_hits[100], global_gt_counts),
+            "multi_image_mean_R@20": float(multi_accum["image_r"][20]) / float(multi_n),
+            "multi_image_mean_R@50": float(multi_accum["image_r"][50]) / float(multi_n),
+            "multi_image_mean_R@100": float(multi_accum["image_r"][100]) / float(multi_n),
+            "multi_head_mR@50": multi_buckets.get("head_mR", 0.0),
+            "multi_body_mR@50": multi_buckets.get("body_mR", 0.0),
+            "multi_tail_mR@50": multi_buckets.get("tail_mR", 0.0),
+            "n_images": multi_n,
+            "num_gt": multi_gt,
+        }
+    elif multi_topk > 0:
+        outm["predcls_multi"] = {"available": False, "reason": "No valid images with GT triplets found."}
 
     for task in tasks:
         n = int(accum[task]["n"])
