@@ -648,6 +648,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--eval_sgg_classifier_temperature", type=float, default=getattr(TrainConfig, "eval_sgg_classifier_temperature", 1.0))
     p.add_argument("--eval_sgg_text_temperature", type=float, default=getattr(TrainConfig, "eval_sgg_text_temperature", 1.0))
     p.add_argument("--eval_sgg_predicate_diag_topk", type=int, default=TrainConfig.eval_sgg_predicate_diag_topk)
+    p.add_argument("--eval_sgg_multi_predicate_topk", type=int, default=TrainConfig.eval_sgg_multi_predicate_topk)
     p.add_argument("--eval_sgg_compare_score_modes", type=str, default=getattr(TrainConfig, "eval_sgg_compare_score_modes", ""))
     p.add_argument("--checkpoint_selection_lambda_mr", type=float, default=getattr(TrainConfig, "checkpoint_selection_lambda_mr", 1.0))
     p.add_argument("--checkpoint_selection_mu_tail", type=float, default=getattr(TrainConfig, "checkpoint_selection_mu_tail", 1.0))
