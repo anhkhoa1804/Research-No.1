@@ -247,6 +247,36 @@ class TrainConfig:
     # so historical comparability is preserved. 0 disables it entirely.
     # See docs/known_issues.md, P1 "R@K is top-1 predicate accuracy".
     eval_sgg_multi_predicate_topk: int = 10
+
+    # --- prior-residual objective (architecture candidate A1) ---------------
+    # z = alpha * log P(p | s, o) + f_theta(x), optimised with ordinary CE.
+    # At the optimum f_theta learns log P(p|x,s,o) - alpha*log P(p|s,o), i.e.
+    # the information the image adds OVER co-occurrence. See
+    # openvocab_rel/prior_residual.py and docs/PRIOR_RESIDUAL_HYPOTHESIS.md.
+    # Default OFF: this is a research arm, never a silent default.
+    prior_residual_enabled: bool = False
+    # 1.0, NOT the evaluation-time 3.75. At alpha=1 the residual is exactly the
+    # log-likelihood ratio; at 3.75 the prior is over-counted and f_theta must
+    # spend capacity cancelling 2.75*log P(p|s,o) before expressing anything.
+    prior_residual_alpha: float = 1.0
+    # No-op while the prior is a fixed table (no parameters), but NOT a no-op
+    # once composed with the learned calibration gate. Explicit by design.
+    prior_residual_stopgrad: bool = True
+    # True: prior enters the TRAINING objective only, and evaluation scores the
+    # bare model. That is the configuration that measures the learned residual
+    # in isolation -- the honest "model-only" number.
+    prior_residual_train_only: bool = False
+    # Training prior. MUST be built from the training split alone and MUST be a
+    # distinguishable artifact from freq_bias_path (the evaluation prior), or
+    # the two silently become the same experiment.
+    prior_residual_path: str = ""
+
+    # --- visual ablation: the hard gate on whether vision is used at all -----
+    # none | zero | shuffle. Applied to the dense CLIP patch tokens, the only
+    # route by which image content reaches the relation encoder. If
+    # none ~= shuffle ~= zero, the model is not using visual evidence and the
+    # architecture has failed regardless of its metrics.
+    visual_ablation_mode: str = "none"
     eval_sgg_compare_score_modes: str = ""  # comma list, e.g. classifier,text,ensemble
     checkpoint_selection_lambda_mr: float = 1.0
     checkpoint_selection_mu_tail: float = 1.0

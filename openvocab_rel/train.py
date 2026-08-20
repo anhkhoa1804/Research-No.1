@@ -14,6 +14,7 @@ import torch.distributed as dist
 import torch.nn.functional as F
 
 from .clip_utils import clip_text_features
+from .prior_residual import apply_visual_ablation, compose_prior_residual, residual_diagnostics
 import torch.multiprocessing as mp
 from torch.nn.parallel import DistributedDataParallel as DDP
 torch.backends.cuda.matmul.allow_tf32 = True
@@ -649,6 +650,12 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--eval_sgg_text_temperature", type=float, default=getattr(TrainConfig, "eval_sgg_text_temperature", 1.0))
     p.add_argument("--eval_sgg_predicate_diag_topk", type=int, default=TrainConfig.eval_sgg_predicate_diag_topk)
     p.add_argument("--eval_sgg_multi_predicate_topk", type=int, default=TrainConfig.eval_sgg_multi_predicate_topk)
+    p.add_argument("--prior_residual_enabled", type=_str2bool, nargs="?", const=True, default=TrainConfig.prior_residual_enabled)
+    p.add_argument("--prior_residual_alpha", type=float, default=TrainConfig.prior_residual_alpha)
+    p.add_argument("--prior_residual_stopgrad", type=_str2bool, nargs="?", const=True, default=TrainConfig.prior_residual_stopgrad)
+    p.add_argument("--prior_residual_train_only", type=_str2bool, nargs="?", const=True, default=TrainConfig.prior_residual_train_only)
+    p.add_argument("--prior_residual_path", type=str, default=TrainConfig.prior_residual_path)
+    p.add_argument("--visual_ablation_mode", type=str, default=TrainConfig.visual_ablation_mode)
     p.add_argument("--eval_sgg_compare_score_modes", type=str, default=getattr(TrainConfig, "eval_sgg_compare_score_modes", ""))
     p.add_argument("--checkpoint_selection_lambda_mr", type=float, default=getattr(TrainConfig, "checkpoint_selection_lambda_mr", 1.0))
     p.add_argument("--checkpoint_selection_mu_tail", type=float, default=getattr(TrainConfig, "checkpoint_selection_mu_tail", 1.0))
@@ -1552,6 +1559,56 @@ def main(argv: Optional[List[str]] = None) -> None:
         device=device,
     )
     pred_log_prior = torch.log(pred_freq_tensor / pred_freq_tensor.sum().clamp_min(1.0)).detach()
+
+    # --- prior-residual objective (A1) --------------------------------------
+    # Loaded once. Fails LOUDLY: _load_frequency_bias returns None on six
+    # separate conditions without warning, and silently training without the
+    # prior would produce a run that looks like A1 but is actually A0.
+    prior_residual_table = None
+    prior_residual_enabled = bool(getattr(cfg, "prior_residual_enabled", False))
+    if prior_residual_enabled:
+        from .prior_residual import PairPriorTable
+
+        pr_path = str(getattr(cfg, "prior_residual_path", "")).strip()
+        if pr_path == "":
+            raise ValueError(
+                "prior_residual_enabled=True but prior_residual_path is empty. "
+                "Point it at a prior built from the TRAINING split only, e.g. "
+                "tools/build_vg150_frequency_prior.py --train_jsonl <root>/train.jsonl"
+            )
+        eval_prior_path = str(getattr(cfg, "freq_bias_path", "")).strip()
+        if eval_prior_path != "" and os.path.abspath(eval_prior_path) == os.path.abspath(pr_path):
+            print(
+                "[PriorResidual][WARN] the training prior and the evaluation prior are the "
+                "SAME file. They must be distinguishable artifacts or the residual and the "
+                "calibration are the same experiment.",
+                flush=True,
+            )
+        prior_residual_table = PairPriorTable.load(
+            pr_path, global_pred_pool, device, float(getattr(cfg, "freq_bias_smoothing", 1.0))
+        )
+        if prior_residual_table is None:
+            raise RuntimeError(
+                f"prior_residual_enabled=True but the prior at {pr_path!r} could not be loaded. "
+                "_load_frequency_bias returns None silently on a missing/unparseable file, an "
+                "empty predicate_vocab, or wrong-length probability rows -- see "
+                "docs/known_issues.md. Refusing to train a mislabelled A0 run."
+            )
+        if is_main():
+            print(
+                f"[PriorResidual] ENABLED  alpha={float(getattr(cfg, 'prior_residual_alpha', 1.0))} "
+                f"stopgrad={bool(getattr(cfg, 'prior_residual_stopgrad', True))} "
+                f"train_only={bool(getattr(cfg, 'prior_residual_train_only', False))} "
+                f"path={pr_path} source_predicates={prior_residual_table.num_source_predicates}",
+                flush=True,
+            )
+    visual_ablation_mode = str(getattr(cfg, "visual_ablation_mode", "none")).strip().lower()
+    if visual_ablation_mode not in ("", "none", "off") and is_main():
+        print(
+            f"[VisualAblation] mode={visual_ablation_mode} -- image evidence is being "
+            "DELIBERATELY DESTROYED. This is an ablation arm, not a normal run.",
+            flush=True,
+        )
     tail_logit_tau = float(getattr(cfg, "tail_logit_adjustment_tau", 0.0))
     if bool(getattr(cfg, "tail_logit_adjustment_enabled", False)) and tail_logit_tau <= 0.0:
         tail_logit_tau = max(float(getattr(cfg, "logit_adj_tau", 0.0)), 0.25)
@@ -1858,6 +1915,9 @@ def main(argv: Optional[List[str]] = None) -> None:
             batch_rel_texts = [ex.get("rel_texts", []) for ex in batch]
             batch_rel_role_swap_texts = [ex.get("rel_role_swap_texts", []) for ex in batch]
             batch_rel_cf_attr_texts = [ex.get("rel_cf_attr_texts", []) for ex in batch]
+            # (subject_label, object_label) per candidate pair -- needed to look up
+            # the pair-conditioned prior. Produced by _prepare_rel_payload.
+            batch_rel_pair_names = [ex.get("rel_pair_names", []) for ex in batch]
             batch_force_keep = [
                 torch.nonzero(ex.get("rel_pos_mask", torch.zeros((0,), dtype=torch.bool)), as_tuple=False).squeeze(1)
                 if ex.get("rel_pos_mask", None) is not None
@@ -1873,6 +1933,12 @@ def main(argv: Optional[List[str]] = None) -> None:
                 cm = unwrap_ddp(clip_model)
                 vision_out = cm.vision_model(pixel_values=pixel)
                 tokens = vision_out.last_hidden_state[:, 1:, :]
+                # Hard scientific gate: destroy image evidence on demand. Applied
+                # here because these dense patch tokens are the ONLY route by which
+                # image content reaches the relation encoder. Boxes and geometry are
+                # left intact, so what is ablated is appearance, not pair structure.
+                if visual_ablation_mode not in ('', 'none', 'off'):
+                    tokens = apply_visual_ablation(tokens, visual_ablation_mode)
                 bsz, n_tok, d_ch = tokens.shape
                 side = int(math.sqrt(n_tok))
                 feat_map = tokens.transpose(1, 2).reshape(bsz, d_ch, side, side)
@@ -1947,6 +2013,12 @@ def main(argv: Optional[List[str]] = None) -> None:
                 batch_rel_role_swap_texts[i][int(j)]
                 for i in range(len(keep_sizes))
                 for j in kept_trimmed[i].tolist()
+            ]
+            pair_names_all = [
+                batch_rel_pair_names[i][int(j)]
+                for i in range(len(keep_sizes))
+                for j in kept_trimmed[i].tolist()
+                if int(j) < len(batch_rel_pair_names[i])
             ]
             flat_r = torch.cat(rel_chunks, dim=0)
             flat_rs = torch.cat(rs_chunks, dim=0)
@@ -2102,6 +2174,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 l_triplet_rank = torch.tensor(0.0, device=device)
                 l_role_swap_rank = torch.tensor(0.0, device=device)
                 l_object_bridge = torch.tensor(0.0, device=device)
+                prior_residual_last = None
                 train_objective = train_objective_name
                 logit_adj_tau = float(getattr(cfg, "logit_adj_tau", 0.0))
                 if float(getattr(cfg, "lambda_predicate_ce", 0.0)) > 0.0:
@@ -2122,6 +2195,33 @@ def main(argv: Optional[List[str]] = None) -> None:
                                     ce_logits = ce_logits - adj
                                     raw_ce_logits = raw_ce_logits - adj
                                 ce_targets_valid = ce_targets[valid_ce].long()
+                                # --- prior-residual composition (A1) ---------------
+                                # z = alpha * log P(p|s,o) + f_theta(x). CE on z makes
+                                # the gradient to f_theta proportional to the prior's
+                                # error: where the prior is already right the loss is
+                                # near zero and no gradient flows.
+                                if prior_residual_table is not None:
+                                    ce_positive_only = bool(getattr(cfg, "predicate_ce_positive_only", True))
+                                    idx_sel = pos_idx if ce_positive_only else torch.arange(
+                                        int(flat_r.shape[0]), device=device
+                                    )
+                                    sel = idx_sel[valid_ce] if int(idx_sel.numel()) == int(valid_ce.numel()) else None
+                                    if sel is not None and int(sel.numel()) == int(ce_logits.shape[0]):
+                                        names_sel = [
+                                            pair_names_all[int(i)]
+                                            for i in sel.detach().cpu().tolist()
+                                            if 0 <= int(i) < len(pair_names_all)
+                                        ]
+                                        if len(names_sel) == int(ce_logits.shape[0]):
+                                            pr_logits = prior_residual_table.logits_for_pairs(names_sel, device)
+                                            if pr_logits is not None and int(pr_logits.shape[-1]) == int(ce_logits.shape[-1]):
+                                                prior_residual_last = pr_logits
+                                                ce_logits = compose_prior_residual(
+                                                    ce_logits,
+                                                    pr_logits,
+                                                    alpha=float(getattr(cfg, "prior_residual_alpha", 1.0)),
+                                                    stopgrad=bool(getattr(cfg, "prior_residual_stopgrad", True)),
+                                                )
                                 l_predicate_ce = _predicate_ce_loss(ce_logits, ce_targets_valid, pred_ce_weights, cfg, pred_sim_matrix=pred_sim_matrix, pred_group_matrix=pred_group_matrix)
                                 if bool(getattr(cfg, "adaptive_calibration_enabled", False)):
                                     l_calibration_kl = _calibration_kl_loss(raw_ce_logits, ce_logits)
