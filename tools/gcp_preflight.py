@@ -115,6 +115,79 @@ def sha256_of(path: Path, chunk: int = 1 << 23) -> str:
     return h.hexdigest()
 
 
+def sha256_line_ending_variants(path: Path, chunk: int = 1 << 23) -> tuple[str, str]:
+    """Return (sha_as_lf, sha_as_crlf) for `path`'s content.
+
+    Streams the file once and hashes two renderings of the SAME content: one
+    with every line ending normalized to LF, one to CRLF. Used only to explain
+    a SHA256 mismatch -- never to decide whether a check passes.
+
+    A lone CR not followed by LF (classic-Mac line ending) is treated as
+    ordinary content, not a line ending, in both renderings.
+    """
+    h_lf = hashlib.sha256()
+    h_crlf = hashlib.sha256()
+    pending_cr = False
+    with path.open("rb") as f:
+        while True:
+            block = f.read(chunk)
+            if not block:
+                break
+            if pending_cr:
+                block = b"\r" + block
+                pending_cr = False
+            # A trailing CR may be the first half of a CRLF split across the
+            # chunk boundary; defer it rather than mis-classifying it.
+            if block.endswith(b"\r"):
+                block = block[:-1]
+                pending_cr = True
+            as_lf = block.replace(b"\r\n", b"\n")
+            h_lf.update(as_lf)
+            h_crlf.update(as_lf.replace(b"\n", b"\r\n"))
+    if pending_cr:
+        h_lf.update(b"\r")
+        h_crlf.update(b"\r")
+    return h_lf.hexdigest(), h_crlf.hexdigest()
+
+
+# Identity classes reported by classify_identity(). Ordered most-to-least
+# faithful. Only BYTE_IDENTICAL satisfies the strict historical gate.
+IDENTITY_BYTE = "BYTE-IDENTICAL"
+IDENTITY_LINE_ENDINGS = "CONTENT-IDENTICAL / LINE-ENDINGS-DIFFER"
+IDENTITY_DIFFERENT = "DIFFERENT CONTENT"
+
+
+def classify_identity(path: Path, expected_sha: str, actual_sha: str) -> tuple[str, str]:
+    """Classify how `path` relates to the manifest's expected SHA256.
+
+    Returns (identity_class, detail). This is a DIAGNOSTIC only: it explains a
+    mismatch so the cause is legible instead of ambiguous. It does not and must
+    not soften the gate -- a non-BYTE-IDENTICAL artifact is still a failure,
+    because the historical experiment was defined against exact bytes.
+    """
+    if actual_sha == expected_sha:
+        return IDENTITY_BYTE, ""
+    if not expected_sha:
+        return IDENTITY_DIFFERENT, "manifest records no sha256 to compare against"
+    try:
+        sha_lf, sha_crlf = sha256_line_ending_variants(path)
+    except OSError as exc:
+        return IDENTITY_DIFFERENT, f"could not re-read file for identity analysis: {exc}"
+    if expected_sha == sha_crlf:
+        return (
+            IDENTITY_LINE_ENDINGS,
+            "this file uses LF; the manifest hash was computed over the same "
+            "content with CRLF line endings (Windows-authored artifact)",
+        )
+    if expected_sha == sha_lf:
+        return (
+            IDENTITY_LINE_ENDINGS,
+            "this file uses CRLF; the manifest hash was computed over the same "
+            "content with LF line endings",
+        )
+    return IDENTITY_DIFFERENT, "content differs beyond line endings"
+
+
 def _git(args: List[str]) -> Optional[str]:
     try:
         return subprocess.run(
@@ -250,15 +323,22 @@ def check_artifact(pf: Preflight, key: str, spec: Dict[str, Any]) -> Optional[Pa
     entry["sha256"] = actual_sha
     if not expected_sha:
         pf.warn(f"{key}: manifest records no sha256; recorded actual {actual_sha}")
+        entry["identity"] = IDENTITY_DIFFERENT
     elif actual_sha != expected_sha:
+        identity, detail = classify_identity(path, expected_sha, actual_sha)
+        entry["identity"] = identity
+        entry["identity_detail"] = detail
         pf.fail(
             f"{key} SHA256 MISMATCH\n"
             f"        expected: {expected_sha}\n"
             f"        actual:   {actual_sha}\n"
             f"        path:     {path}\n"
-            "        This is not the artifact the experiment was defined against."
+            f"        identity: {identity}\n"
+            + (f"        detail:   {detail}\n" if detail else "")
+            + "        This is not the artifact the experiment was defined against."
         )
     else:
+        entry["identity"] = IDENTITY_BYTE
         pf.ok(f"{key} sha256 verified ({actual_size:,} bytes)")
     return path
 

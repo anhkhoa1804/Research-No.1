@@ -446,3 +446,129 @@ def test_historical_claim_is_never_labelled_a_baseline():
         )
     assert "unreproduced" in tokens
     assert "single_source" in tokens
+
+
+# ---------------------------------------------------------------------------
+# artifact identity classification (byte / content / different)
+#
+# These cover the additive diagnostic that explains WHY a hash mismatched.
+# The diagnostic must never soften the gate: the historical experiment was
+# defined against exact bytes, so anything short of BYTE-IDENTICAL still fails.
+# ---------------------------------------------------------------------------
+
+def _load_preflight_module():
+    import importlib.util
+    spec = importlib.util.spec_from_file_location("_pf_under_test", PREFLIGHT)
+    module = importlib.util.module_from_spec(spec)
+    assert spec.loader is not None
+    spec.loader.exec_module(module)
+    return module
+
+
+def test_line_ending_variant_hashes_match_hand_computed_values(tmp_path):
+    import hashlib
+    pf = _load_preflight_module()
+    path = tmp_path / "lf.txt"
+    path.write_bytes(b"alpha\nbeta\ngamma\n")
+    sha_lf, sha_crlf = pf.sha256_line_ending_variants(path)
+    assert sha_lf == hashlib.sha256(b"alpha\nbeta\ngamma\n").hexdigest()
+    assert sha_crlf == hashlib.sha256(b"alpha\r\nbeta\r\ngamma\r\n").hexdigest()
+
+
+def test_line_ending_variants_are_symmetric_for_a_crlf_file(tmp_path):
+    """A CRLF file and its LF twin must produce the same variant pair."""
+    pf = _load_preflight_module()
+    lf_path = tmp_path / "a.txt"
+    crlf_path = tmp_path / "b.txt"
+    lf_path.write_bytes(b"one\ntwo\n")
+    crlf_path.write_bytes(b"one\r\ntwo\r\n")
+    assert pf.sha256_line_ending_variants(lf_path) == pf.sha256_line_ending_variants(crlf_path)
+
+
+def test_line_ending_variants_handle_a_crlf_split_across_chunks(tmp_path):
+    """A CRLF straddling the read boundary must not be misread as CR + LF."""
+    pf = _load_preflight_module()
+    path = tmp_path / "split.txt"
+    path.write_bytes(b"xxxx\r\nyyyy\r\n")
+    # chunk=5 puts the boundary exactly between the CR and the LF.
+    assert pf.sha256_line_ending_variants(path, chunk=5) == pf.sha256_line_ending_variants(path)
+
+
+def test_lone_cr_is_treated_as_content_not_a_line_ending(tmp_path):
+    import hashlib
+    pf = _load_preflight_module()
+    path = tmp_path / "mac.txt"
+    path.write_bytes(b"a\rb")
+    sha_lf, sha_crlf = pf.sha256_line_ending_variants(path)
+    assert sha_lf == hashlib.sha256(b"a\rb").hexdigest()
+    assert sha_crlf == hashlib.sha256(b"a\rb").hexdigest()
+
+
+def test_classify_identity_reports_byte_identical_on_a_match(tmp_path):
+    pf = _load_preflight_module()
+    path = tmp_path / "f.txt"
+    path.write_bytes(b"content\n")
+    actual = pf.sha256_of(path)
+    identity, _detail = pf.classify_identity(path, actual, actual)
+    assert identity == pf.IDENTITY_BYTE
+
+
+def test_classify_identity_detects_a_line_ending_only_difference(tmp_path):
+    import hashlib
+    pf = _load_preflight_module()
+    path = tmp_path / "f.txt"
+    path.write_bytes(b"row1\nrow2\n")
+    crlf_sha = hashlib.sha256(b"row1\r\nrow2\r\n").hexdigest()
+    identity, detail = pf.classify_identity(path, crlf_sha, pf.sha256_of(path))
+    assert identity == pf.IDENTITY_LINE_ENDINGS
+    assert "LF" in detail
+
+
+def test_classify_identity_reports_different_content_when_bytes_really_differ(tmp_path):
+    import hashlib
+    pf = _load_preflight_module()
+    path = tmp_path / "f.txt"
+    path.write_bytes(b"row1\nrow2\n")
+    other = hashlib.sha256(b"totally different\n").hexdigest()
+    identity, detail = pf.classify_identity(path, other, pf.sha256_of(path))
+    assert identity == pf.IDENTITY_DIFFERENT
+    assert "beyond line endings" in detail
+
+
+def test_line_ending_mismatch_is_reported_but_STILL_FAILS(fixture_repo):
+    """The gate must not be weakened by the diagnostic.
+
+    Rewriting train.jsonl with CRLF leaves the content identical but the bytes
+    different. The preflight must say so explicitly AND still fail, because the
+    historical run was defined against exact bytes.
+    """
+    train = fixture_repo / "datasets_vg150_clean" / "train.jsonl"
+    train.write_bytes(train.read_bytes().replace(b"\n", b"\r\n"))
+    code, out = run_preflight(fixture_repo)
+    assert code == 1, "a line-ending-only difference must still fail the gate"
+    assert "dataset_train SHA256 MISMATCH" in out
+    assert "CONTENT-IDENTICAL / LINE-ENDINGS-DIFFER" in out
+    assert any("dataset_train SHA256 MISMATCH" in f for f in non_ancestry_failures(out)), \
+        "the mismatch must be recorded as a real failure, not merely printed"
+
+
+def test_genuinely_different_content_is_classified_as_different(fixture_repo):
+    train = fixture_repo / "datasets_vg150_clean" / "train.jsonl"
+    train.write_text('{"image_id":99}\n{"image_id":98}\n', encoding="utf-8")
+    code, out = run_preflight(fixture_repo)
+    assert code == 1
+    assert "DIFFERENT CONTENT" in out
+    assert "CONTENT-IDENTICAL" not in out
+
+
+def test_identity_class_is_recorded_in_the_captured_manifest(fixture_repo, tmp_path):
+    import yaml
+    train = fixture_repo / "datasets_vg150_clean" / "train.jsonl"
+    train.write_bytes(train.read_bytes().replace(b"\n", b"\r\n"))
+    out_file = tmp_path / "captured.yaml"
+    run_preflight(fixture_repo, "--out", str(out_file))
+    captured = yaml.safe_load(out_file.read_text(encoding="utf-8"))
+    assert captured["artifacts"]["dataset_train"]["identity"] == \
+        "CONTENT-IDENTICAL / LINE-ENDINGS-DIFFER"
+    assert captured["artifacts"]["checkpoint"]["identity"] == "BYTE-IDENTICAL"
+    assert captured["preflight_status"] == "FAILED"
