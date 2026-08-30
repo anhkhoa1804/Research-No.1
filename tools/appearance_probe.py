@@ -63,10 +63,16 @@ DEFAULT_CACHE = Path("runs/analysis/clip_appearance_cache.pt")
 DEFAULT_PRIOR = Path("datasets_vg150_clean/frequency_prior_train.json")
 DEFAULT_TRAIN = Path("datasets_vg150_clean/train.jsonl")
 DEFAULT_VAL = Path("datasets_vg150_clean/validation.jsonl")
+# Default kept at B/32 so an existing CPU-only invocation reproduces the
+# original measurement byte-for-byte. --clip_name selects the encoder; the
+# repo's own model is openai/clip-vit-large-patch14-336, which was infeasible
+# on the CPU-only machine this probe was first written on (0.3 crops/s) and is
+# the encoder the negative result must be re-tested against on a GPU.
 CLIP_ID = "openai/clip-vit-base-patch32"
 K = 5
 PCA_DIM = 48
 EPOCHS = 30
+ENCODE_BATCH = 64
 
 
 # ===========================================================================
@@ -86,7 +92,9 @@ def _image_features(model, px):
 
 
 def extract(prior_path: Path, train_path: Path, val_path: Path, cache: Path,
-            n_train: int, n_val: int, images_root: Path) -> None:
+            n_train: int, n_val: int, images_root: Path,
+            clip_name: str = CLIP_ID, device: str = "cpu",
+            encode_batch: int = ENCODE_BATCH, amp: bool = True) -> None:
     from PIL import Image
     from transformers import CLIPImageProcessor, CLIPModel
 
@@ -94,9 +102,16 @@ def extract(prior_path: Path, train_path: Path, val_path: Path, cache: Path,
     from openvocab_rel.geometry import geom_feats_torch
 
     torch.set_grad_enabled(False)
-    print(f"loading {CLIP_ID} (FROZEN -- never fine-tuned) ...", flush=True)
-    model = CLIPModel.from_pretrained(CLIP_ID).eval()
-    proc = CLIPImageProcessor.from_pretrained(CLIP_ID)
+    dev = torch.device(device)
+    # fp16 only on CUDA: the encoder is frozen and its output is L2-normalized
+    # immediately, so reduced precision cannot leak into the fitted scorer as
+    # anything but a tiny feature perturbation. On CPU fp16 is both slower and
+    # less accurate, so it is never used there.
+    use_amp = bool(amp) and dev.type == "cuda"
+    print(f"loading {clip_name} (FROZEN -- never fine-tuned) on {dev}"
+          f"{' [fp16 autocast]' if use_amp else ''} ...", flush=True)
+    model = CLIPModel.from_pretrained(clip_name).eval().to(dev)
+    proc = CLIPImageProcessor.from_pretrained(clip_name)
     dim = model.config.projection_dim
 
     raw = json.loads(prior_path.read_text(encoding="utf-8"))
@@ -131,9 +146,17 @@ def extract(prior_path: Path, train_path: Path, val_path: Path, cache: Path,
 
     def encode(pils):
         out = []
-        for i in range(0, len(pils), 64):
-            px = proc(images=pils[i:i + 64], return_tensors="pt")["pixel_values"]
-            out.append(F.normalize(_image_features(model, px), dim=-1))
+        for i in range(0, len(pils), encode_batch):
+            px = proc(images=pils[i:i + encode_batch], return_tensors="pt")["pixel_values"].to(dev)
+            if use_amp:
+                with torch.autocast(device_type="cuda", dtype=torch.float16):
+                    f = _image_features(model, px)
+            else:
+                f = _image_features(model, px)
+            # Normalize and store in fp32 on CPU: the cache is consumed by a
+            # CPU scorer, and keeping features on the GPU would pin memory for
+            # the whole extraction for no benefit.
+            out.append(F.normalize(f.float(), dim=-1).cpu())
         return torch.cat(out) if out else torch.zeros(0, dim)
 
     def run(path, cap, tag):
@@ -206,16 +229,22 @@ def extract(prior_path: Path, train_path: Path, val_path: Path, cache: Path,
                                 text=True, check=True).stdout.strip()
     except Exception:
         commit = "unknown"
+    res = proc.crop_size if isinstance(getattr(proc, "crop_size", None), dict) else None
     meta = {
-        "clip_model": CLIP_ID, "clip_frozen": True, "projection_dim": dim,
-        "preprocess_resolution": 224, "l2_normalised": True,
+        "clip_model": clip_name, "clip_frozen": True, "projection_dim": dim,
+        "preprocess_resolution": int(res["height"]) if res else None,
+        "l2_normalised": True,
+        "device": str(dev), "fp16_autocast": bool(use_amp), "encode_batch": int(encode_batch),
         "subject_object_crop_pad": 0.1, "union_crop_pad": 0.05,
         "git_commit": commit,
         "n_train_images": int(tr["n_images"]), "n_train_instances": int(tr["y"].numel()),
         "n_val_images": int(va["n_images"]), "n_val_instances": int(va["y"].numel()),
         "n_crops_encoded": int(tr["n_crops"] + va["n_crops"]),
-        "note": "ViT-B/32 forced by CPU-only hardware; L/14-336 runs at 0.3 crops/s. "
-                "Weaker encoder => positive results are a LOWER BOUND.",
+        "note": (
+            "Encoder recorded above. A weaker encoder than the repo's own "
+            "openai/clip-vit-large-patch14-336 makes a NEGATIVE result a LOWER "
+            "BOUND only."
+        ),
     }
     cache.parent.mkdir(parents=True, exist_ok=True)
     torch.save({"train": tr, "val": va, "meta": meta, "PV": PV}, cache)
@@ -431,6 +460,14 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--n_train", type=int, default=1200)
     ap.add_argument("--n_val", type=int, default=1200)
     ap.add_argument("--out", default="")
+    ap.add_argument("--clip_name", default=CLIP_ID,
+                    help="CLIP encoder to extract with. The repo's own model is "
+                         "openai/clip-vit-large-patch14-336; the B/32 default preserves "
+                         "the original CPU-only measurement.")
+    ap.add_argument("--device", default="cpu", help="cpu or cuda")
+    ap.add_argument("--encode_batch", type=int, default=ENCODE_BATCH)
+    ap.add_argument("--no_amp", action="store_true",
+                    help="disable fp16 autocast on CUDA (fp32 control arm)")
     args = ap.parse_args(argv)
 
     if not args.extract and not args.score:
@@ -442,7 +479,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                 print(f"[FAIL] missing: {p}", file=sys.stderr)
                 return 2
         extract(Path(args.prior), Path(args.train), Path(args.val), cache,
-                args.n_train, args.n_val, Path(args.images))
+                args.n_train, args.n_val, Path(args.images),
+                clip_name=str(args.clip_name), device=str(args.device),
+                encode_batch=int(args.encode_batch), amp=not bool(args.no_amp))
     if args.score:
         if not cache.exists():
             print(f"[FAIL] cache not found: {cache}. Run with --extract first.", file=sys.stderr)

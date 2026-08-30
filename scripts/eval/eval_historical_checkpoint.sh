@@ -80,7 +80,11 @@ if [[ "${MODE}" == "canary" ]]; then
   EVAL_BATCHES="${EVAL_BATCHES:-2}"
   RUN_PREFIX="historical_canary"
 else
-  EVAL_BATCHES="${EVAL_BATCHES:-0}"    # 0 = the whole split
+  # 0 = the whole split. evals.py treats a non-positive cap as "no limit"
+  # (_batch_limit_reached). Before that helper existed, 0 broke on the first
+  # batch and this "full" run evaluated ZERO images while exiting 0 and
+  # reporting all-zero metrics.
+  EVAL_BATCHES="${EVAL_BATCHES:-0}"
   RUN_PREFIX="historical_full"
 fi
 

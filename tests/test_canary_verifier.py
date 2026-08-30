@@ -275,3 +275,48 @@ def test_failing_verdict_file_starts_with_fail(tmp_path):
     code, _out = run_verifier(metrics, "--out", str(verdict))
     assert code == 1
     assert verdict.read_text(encoding="utf-8").splitlines()[0] == "FAIL"
+
+
+# ---------------------------------------------------------------------------
+# run sanity must work on the REAL metrics layout, not just the fixture's
+#
+# The evaluator nests these fields under val_sgg.predcls. Reading only the top
+# level let a run that evaluated ZERO images pass the verifier with all-zero
+# metrics -- the guard passed its tests while never firing in production.
+# ---------------------------------------------------------------------------
+
+def _nested_row(n_images: float, num_gt: float) -> dict:
+    """A metrics row shaped the way openvocab_rel/evals.py actually writes one."""
+    row = make_row()
+    row.pop("n_images_evaluated", None)
+    row.pop("num_gt", None)
+    row.pop("R@50", None)
+    row.pop("mR@50", None)
+    row["val_sgg"] = {"predcls": {"n": n_images, "num_gt": num_gt,
+                                  "R@50": 0.0 if n_images == 0 else 0.66,
+                                  "mR@50": 0.0 if n_images == 0 else 0.22}}
+    return row
+
+
+def test_zero_images_is_flagged_in_the_nested_layout(tmp_path):
+    code, out = run_verifier(write_metrics(tmp_path, _nested_row(0.0, 0.0)))
+    assert code == 1
+    assert "evaluated at least one image" in out
+    assert "eval_batches=0 means ZERO batches" in out
+
+
+def test_nonzero_nested_run_passes(tmp_path):
+    code, out = run_verifier(write_metrics(tmp_path, _nested_row(240.0, 3093.0)))
+    assert code == 0, out
+    assert "[PASS] evaluated at least one image" in out
+
+
+def test_missing_image_count_entirely_is_flagged(tmp_path):
+    """Absent counts must fail loudly rather than skip the check."""
+    row = make_row()
+    for key in ("n_images_evaluated", "num_images", "num_gt"):
+        row.pop(key, None)
+    row["val_sgg"] = {"predcls": {}}
+    code, out = run_verifier(write_metrics(tmp_path, row))
+    assert code == 1
+    assert "no image count found" in out

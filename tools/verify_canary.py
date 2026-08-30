@@ -110,6 +110,19 @@ def expected_predicate_vocab_hash() -> Optional[str]:
     return hashlib.sha256(raw).hexdigest()[:16]
 
 
+def _first_present(*values: Any) -> Any:
+    """First non-None value, so a metric can be read from either layout.
+
+    Real metrics rows nest run-sanity fields under val_sgg.predcls; the
+    synthetic fixtures in tests/ put them at the top level. Both must work, or
+    the guard passes its tests while never firing in production.
+    """
+    for value in values:
+        if value is not None:
+            return value
+    return None
+
+
 class Verdict:
     def __init__(self) -> None:
         self.failures: List[str] = []
@@ -259,17 +272,29 @@ def main(argv: Optional[List[str]] = None) -> int:
                 f"would have been UNCALIBRATED while reporting normally")
 
     v.note("\n--- run sanity ---------------------------------------------------")
-    n_images = row.get("n_images_evaluated", row.get("num_images"))
+    # The evaluator nests these under val_sgg.predcls; only synthetic fixtures
+    # put them at the top level. Reading the top level ALONE let a run that
+    # evaluated ZERO images pass this verifier while reporting all-zero
+    # metrics -- exactly the silent failure this section exists to catch.
+    predcls = ((row.get("val_sgg") or {}).get("predcls") or {}) if isinstance(row.get("val_sgg"), dict) else {}
+    n_images = _first_present(row.get("n_images_evaluated"), row.get("num_images"), predcls.get("n"))
     if n_images is not None:
-        v.check(float(n_images) > 0, "evaluated at least one image", f"n_images = {n_images}")
-    num_gt = row.get("num_gt")
+        v.check(float(n_images) > 0, "evaluated at least one image",
+                f"n_images = {n_images}. A run that evaluates nothing still exits 0 and "
+                f"reports all-zero metrics; note that eval_batches=0 means ZERO batches, "
+                f"not 'the whole split'")
+    else:
+        v.check(False, "evaluated at least one image",
+                "no image count found in the metrics row (checked n_images_evaluated, "
+                "num_images and val_sgg.predcls.n)")
+    num_gt = _first_present(row.get("num_gt"), predcls.get("num_gt"))
     if num_gt is not None:
         v.check(float(num_gt) > 0, "ground-truth triplets were found",
                 f"num_gt = {num_gt}; zero GT means R@K/mR@K are meaningless")
 
     for k in ("R@50", "mR@50"):
-        if k in row:
-            val = row[k]
+        val = _first_present(row.get(k), predcls.get(k))
+        if val is not None:
             try:
                 bad = val != val  # NaN
             except Exception:

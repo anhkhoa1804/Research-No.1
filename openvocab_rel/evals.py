@@ -1412,6 +1412,27 @@ def _finalize_predicate_diag(diag: Dict[str, Any], topk: int) -> Dict[str, Any]:
 
 
 @torch.no_grad()
+def _batch_limit_reached(bi: int, max_batches: Any) -> bool:
+    """True once batch index `bi` has passed the cap. Non-positive cap = NO LIMIT.
+
+    Every eval loop below caps its batch count with this. A non-positive cap
+    means "evaluate the whole loader", which is what
+    scripts/eval/eval_historical_checkpoint.sh has always documented
+    (`EVAL_BATCHES=0   # 0 = the whole split`).
+
+    Before this helper the loops tested `bi >= int(max_batches)` directly, so a
+    cap of 0 broke on the very first batch: a run configured for the entire
+    split evaluated NOTHING, exited 0, and reported all-zero R@K/mR@K. That is
+    a silent-failure mode, not a loud one, so it is fixed here rather than
+    worked around at the call site. Any positive cap behaves exactly as before.
+    """
+    try:
+        cap = int(max_batches)
+    except (TypeError, ValueError):
+        return False
+    return cap > 0 and bi >= cap
+
+
 def eval_sgg_standard(
     cfg: TrainConfig,
     model: nn.Module,
@@ -1670,7 +1691,7 @@ def eval_sgg_standard(
 
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         eval_batch: List[Dict[str, Any]] = []
@@ -2565,7 +2586,7 @@ def eval_query_grounding(
     pred_to_idx = {p: i for i, p in enumerate(pred_vocab)}
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         regs, rels, rel_swaps, assigns, gates, kept_idx = _forward_eval_batch(
@@ -2687,7 +2708,7 @@ def eval_query_grounding_vs_k(
         n = 0
 
         for bi, batch in enumerate(loader):
-            if bi >= int(max_batches):
+            if _batch_limit_reached(bi, max_batches):
                 break
 
             regs, rels, rel_swaps, assigns, gates, kept_idx = _forward_eval_batch(
@@ -2785,7 +2806,7 @@ def eval_prompt_robustness(
     text_cache = _EvalTextCache(clip_model, processor, device)
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         regs, rels, rel_swaps, assigns, gates, kept_idx = _forward_eval_batch(
@@ -2910,7 +2931,7 @@ def eval_prune_reliability(
     cand_sum = 0
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         regs, rels, rel_swaps, assigns, gates, kept_idx = _forward_eval_batch(
@@ -2998,7 +3019,7 @@ def eval_global_predicate_classification(
     b_n = {"head": 0, "mid": 0, "tail": 0}
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         regs, rels, rel_swaps, assigns, gates, kept_idx = _forward_eval_batch(
@@ -3092,7 +3113,7 @@ def eval_swap_consistency(
     swap_cos = []
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         regs, rels, rel_swaps, assigns, gates, kept_idx = _forward_eval_batch(
@@ -3162,7 +3183,7 @@ def eval_query_grounding_split(
     met_held = _accum()
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         regs, rels, rel_swaps, assigns, gates, kept_idx = _forward_eval_batch(
@@ -3279,7 +3300,7 @@ def eval_object_leakage_diagnostic(
     n = 0
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         regs, rels, rel_swaps, assigns, gates, kept_idx = _forward_eval_batch(
@@ -3386,7 +3407,7 @@ def eval_latency_throughput(
     n_pairs = 0
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         if device.type == "cuda":
@@ -3449,7 +3470,7 @@ def eval_prune_tradeoff(
     cand_sum = 0
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         kept_per_k: Dict[int, List[torch.Tensor]] = {}
@@ -3533,7 +3554,7 @@ def eval_geometry_hard_negative_stress(
     n = 0
 
     for bi, batch in enumerate(loader):
-        if bi >= int(max_batches):
+        if _batch_limit_reached(bi, max_batches):
             break
 
         regs, rels, rel_swaps, assigns, gates, kept_idx = _forward_eval_batch(
