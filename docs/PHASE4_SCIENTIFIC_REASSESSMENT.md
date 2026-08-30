@@ -1,5 +1,17 @@
 # Phase 4 — scientific reassessment on measured L4 evidence
 
+> **SUPERSEDED IN PART — read `docs/MODEL_VS_LEAKFREE_PRIOR_RESULT.md` first.**
+>
+> Section 0 and section 2 below lead with a 240-image pilot in which the model
+> appeared **+3.82 mR@50** ahead of the leak-free prior. A matched 3,000-image
+> run (all 50 predicates present; N=240 covers only 47) measured **−0.82**.
+> The model does **not** beat the leak-free prior. The pilot's magnitude was a
+> small-sample artifact of a class-averaged metric.
+>
+> What still stands: the no-vision recalibration result (+4.03 mR@50 at
+> N=3,000, +4.11 full split), the four protocol bugs, the headroom analysis,
+> and the withdrawal of the old +0.50/+0.34 claim.
+
 Everything below was **measured on this machine today** unless explicitly
 labelled otherwise. Run artifacts are under `runs/`; each carries
 `provenance.json` with git SHA, environment, GPU and artifact hashes.
