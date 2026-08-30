@@ -69,7 +69,45 @@ EXPECTED: List[Tuple[str, Any, str]] = [
      "the maintained loader backend"),
 ]
 
-EXPECTED_NUM_PREDICATES = 50
+# The RUNTIME predicate vocabulary is the 50 canonical VG150 predicates plus one
+# synthetic "relation" background class appended at index 50 by
+# VG150DataLoader (vg150_loader.py, "predicate ids must match the 51-way
+# classifier head"), and documented in data/manifests/vg150.yaml:
+#     num_predicates: 50   # +1 synthetic "relation" background class at runtime
+#
+# This check previously compared that runtime count against the ON-DISK count
+# of 50 and therefore failed on every correctly-configured run. Comparing the
+# count alone was also the weaker check: a vocabulary of the right SIZE can
+# still carry the wrong ORDER, which silently misaligns every predicate index
+# against the checkpoint and the frequency prior. The size and the exact
+# ordering are both verified below, against a hash derived from
+# STANDARD_VG150_PREDICATES rather than a hardcoded digest.
+EXPECTED_NUM_PREDICATES = 51
+BACKGROUND_PREDICATE = "relation"
+
+
+def expected_predicate_vocab() -> Optional[List[str]]:
+    """The 51-entry runtime vocabulary this protocol requires, in index order."""
+    try:
+        sys.path.insert(0, str(Path.cwd()))
+        from tools.prepare_vg150_subset import STANDARD_VG150_PREDICATES  # type: ignore
+    except Exception:
+        return None
+    return sorted(STANDARD_VG150_PREDICATES) + [BACKGROUND_PREDICATE]
+
+
+def expected_predicate_vocab_hash() -> Optional[str]:
+    """Recompute train.py's predicate_vocab_hash for the expected ordering.
+
+    Mirrors _stable_hash_json in openvocab_rel/train.py. Derived, never
+    hardcoded, so it cannot drift away from the canonical vocabulary.
+    """
+    vocab = expected_predicate_vocab()
+    if vocab is None:
+        return None
+    import hashlib
+    raw = json.dumps(vocab, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:16]
 
 
 class Verdict:
@@ -181,8 +219,23 @@ def main(argv: Optional[List[str]] = None) -> int:
                 f"predicate vocabulary size == {EXPECTED_NUM_PREDICATES}",
                 f"resolved to {n_pred}; a different size means a different index mapping "
                 f"than the checkpoint and the frequency prior were built against")
-    if exp.get("predicate_vocab_hash"):
-        v.note(f"  [INFO] predicate_vocab_hash = {exp['predicate_vocab_hash']}")
+    # Size alone does not establish index alignment; the ORDER is what the
+    # checkpoint's classifier head and the frequency prior are indexed against.
+    recorded_hash = exp.get("predicate_vocab_hash")
+    expected_hash = expected_predicate_vocab_hash()
+    if recorded_hash and expected_hash:
+        v.check(
+            str(recorded_hash) == str(expected_hash),
+            "predicate vocabulary ORDER == sorted(STANDARD_VG150_PREDICATES) + ['relation']",
+            f"recorded predicate_vocab_hash {recorded_hash!r} != expected {expected_hash!r}; "
+            "the vocabulary is the right size but a different ordering, which misaligns "
+            "every predicate index against the checkpoint and the frequency prior",
+        )
+    elif recorded_hash:
+        v.note(f"  [WARN] could not derive the expected vocabulary hash; "
+               f"recorded {recorded_hash!r} left unchecked")
+    if recorded_hash:
+        v.note(f"  [INFO] predicate_vocab_hash = {recorded_hash}")
 
     v.note("\n--- checkpoint identity ------------------------------------------")
     resumed = str(cfg.get("resume_from", ""))

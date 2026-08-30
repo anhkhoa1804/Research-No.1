@@ -19,6 +19,21 @@ import pytest
 REPO_ROOT = Path(__file__).resolve().parent.parent
 VERIFIER = REPO_ROOT / "tools" / "verify_canary.py"
 
+sys.path.insert(0, str(REPO_ROOT))
+from tools.prepare_vg150_subset import STANDARD_VG150_PREDICATES  # noqa: E402
+
+
+def _expected_vocab_hash() -> str:
+    """The hash train.py records for the correct 51-entry runtime vocabulary.
+
+    Derived here the same way the verifier derives it, so the fixture cannot
+    silently drift away from the canonical vocabulary.
+    """
+    import hashlib
+    vocab = sorted(STANDARD_VG150_PREDICATES) + ["relation"]
+    raw = json.dumps(vocab, sort_keys=True, ensure_ascii=False, default=str).encode("utf-8")
+    return hashlib.sha256(raw).hexdigest()[:16]
+
 # A metrics row whose resolved config matches the frozen historical protocol.
 GOOD_CONFIG = {
     "eval_sgg_predicate_score_mode": "ensemble",
@@ -46,8 +61,11 @@ def make_row(config_overrides: dict | None = None, row_overrides: dict | None = 
     row = {
         "config": config,
         "experiment": {
-            "num_predicates": 50,
-            "predicate_vocab_hash": "0123456789abcdef",
+            # 50 canonical predicates + the synthetic "relation" background
+            # class the loader appends at runtime (vg150_loader.py); the
+            # 51-way head is what the checkpoint was trained against.
+            "num_predicates": 51,
+            "predicate_vocab_hash": _expected_vocab_hash(),
             "git_commit": "abcdef1",
             "train_config": config,
         },
@@ -141,11 +159,42 @@ def test_missing_frequency_prior_file_is_flagged(tmp_path):
 
 
 def test_wrong_predicate_vocabulary_size_is_flagged(tmp_path):
+    """50 is the ON-DISK count; the runtime vocabulary must carry the +1 background class."""
     row = make_row()
-    row["experiment"]["num_predicates"] = 51
+    row["experiment"]["num_predicates"] = 50
     code, out = run_verifier(write_metrics(tmp_path, row))
     assert code == 1
-    assert "predicate vocabulary size == 50" in out
+    assert "predicate vocabulary size == 51" in out
+
+
+def test_correct_51_way_runtime_vocabulary_passes(tmp_path):
+    """Guards the regression this fixed: 51 is correct, and used to fail every run."""
+    row = make_row()
+    assert row["experiment"]["num_predicates"] == 51
+    code, out = run_verifier(write_metrics(tmp_path, row))
+    assert code == 0, out
+    assert "[PASS] predicate vocabulary size == 51" in out
+
+
+def test_right_vocabulary_size_but_wrong_order_is_flagged(tmp_path):
+    """A correctly-sized vocabulary in the wrong ORDER misaligns every index."""
+    row = make_row()
+    row["experiment"]["predicate_vocab_hash"] = "deadbeefdeadbeef"
+    code, out = run_verifier(write_metrics(tmp_path, row))
+    assert code == 1
+    assert "predicate vocabulary ORDER" in out
+    assert "misaligns" in out
+
+
+def test_expected_vocabulary_hash_is_derived_not_hardcoded():
+    """The verifier must derive the expected hash from the canonical vocabulary."""
+    import re
+    source = VERIFIER.read_text(encoding="utf-8")
+    assert "STANDARD_VG150_PREDICATES" in source
+    # A bare 16-hex literal would be a frozen digest that could drift.
+    assert not re.search(r"['\"][0-9a-f]{16}['\"]", source), (
+        "verify_canary.py must derive the predicate vocabulary hash, not hardcode it"
+    )
 
 
 def test_wrong_checkpoint_is_flagged(tmp_path):
