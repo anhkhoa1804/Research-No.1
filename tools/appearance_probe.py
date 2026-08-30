@@ -74,6 +74,14 @@ PCA_DIM = 48
 EPOCHS = 30
 ENCODE_BATCH = 64
 
+# Decision thresholds, pre-registered in
+# docs/APPEARANCE_PROBE_L14_PREREGISTRATION.md before the L/14-336 run.
+# The 5% figure is inherited verbatim from the earlier B/32 analysis's own
+# stated criterion, not chosen after seeing any result. Between the two bounds
+# the outcome is reported as inconclusive rather than rounded to a verdict.
+THRESHOLD_LOW_PCT = 4.0
+THRESHOLD_HIGH_PCT = 6.0
+
 
 # ===========================================================================
 # extraction
@@ -91,6 +99,7 @@ def _image_features(model, px):
     return model.visual_projection(pooled)
 
 
+@torch.no_grad()
 def extract(prior_path: Path, train_path: Path, val_path: Path, cache: Path,
             n_train: int, n_val: int, images_root: Path,
             clip_name: str = CLIP_ID, device: str = "cpu",
@@ -101,7 +110,11 @@ def extract(prior_path: Path, train_path: Path, val_path: Path, cache: Path,
     sys.path.insert(0, str(Path.cwd()))
     from openvocab_rel.geometry import geom_feats_torch
 
-    torch.set_grad_enabled(False)
+    # Grad is disabled by the @torch.no_grad() decorator above, which scopes it
+    # to this function. The previous `torch.set_grad_enabled(False)` here was a
+    # PROCESS-WIDE switch that was never restored, so the documented combined
+    # invocation (`--extract --score`) always died in score()'s first
+    # loss.backward() with "element 0 of tensors does not require grad".
     dev = torch.device(device)
     # fp16 only on CUDA: the encoder is frozen and its output is L2-normalized
     # immediately, so reduced precision cannot leak into the fitted scorer as
@@ -403,24 +416,45 @@ def score(cache: Path, out_path: str) -> Dict[str, Any]:
     print("=" * 86)
     print(f"{'lambda':<36}{'val R':>8}{'val mR':>8}{'tail':>7}{'headroom':>10}")
     print(f"{'0.00  (P0)':<36}{R0*100:>8.2f}%{m0*100:>8.2f}%{bk0['tail']*100:>7.1f}%{0.0:>10.1f}%")
-    best = (m0, None, None, None)
+
+    # lambda is selected on the HELD-OUT-FROM-TRAIN split (`hm`, returned by
+    # fit), never on validation. Selecting it by validation score would make
+    # the headline the maximum of six correlated draws on the same split it is
+    # reported on -- an optimistic bias, not a measurement. The
+    # validation-argmax is still computed and reported below, explicitly
+    # labelled as the cherry-picked upper bound, so the size of that bias is
+    # visible rather than hidden.
+    selected = (-1.0, m0, None, None, None)   # (heldout_mR, val_mR, lam, ph, pg)
+    val_argmax = (m0, None)                   # (val_mR, lam) -- optimistic, not the headline
     for lam in (0.1, 0.25, 0.5, 1.0, 2.0):
         hm, W, b = fit("subj+obj+union+geom", lam=lam)
         m, ph, pg = show(f"{lam:<5} subj+obj+union+geom", apply(W, b, "subj+obj+union+geom", lam=lam),
                          f"additive_lam{lam}")
-        if m > best[0]:
-            best = (m, lam, ph, pg)
+        res[f"additive_lam{lam}"]["heldout_mR"] = float(hm)
+        if hm > selected[0]:
+            selected = (hm, m, lam, ph, pg)
+        if m > val_argmax[0]:
+            val_argmax = (m, lam)
 
-    res["best_additive_mR"] = best[0]
-    res["best_additive_lambda"] = best[1]
-    res["best_additive_headroom_pct"] = (best[0] - m0) / max(1e-9, (mo - m0)) * 100
+    best_mR, best_lam, ph_best, pg_best = selected[1], selected[2], selected[3], selected[4]
+    res["lambda_selection"] = "held-out-from-train (validation never used to select)"
+    res["best_additive_mR"] = best_mR
+    res["best_additive_lambda"] = best_lam
+    res["best_additive_headroom_pct"] = (best_mR - m0) / max(1e-9, (mo - m0)) * 100
+    res["val_argmax_mR"] = val_argmax[0]
+    res["val_argmax_lambda"] = val_argmax[1]
+    res["val_argmax_headroom_pct"] = (val_argmax[0] - m0) / max(1e-9, (mo - m0)) * 100
     print("\n" + "=" * 86)
-    print(f"BEST ADDITIVE: lambda={best[1]}  mR {best[0]*100:.2f}%  vs P0 {m0*100:.2f}%  "
-          f"delta {(best[0]-m0)*100:+.2f}   headroom captured {res['best_additive_headroom_pct']:.1f}%")
+    print(f"SELECTED (lambda chosen on held-out train): lambda={best_lam}  "
+          f"mR {best_mR*100:.2f}%  vs P0 {m0*100:.2f}%  delta {(best_mR-m0)*100:+.2f}   "
+          f"headroom captured {res['best_additive_headroom_pct']:.1f}%")
+    print(f"  [reference only, NOT the headline] validation-argmax lambda={val_argmax[1]}  "
+          f"mR {val_argmax[0]*100:.2f}%  headroom {res['val_argmax_headroom_pct']:.1f}%  "
+          f"<- optimistic: selected on the split it is reported on")
     print("=" * 86)
 
-    if best[2] is not None:
-        ph, pg = best[2], best[3]
+    if ph_best is not None:
+        ph, pg = ph_best, pg_best
         rows = [(PV[k], pg0[k], ph0[k] / pg0[k], (ph[k] / pg[k]) if pg.get(k) else 0.0)
                 for k in pg0 if pg0[k] >= 15]
         rows = [(n, c, a, b, b - a) for n, c, a, b in rows]
@@ -433,12 +467,36 @@ def score(cache: Path, out_path: str) -> Dict[str, Any]:
         for n, c, a, b, dd in rows[:10]:
             print(f"{n:<16}{c:>7,}{a*100:>8.1f}%{b*100:>9.1f}%{dd*100:>+8.1f}")
 
+    # The verdict is DERIVED from the measured numbers against the threshold
+    # pre-registered in docs/APPEARANCE_PROBE_L14_PREREGISTRATION.md. It was
+    # previously a hardcoded sentence that printed "signal is REAL but far too
+    # WEAK" regardless of what was measured -- including on runs where the
+    # ablation gate FAILED and the measurement was therefore invalid.
+    captured = res["best_additive_headroom_pct"]
+    if not gate:
+        verdict = "INVALID"
+        explanation = ("the visual ablation gate failed (real > shuffled > zero does not hold), "
+                       "so this run measures nothing about appearance either way")
+    elif captured >= THRESHOLD_HIGH_PCT:
+        verdict = "H1 SUPPORTED"
+        explanation = (f"captured {captured:.1f}% >= {THRESHOLD_HIGH_PCT:.0f}%: appearance converts "
+                       "a material share of the headroom")
+    elif captured < THRESHOLD_LOW_PCT:
+        verdict = "H0 SUPPORTED"
+        explanation = (f"captured {captured:.1f}% < {THRESHOLD_LOW_PCT:.0f}%: appearance does not "
+                       "convert the headroom at this encoder")
+    else:
+        verdict = "INCONCLUSIVE"
+        explanation = (f"captured {captured:.1f}% sits in the pre-registered "
+                       f"{THRESHOLD_LOW_PCT:.0f}-{THRESHOLD_HIGH_PCT:.0f}% inconclusive band")
+    res["verdict"] = verdict
+    res["verdict_explanation"] = explanation
     print("\n" + "=" * 86)
     print("VERDICT")
     print("=" * 86)
     print(f"  visual ablation gate      : {'PASS' if gate else 'FAIL'}")
-    print(f"  oracle headroom captured  : {res['best_additive_headroom_pct']:.1f}%")
-    print("  -> appearance signal is REAL but far too WEAK to justify a neural reranker")
+    print(f"  oracle headroom captured  : {captured:.1f}%   (lambda selected on held-out train)")
+    print(f"  -> {verdict}: {explanation}")
 
     if out_path:
         p = Path(out_path)
