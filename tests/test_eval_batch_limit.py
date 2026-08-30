@@ -62,3 +62,41 @@ def test_every_eval_loop_uses_the_helper():
         "_batch_limit_reached so a cap of 0 means the whole split"
     )
     assert source.count("_batch_limit_reached(bi, max_batches)") >= 12
+
+
+def test_eval_sgg_standard_keeps_its_no_grad_decorator():
+    """The helper must not be inserted between @torch.no_grad() and the function.
+
+    Inserting a top-level def directly after the decorator silently transfers
+    the decorator to the new function and strips eval_sgg_standard of
+    no_grad -- evaluation would then build a graph.
+    """
+    source = (REPO_ROOT / "openvocab_rel" / "evals.py").read_text(encoding="utf-8")
+    idx = source.index("def eval_sgg_standard(")
+    preceding = source[:idx].rstrip().splitlines()[-1].strip()
+    assert preceding == "@torch.no_grad()", (
+        f"eval_sgg_standard is preceded by {preceding!r}, not @torch.no_grad()"
+    )
+
+
+def test_helper_is_not_decorated():
+    source = (REPO_ROOT / "openvocab_rel" / "evals.py").read_text(encoding="utf-8")
+    idx = source.index("def _batch_limit_reached(")
+    preceding = source[:idx].rstrip().splitlines()[-1].strip()
+    assert not preceding.startswith("@"), (
+        f"_batch_limit_reached picked up the decorator {preceding!r}"
+    )
+
+
+def test_evals_py_keeps_its_crlf_line_endings():
+    """evals.py is CRLF in this repository; a whole-file rewrite must not flip it.
+
+    A tool that reads the file as text and writes it back converts all 3,691
+    line endings, producing a diff that buries a real change in noise and
+    changes the file's hash for everyone.
+    """
+    raw = (REPO_ROOT / "openvocab_rel" / "evals.py").read_bytes()
+    crlf = raw.count(b"\r\n")
+    lone_lf = raw.count(b"\n") - crlf
+    assert crlf > 3000, f"expected CRLF line endings, found only {crlf}"
+    assert lone_lf == 0, f"{lone_lf} lines use bare LF; the file is mixed"

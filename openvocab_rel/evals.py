@@ -1411,7 +1411,6 @@ def _finalize_predicate_diag(diag: Dict[str, Any], topk: int) -> Dict[str, Any]:
     }
 
 
-@torch.no_grad()
 def _batch_limit_reached(bi: int, max_batches: Any) -> bool:
     """True once batch index `bi` has passed the cap. Non-positive cap = NO LIMIT.
 
@@ -1433,6 +1432,7 @@ def _batch_limit_reached(bi: int, max_batches: Any) -> bool:
     return cap > 0 and bi >= cap
 
 
+@torch.no_grad()
 def eval_sgg_standard(
     cfg: TrainConfig,
     model: nn.Module,
