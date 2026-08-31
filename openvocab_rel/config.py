@@ -284,6 +284,18 @@ class TrainConfig:
     freq_bias_path: str = ""
     freq_bias_alpha: float = 0.5
     freq_bias_smoothing: float = 1.0
+    # --- Experiment C-prime (docs/MODEL_RECALIBRATION_C_PREREGISTRATION.md) ---
+    # Class-balancing tau applied to the FREQUENCY-PRIOR rows:
+    #     log P(p|s,o)  ->  log P(p|s,o) - tau * log P(p)
+    # This is NOT eval_logit_adj_tau, which is applied to cls_logits only
+    # (evals.py:1256) and is multiplied by eval_sgg_predicate_ensemble_alpha=0.0
+    # under the historical protocol -- proven inert in runs/p8_tau_path_bug/.
+    # 0.0 is a strict no-op: the historical/default protocol is unchanged.
+    eval_freq_bias_tau: float = 0.0
+    # When non-empty, dump per-pair PRE-composition model logits and prior rows
+    # to this .pt path, so the decision rule can be re-derived on CPU without a
+    # second GPU pass. Purely observational: it changes no metric.
+    eval_sgg_dump_pair_logits_path: str = ""
     predicate_background_weight: float = 0.1
     predicate_ce_loss: str = "focal"  # ce, weighted_ce, focal
     predicate_ce_gamma: float = 1.5

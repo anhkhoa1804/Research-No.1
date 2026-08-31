@@ -1175,6 +1175,125 @@ def _frequency_bias_for_pairs(
     return torch.stack(rows, dim=0)
 
 
+def _pair_dump_enabled(cfg: Any) -> str:
+    """Path for the per-pair logit dump, or "" when disabled (the default)."""
+    return str(getattr(cfg, "eval_sgg_dump_pair_logits_path", "") or "").strip()
+
+
+def _collect_pair_dump(
+    dump: Dict[str, Any],
+    ex: Dict[str, Any],
+    gt: Dict[str, Any],
+    pair_list: List[Tuple[int, int]],
+    obj_labels: List[str],
+    model_logits: torch.Tensor,
+    freq_bias: Optional[Dict[str, Any]],
+    device: torch.device,
+) -> None:
+    """Record everything needed to re-derive the decision rule on CPU.
+
+    PURELY OBSERVATIONAL. It reads tensors that already exist and appends CPU
+    copies to `dump`. It returns nothing, mutates nothing the evaluator reads,
+    and is only ever called when eval_sgg_dump_pair_logits_path is non-empty.
+
+    `model_logits` MUST be the output of _relation_predicate_logits BEFORE
+    _apply_frequency_bias -- the model term on its own. The prior rows are
+    recomputed here by calling the same pure helper the composition uses, so
+    the two are guaranteed to be the pair of terms that were actually added.
+
+    GT is stored RAW (no alias normalisation) so the CPU side can toggle the
+    alias scheme; see docs/research_sessions/POST_B_SOURCE_FORENSICS.md.
+    """
+    n = len(pair_list)
+    if n == 0 or int(model_logits.shape[0]) != n:
+        return
+    prior_rows = _frequency_bias_for_pairs(freq_bias, pair_list, obj_labels, device)
+    if prior_rows is None or tuple(prior_rows.shape) != tuple(model_logits.shape):
+        prior_rows = torch.zeros_like(model_logits)
+        dump["missing_prior_images"] = int(dump.get("missing_prior_images", 0)) + 1
+    boxes = ex.get("obj_boxes", None)
+    dump["image_id"].append(str(ex.get("image_id", "")))
+    dump["pairs"].append(torch.tensor([[int(a), int(b)] for a, b in pair_list], dtype=torch.long))
+    dump["model_logits"].append(model_logits.detach().float().cpu())
+    dump["prior_rows"].append(prior_rows.detach().float().cpu())
+    dump["obj_labels"].append([str(x) for x in obj_labels])
+    dump["obj_boxes"].append(
+        boxes.detach().float().cpu() if isinstance(boxes, torch.Tensor) else torch.zeros((0, 4))
+    )
+    dump["gt_subj_idx"].append([int(x) for x in gt.get("subj_idx", [])])
+    dump["gt_obj_idx"].append([int(x) for x in gt.get("obj_idx", [])])
+    dump["gt_pred"].append([str(x) for x in gt.get("pred_labels", [])])
+    dump["gt_subj_label"].append([str(x) for x in gt.get("subj_labels", [])])
+    dump["gt_obj_label"].append([str(x) for x in gt.get("obj_labels", [])])
+    dump["n_pairs"] = int(dump.get("n_pairs", 0)) + n
+
+
+def _write_pair_dump(dump: Dict[str, Any], path: str, cfg: Any, pred_vocab: List[str]) -> None:
+    """Persist the dump. Failures are reported but never abort the evaluation."""
+    try:
+        parent = os.path.dirname(str(path))
+        if parent:
+            os.makedirs(parent, exist_ok=True)
+        payload = dict(dump)
+        payload["pred_vocab"] = list(pred_vocab)
+        payload["schema"] = "pair_logit_dump_v1"
+        payload["composition"] = (
+            "final = model_logits + freq_bias_alpha * (prior_rows - tau * global_log_probs); "
+            "background column masked to -1e4; softmax; argmax per pair"
+        )
+        payload["freq_bias_alpha"] = float(getattr(cfg, "freq_bias_alpha", 0.0))
+        payload["eval_freq_bias_tau"] = float(getattr(cfg, "eval_freq_bias_tau", 0.0))
+        payload["ensemble_alpha"] = float(getattr(cfg, "eval_sgg_predicate_ensemble_alpha", 0.5))
+        payload["score_mode"] = str(getattr(cfg, "eval_sgg_predicate_score_mode", ""))
+        payload["use_gt_pairs"] = bool(getattr(cfg, "eval_sgg_use_gt_pairs", False))
+        payload["iou_thresh"] = float(getattr(cfg, "eval_sgg_iou_thresh", 0.5))
+        payload["use_vg_aliases"] = bool(getattr(cfg, "eval_sgg_use_vg_aliases", True))
+        torch.save(payload, str(path))
+        print(f"[eval_sgg] pair-logit dump -> {path} "
+              f"({len(dump.get('image_id', []))} images, {int(dump.get('n_pairs', 0))} pairs)", flush=True)
+    except Exception as exc:  # pragma: no cover - reported, never fatal
+        print(f"[eval_sgg] WARNING: pair-logit dump failed: {exc!r}", flush=True)
+
+
+def _apply_freq_bias_tau(
+    cfg: Any,
+    pair_prior: Optional[torch.Tensor],
+    freq_bias: Optional[Dict[str, Any]],
+) -> Optional[torch.Tensor]:
+    """Class-balancing adjustment on the PRIOR term, for experiment C-prime.
+
+        log P(p | s, o)  ->  log P(p | s, o) - tau * log P(p)
+
+    This is the pathway C-prime needs, and it is NOT the one
+    `eval_logit_adj_tau` provides: that flag is applied to `cls_logits` only
+    (see the call at the top of _relation_predicate_logits' ensemble branch)
+    and is then multiplied by eval_sgg_predicate_ensemble_alpha, which the
+    historical protocol sets to 0.0 -- so it cannot change that protocol's
+    output at all. Proven with the real function, two independent ways, in
+    runs/p8_tau_path_bug/ (tools/prove_tau_path_inert.py).
+
+    `tau = 0.0` (the default) returns the tensor UNCHANGED -- object identity,
+    not just equality -- so the historical/default protocol is byte-identical
+    to what it produced before this function existed.
+
+    log P(p) is the prior file's own `global_log_probs`, already remapped onto
+    the runtime predicate vocabulary by _load_frequency_bias. The synthetic
+    background class receives `default_log_prob` there, but _mask_background_logits
+    overwrites the background column with -10000 AFTER composition, so the
+    adjustment cannot leak into it.
+    """
+    tau = float(getattr(cfg, "eval_freq_bias_tau", 0.0))
+    if tau == 0.0 or pair_prior is None or freq_bias is None:
+        return pair_prior
+    marginal = freq_bias.get("global", None)
+    if not isinstance(marginal, torch.Tensor):
+        return pair_prior
+    if int(marginal.numel()) != int(pair_prior.shape[-1]):
+        return pair_prior
+    marginal = marginal.to(device=pair_prior.device, dtype=pair_prior.dtype).view(1, -1)
+    return pair_prior - (tau * marginal)
+
+
 def _apply_frequency_bias(
     cfg: Any,
     logits: torch.Tensor,
@@ -1191,6 +1310,7 @@ def _apply_frequency_bias(
     pair_prior = _frequency_bias_for_pairs(freq_bias, pair_list, obj_labels, device)
     if pair_prior is None or tuple(pair_prior.shape) != tuple(logits.shape):
         return logits
+    pair_prior = _apply_freq_bias_tau(cfg, pair_prior, freq_bias)
     return logits.float() + (alpha * pair_prior)
 
 
@@ -1514,6 +1634,15 @@ def eval_sgg_standard(
     multi_pred_hits = {k: {p: 0 for p in pred_vocab} for k in ks}
 
     global_gt_counts = {p: 0 for p in pred_vocab}
+    # Experiment C-prime: optional, default-off per-pair logit dump. When the
+    # path is empty this stays None and every dump call site is skipped.
+    _pair_dump_path = _pair_dump_enabled(cfg)
+    pair_dump: Optional[Dict[str, Any]] = (
+        {k: [] for k in ("image_id", "pairs", "model_logits", "prior_rows", "obj_labels",
+                         "obj_boxes", "gt_subj_idx", "gt_obj_idx", "gt_pred",
+                         "gt_subj_label", "gt_obj_label")}
+        if _pair_dump_path else None
+    )
     global_hits = {t: {k: {p: 0 for p in pred_vocab} for k in ks} for t in tasks}
     zs_gt_counts = {p: 0 for p in pred_vocab}
     zs_hits = {t: {k: {p: 0 for p in pred_vocab} for k in ks} for t in tasks}
@@ -1769,6 +1898,8 @@ def eval_sgg_standard(
             gt_obj_scores = torch.ones((len(gt_labels),), dtype=torch.float32, device=device)
 
             rel_logits = _relation_predicate_logits(cfg, out, rel_feat, pred_emb, pred_log_prior)
+            if pair_dump is not None:
+                _collect_pair_dump(pair_dump, ex, gt, pair_list, gt_labels, rel_logits, freq_bias, device)
             rel_logits = _apply_frequency_bias(cfg, rel_logits, freq_bias, pair_list, gt_labels, device)
             rel_probs = _mask_background_logits(rel_logits, pred_vocab).softmax(dim=-1)
             relationness_scores = torch.ones((int(rel_feat.shape[0]),), dtype=torch.float32, device=device)
@@ -2222,6 +2353,8 @@ def eval_sgg_standard(
         "gt_top": _top_counts(object_diag.get("gt_top", {})),
         "pred_top1": _top_counts(object_diag.get("pred_top1", {})),
     }
+    if pair_dump is not None and _pair_dump_path:
+        _write_pair_dump(pair_dump, _pair_dump_path, cfg, pred_vocab)
     return outm
 
 class _EvalTextCache:
