@@ -59,7 +59,8 @@ def _log(m: str = "") -> None:
 class Bench:
     """Flattened view of the cache, with GT triplets mapped onto pair rows."""
 
-    def __init__(self, dump_path: Path, scheme: str = "raw50"):
+    def __init__(self, dump_path: Path, scheme: str = "raw50",
+                 prior_path: Optional[Path] = None):
         d = torch.load(dump_path, weights_only=False)
         self.meta = d
         self.scheme = scheme
@@ -114,9 +115,9 @@ class Bench:
         self.col_to_class = torch.tensor([lab_to_id[c] for c in self.col_label], dtype=torch.long)
         self.n_classes = len(self.classes)
 
-        # log P(p): the prior file's own class marginal, recovered from the
-        # cache as the row every unseen pair falls back to. Column-space.
-        self.log_marginal = self._recover_marginal()
+        # log P(p): the prior file's OWN `global_log_probs`, remapped onto the
+        # cache's column order. Read from the file, never inferred.
+        self.log_marginal = self._load_marginal(prior_path)
 
         # buckets from the evaluated split's GT counts. Identical for every
         # arm because GT is fixed, so cross-arm comparisons are unaffected;
@@ -134,19 +135,61 @@ class Bench:
         q = torch.quantile(self.prior_entropy, torch.tensor([1 / 3, 2 / 3]))
         self.ent_stratum = torch.bucketize(self.prior_entropy, q)  # 0 low, 1 mid, 2 high
 
-    def _recover_marginal(self) -> torch.Tensor:
-        """log P(p), in column space.
+    def _load_marginal(self, prior_path: Optional[Path]) -> torch.Tensor:
+        """log P(p) in column space, from the prior file's `global_log_probs`.
 
-        _frequency_bias_for_pairs falls back to the prior file's `global` row
-        for any pair it has no statistics for, so the modal prior row across
-        the split IS that marginal. Recovered rather than re-read so the CPU
-        tau is provably the same vector the in-evaluator tau would use.
+        An earlier revision INFERRED this as the modal prior row, on the theory
+        that unseen pairs fall back to the global marginal. That is false: they
+        fall back to `default_log_prob`, a UNIFORM row (measured: -3.932 in
+        every column, 616 rows). Subtracting a constant vector cannot move an
+        argmax, so the inferred tau was a silent no-op and the prior-only
+        frontier came out almost flat -- tau=0.5 gave mR@50 23.39 where
+        runs/p7_prior_temperature_sweep/ measures 38.15. Caught by that
+        cross-check, which is why it is now a hard gate in this tool.
         """
-        rounded = (self.prior * 1e4).round().to(torch.int64)
-        keys = Counter(tuple(r) for r in rounded.tolist())
-        modal, count = keys.most_common(1)[0]
-        self.marginal_support = count
-        return torch.tensor(modal, dtype=torch.float32) / 1e4
+        if prior_path is None:
+            raise ValueError("--prior is required: log P(p) is read, never inferred")
+        raw = json.loads(Path(prior_path).read_text(encoding="utf-8"))
+        src = [str(x).strip().lower() for x in raw.get("predicate_vocab", [])]
+        g = raw.get("global_log_probs")
+        if not isinstance(g, list) or len(g) != len(src):
+            raise ValueError(f"{prior_path}: unusable global_log_probs")
+        default = float(raw.get("default_log_prob", -20.0))
+        idx = {p: i for i, p in enumerate(src)}
+        self.marginal_source = str(prior_path)
+        self.marginal_missing = [n for n in self.fg_names_raw if n not in idx]
+        return torch.tensor([float(g[idx[n]]) if n in idx else default
+                             for n in self.fg_names_raw], dtype=torch.float32)
+
+    @staticmethod
+    def _norm(x: torch.Tensor) -> torch.Tensor:
+        """`_normalize_eval_logits` from evals.py: per-row standardisation."""
+        m = x.mean(-1, keepdim=True)
+        sd = x.std(-1, keepdim=True).clamp_min(1e-4)
+        return (x - m) / sd
+
+    def ensemble_term(self, ea: float) -> torch.Tensor:
+        """The model term the evaluator WOULD build at this ensemble_alpha.
+
+        The historical protocol pins ea = 0.0, which makes this the text branch
+        alone. Sweeping it is the counterfactual that separates "the model has
+        no information" from "the protocol discards the model's information".
+        Both branches are normalised, exactly as _relation_predicate_logits
+        does -- comparing a normalised branch against a RAW one would confound
+        the branch with its scale, and arm D shows scale matters a great deal.
+        """
+        ct = float(self.meta.get("classifier_temperature", 1.0)) or 1.0
+        tt = float(self.meta.get("text_temperature", 1.0)) or 1.0
+        return ea * (self._norm(self.cls) / ct) + (1.0 - ea) * (self._norm(self.text) / tt)
+
+    def per_predicate_recall(self, s: torch.Tensor) -> Dict[int, Tuple[int, int]]:
+        pred, y = self.predict(s), self.gt_y
+        hit = (pred == y)
+        ph, pg = Counter(), Counter()
+        for yy, hh in zip(y.tolist(), hit.tolist()):
+            pg[yy] += 1
+            ph[yy] += int(hh)
+        return {k: (ph[k], pg[k]) for k in pg}
 
     # ------------------------------------------------------------ scoring
     def score(self, tau: float, alpha: float, model_term: Optional[torch.Tensor],
@@ -264,6 +307,9 @@ def main(argv: Optional[List[str]] = None) -> int:
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--dump", type=Path, required=True)
     ap.add_argument("--out", type=str, required=True)
+    ap.add_argument("--prior", type=Path, required=True,
+                    help="the SAME frequency prior file the GPU pass used; "
+                         "log P(p) is read from its global_log_probs")
     ap.add_argument("--schemes", type=str, default="raw50,eval48")
     ap.add_argument("--null_seeds", type=int, default=5)
     ap.add_argument("--select_seed", type=int, default=0,
@@ -272,7 +318,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
     res: Dict[str, Any] = {
         "tool": "cprime_analysis",
-        "dump": str(args.dump),
+        "dump": str(args.dump), "prior": str(args.prior),
         "preregistration": "docs/MODEL_RECALIBRATION_C_PREREGISTRATION.md",
         "taus": TAUS, "alphas": ALPHAS, "alpha_historical": ALPHA_HIST,
         "null_seeds": args.null_seeds,
@@ -283,15 +329,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         _log("\n" + "=" * 96)
         _log(f"SCHEME = {scheme}")
         _log("=" * 96)
-        B = Bench(args.dump, scheme)
+        B = Bench(args.dump, scheme, prior_path=args.prior)
         S: Dict[str, Any] = {
             "n_classes": B.n_classes, "n_gt": int(B.gt_y.numel()),
             "n_images": B.n_images, "n_pairs": int(B.model.shape[0]),
-            "marginal_support_rows": B.marginal_support,
+            "marginal_source": B.marginal_source,
+            "marginal_missing_predicates": B.marginal_missing,
         }
         _log(f"  classes={B.n_classes}  GT triplets={int(B.gt_y.numel())}  "
              f"pairs={int(B.model.shape[0])}  images={B.n_images}")
-        _log(f"  log P(p) recovered from {B.marginal_support} identical fallback rows")
+        _log(f"  log P(p) read from {B.marginal_source}"
+             f"{'' if not B.marginal_missing else '  MISSING: ' + str(B.marginal_missing)}")
 
         # ---- ARM A: the frontier
         _log(f"\n  ARM A  prior only")
@@ -304,6 +352,33 @@ def main(argv: Optional[List[str]] = None) -> int:
             _log(f"  {t:>7} {m['R']*100:>8.2f} {m['mR']*100:>8.2f} {m['head_mR']*100:>7.2f}"
                  f" {m['body_mR']*100:>7.2f} {m['tail_mR']*100:>7.2f}")
         S["arm_A_prior_only"] = curve
+
+        # VALIDATION GATE. The prior-only frontier is computed here from the
+        # cached prior rows; runs/p7_prior_temperature_sweep/ computed it
+        # independently, from the prior FILE, with a different tool. They must
+        # agree. This gate is what caught the inferred-marginal defect: a
+        # silent no-op tau reproduced tau=0 exactly and diverged everywhere
+        # else, which a tau=0-only check would have passed.
+        if scheme == "raw50":
+            ref = {0.0: (66.80, 21.98), 0.05: (66.47, 24.22), 0.1: (66.16, 26.00),
+                   0.2: (61.95, 28.42), 0.5: (44.64, 38.15)}
+            devs = []
+            for row in curve:
+                if row["tau"] in ref:
+                    rR, rM = ref[row["tau"]]
+                    devs.append((row["tau"], row["R"] * 100 - rR, row["mR"] * 100 - rM))
+            worst = max((max(abs(a), abs(b)) for _, a, b in devs), default=0.0)
+            S["p7_reproduction_gate"] = {
+                "reference": "runs/p7_prior_temperature_sweep/decision_rule_sweep.json",
+                "deviations_points": [{"tau": t, "dR": a, "dmR": b} for t, a, b in devs],
+                "worst_abs_deviation_points": worst,
+                "passes": bool(worst < 1.0),
+            }
+            _log(f"\n  GATE  prior-only frontier vs p7 (independent tool): "
+                 f"worst |deviation| {worst:.2f} points -> "
+                 f"{'PASS' if worst < 1.0 else 'FAIL'}")
+            for t, a, b in devs:
+                _log(f"        tau={t:<6} dR {a:+6.2f}  dmR {b:+6.2f}")
 
         # ---- ARMS B / B'
         model_terms = {"B_model": B.model, "Bp_classifier": B.cls, "B_text": B.text}
@@ -345,6 +420,120 @@ def main(argv: Optional[List[str]] = None) -> int:
                 _log(f"  {a:>7} {t:>6} {m['R']*100:>8.2f} {m['mR']*100:>8.2f}"
                      f" {'   n/a' if g is None else format(g, '+9.2f')}")
         S["arm_D_alpha_sweep"] = drows
+
+        # ---- ARM E: the ensemble_alpha counterfactual (Q7 / decision B)
+        EAS = [0.0, 0.25, 0.5, 0.75, 1.0]
+        _log(f"\n  ARM E  ensemble_alpha counterfactual  (both branches normalised, "
+             f"+ prior alpha={ALPHA_HIST})")
+        _log(f"  {'ens_a':>6} {'tau':>6} {'R@50':>8} {'mR@50':>8} {'tail':>7} {'dPareto':>9} {'nullN1':>8} {'margin':>8}")
+        erows = []
+        for ea in EAS:
+            mt = B.ensemble_term(ea)
+            for t in TAUS:
+                m = B.metrics(B.score(t, ALPHA_HIST, mt))
+                m["ensemble_alpha"], m["tau"] = ea, t
+                m["pareto_dmR_points"] = pareto_gap(curve, m["R"], m["mR"])
+                gaps = []
+                for sd_ in range(args.null_seeds):
+                    idx = null_rows(B, "N1", 7000 + 137 * sd_)
+                    mn = B.metrics(B.score(t, ALPHA_HIST, mt, model_rows=idx))
+                    gg = pareto_gap(curve, mn["R"], mn["mR"])
+                    if gg is not None:
+                        gaps.append(gg)
+                m["null_N1_mean"] = (sum(gaps) / len(gaps)) if gaps else None
+                m["null_N1_sd"] = _sd(gaps)
+                if m["pareto_dmR_points"] is not None and m["null_N1_mean"] is not None:
+                    m["margin_over_null_points"] = m["pareto_dmR_points"] - m["null_N1_mean"]
+                    m["null_2sd"] = 2.0 * m["null_N1_sd"] if m["null_N1_sd"] else 0.0
+                    m["passes_null_gate"] = bool(m["pareto_dmR_points"] > 0
+                                                 and m["margin_over_null_points"] >= m["null_2sd"])
+                else:
+                    m["margin_over_null_points"] = None
+                    m["passes_null_gate"] = False
+                erows.append(m)
+                fmt = lambda x: "     n/a" if x is None else f"{x:+8.2f}"
+                _log(f"  {ea:>6} {t:>6} {m['R']*100:>8.2f} {m['mR']*100:>8.2f} "
+                     f"{m['tail_mR']*100:>7.2f} {fmt(m['pareto_dmR_points'])} "
+                     f"{fmt(m['null_N1_mean'])} {fmt(m['margin_over_null_points'])}")
+        S["arm_E_ensemble_alpha"] = erows
+
+        # ---- CRITERION 5: held-out selection, image-level 50/50 split.
+        # tau and ensemble_alpha are chosen on half A and READ on half B, so no
+        # reported number is selected on the data it is reported from.
+        g = torch.Generator().manual_seed(args.select_seed)
+        perm = torch.randperm(B.n_images, generator=g)
+        halfA = set(perm[: B.n_images // 2].tolist())
+        row_img = B.img_of_row[B.gt_row]
+        inA = torch.tensor([int(i) in halfA for i in row_img.tolist()])
+        sel_out = {}
+        for armname, termfn in (("E_ensemble", B.ensemble_term),):
+            best, bestgap = None, -1e9
+            curveA = [dict(B.metrics(B.score(t, ALPHA_HIST, None), mask=inA), tau=t) for t in TAUS]
+            curveB = [dict(B.metrics(B.score(t, ALPHA_HIST, None), mask=~inA), tau=t) for t in TAUS]
+            for ea in EAS:
+                mt = termfn(ea)
+                for t in TAUS:
+                    mA = B.metrics(B.score(t, ALPHA_HIST, mt), mask=inA)
+                    gA = pareto_gap(curveA, mA["R"], mA["mR"])
+                    if gA is not None and gA > bestgap:
+                        bestgap, best = gA, (ea, t)
+            ea, t = best
+            mt = termfn(ea)
+            mB_ = B.metrics(B.score(t, ALPHA_HIST, mt), mask=~inA)
+            gB = pareto_gap(curveB, mB_["R"], mB_["mR"])
+            nulls_b = []
+            for sd_ in range(args.null_seeds):
+                idx = null_rows(B, "N1", 7000 + 137 * sd_)
+                mn = B.metrics(B.score(t, ALPHA_HIST, mt, model_rows=idx), mask=~inA)
+                gg = pareto_gap(curveB, mn["R"], mn["mR"])
+                if gg is not None:
+                    nulls_b.append(gg)
+            sel_out[armname] = {
+                "selected_on": "half A (image-level 50/50, seed %d)" % args.select_seed,
+                "selected_ensemble_alpha": ea, "selected_tau": t,
+                "halfA_pareto_dmR_points": bestgap,
+                "heldout_halfB_R": mB_["R"], "heldout_halfB_mR": mB_["mR"],
+                "heldout_halfB_pareto_dmR_points": gB,
+                "heldout_null_mean": (sum(nulls_b) / len(nulls_b)) if nulls_b else None,
+                "heldout_null_sd": _sd(nulls_b),
+            }
+            _log(f"\n  CRITERION 5  held-out selection ({armname})")
+            _log(f"    selected on half A: ensemble_alpha={ea}, tau={t} (gap {bestgap:+.2f})")
+            _log(f"    read on half B    : R@50 {mB_['R']*100:.2f}  mR@50 {mB_['mR']*100:.2f}  "
+                 f"gap {'n/a' if gB is None else format(gB, '+.2f')}  "
+                 f"null {(sum(nulls_b)/len(nulls_b)) if nulls_b else float('nan'):+.2f}")
+        S["criterion5_heldout"] = sel_out
+
+        # ---- CRITERION 3: is the gain carried by one predicate?
+        best_e = max((r for r in erows if r["pareto_dmR_points"] is not None),
+                     key=lambda r: r["pareto_dmR_points"])
+        mt = B.ensemble_term(best_e["ensemble_alpha"])
+        base = B.per_predicate_recall(B.score(best_e["tau"], ALPHA_HIST, None))
+        arm = B.per_predicate_recall(B.score(best_e["tau"], ALPHA_HIST, mt))
+        contrib = []
+        for k in base:
+            d0 = base[k][0] / base[k][1]
+            d1 = arm.get(k, (0, base[k][1]))[0] / base[k][1]
+            contrib.append({"class": B.classes[k], "bucket": B.bucket_of[k],
+                            "n": base[k][1], "delta_recall": d1 - d0,
+                            "contribution_mR_points": (d1 - d0) / len(base) * 100.0})
+        contrib.sort(key=lambda r: -abs(r["contribution_mR_points"]))
+        pos = sum(c["contribution_mR_points"] for c in contrib if c["contribution_mR_points"] > 0)
+        total = sum(c["contribution_mR_points"] for c in contrib)
+        top = contrib[0]
+        S["criterion3_predicate_decomposition"] = {
+            "at": {"ensemble_alpha": best_e["ensemble_alpha"], "tau": best_e["tau"]},
+            "total_mR_delta_points": total,
+            "largest_single_predicate": top,
+            "largest_share_of_positive_gain": (top["contribution_mR_points"] / pos) if pos > 0 else None,
+            "top10": contrib[:10],
+        }
+        _log(f"\n  CRITERION 3  predicate decomposition at ensemble_alpha="
+             f"{best_e['ensemble_alpha']}, tau={best_e['tau']}")
+        _log(f"    total mR delta {total:+.2f} pts; largest single predicate "
+             f"'{top['class']}' ({top['bucket']}, n={top['n']}) "
+             f"{top['contribution_mR_points']:+.2f} pts = "
+             f"{(top['contribution_mR_points']/pos*100) if pos>0 else float('nan'):.1f}% of positive gain")
 
         # ---- NULLS
         _log(f"\n  NULLS  ({args.null_seeds} seeds each, rescored at every tau)")

@@ -29,6 +29,20 @@ import torch
 
 from tools.cprime_analysis import ALPHA_HIST, Bench, null_rows, pareto_gap
 
+# A synthetic prior file. The real 280 MB one is not parsed in tests; what
+# matters here is the CONTRACT (global_log_probs is read, in vocabulary order),
+# not its values.
+@pytest.fixture(scope="module")
+def PRIOR(tmp_path_factory):
+    pv = _vg150()
+    p = tmp_path_factory.mktemp("p") / "prior.json"
+    p.write_text(json.dumps({
+        "predicate_vocab": pv,
+        "global_log_probs": [-1.0 - 0.1 * i for i in range(len(pv))],
+        "default_log_prob": -20.0,
+    }))
+    return p
+
 
 def _vg150():
     raw = json.loads(Path("datasets_vg150_clean/vocabulary/predicates.json").read_text())["idx_to_predicate"]
@@ -85,20 +99,20 @@ def dump_path(tmp_path_factory):
 
 
 # ------------------------------------------------- 1/3 denominators + schemes
-def test_raw50_and_eval48_class_counts(dump_path):
-    assert Bench(dump_path, "raw50").n_classes == 50
-    assert Bench(dump_path, "eval48").n_classes == 48
+def test_raw50_and_eval48_class_counts(dump_path, PRIOR):
+    assert Bench(dump_path, "raw50", PRIOR).n_classes == 50
+    assert Bench(dump_path, "eval48", PRIOR).n_classes == 48
 
 
-def test_the_two_schemes_differ_by_exactly_the_two_known_merges(dump_path):
-    a, b = Bench(dump_path, "raw50"), Bench(dump_path, "eval48")
+def test_the_two_schemes_differ_by_exactly_the_two_known_merges(dump_path, PRIOR):
+    a, b = Bench(dump_path, "raw50", PRIOR), Bench(dump_path, "eval48", PRIOR)
     assert set(a.classes) - set(b.classes) == {"near", "wears"}
     assert set(b.classes) - set(a.classes) == set()
 
 
-def test_every_arm_shares_one_predicate_set_and_one_denominator(dump_path):
+def test_every_arm_shares_one_predicate_set_and_one_denominator(dump_path, PRIOR):
     """The defect this pins: comparing a 48-class mean against a 50-class one."""
-    B = Bench(dump_path, "raw50")
+    B = Bench(dump_path, "raw50", PRIOR)
     arms = {
         "prior_only": B.score(0.1, ALPHA_HIST, None),
         "model_plus_prior": B.score(0.1, ALPHA_HIST, B.model),
@@ -113,36 +127,36 @@ def test_every_arm_shares_one_predicate_set_and_one_denominator(dump_path):
     assert len(set(ns.values())) == 1, ns                  # identical GT item set
 
 
-def test_gt_item_set_is_identical_across_schemes_up_to_merging(dump_path):
-    a, b = Bench(dump_path, "raw50"), Bench(dump_path, "eval48")
+def test_gt_item_set_is_identical_across_schemes_up_to_merging(dump_path, PRIOR):
+    a, b = Bench(dump_path, "raw50", PRIOR), Bench(dump_path, "eval48", PRIOR)
     assert int(a.gt_y.numel()) == int(b.gt_y.numel())
     assert torch.equal(a.gt_row, b.gt_row)
 
 
 # ------------------------------------------------------------- 2 ordering
-def test_predicate_column_order_is_preserved(dump_path):
-    B = Bench(dump_path, "raw50")
+def test_predicate_column_order_is_preserved(dump_path, PRIOR):
+    B = Bench(dump_path, "raw50", PRIOR)
     assert B.fg_names_raw == [p.strip().lower() for p in _vg150()]
     assert B.col_label == B.fg_names_raw           # raw50 is the identity map
     assert len(B.fg_cols) == 50
 
 
-def test_eval48_maps_columns_without_reordering_them(dump_path):
-    B = Bench(dump_path, "eval48")
+def test_eval48_maps_columns_without_reordering_them(dump_path, PRIOR):
+    B = Bench(dump_path, "eval48", PRIOR)
     for col, raw in enumerate(B.fg_names_raw):
         expected = {"near": "next to", "wears": "wearing"}.get(raw, raw)
         assert B.col_label[col] == expected
 
 
 # ----------------------------------------------------------------- 4 tau/alpha
-def test_tau_zero_is_a_no_op_on_the_prior_term(dump_path):
-    B = Bench(dump_path, "raw50")
+def test_tau_zero_is_a_no_op_on_the_prior_term(dump_path, PRIOR):
+    B = Bench(dump_path, "raw50", PRIOR)
     assert torch.equal(B.score(0.0, 1.0, None), B.prior)
 
 
-def test_prior_only_arm_is_invariant_to_alpha(dump_path):
+def test_prior_only_arm_is_invariant_to_alpha(dump_path, PRIOR):
     """A positive rescale cannot move an argmax; if it does, the metric is wrong."""
-    B = Bench(dump_path, "raw50")
+    B = Bench(dump_path, "raw50", PRIOR)
     base = B.metrics(B.score(0.1, 1.0, None))
     for a in (0.5, 2.0, ALPHA_HIST, 7.5):
         m = B.metrics(B.score(0.1, a, None))
@@ -150,9 +164,24 @@ def test_prior_only_arm_is_invariant_to_alpha(dump_path):
         assert m["mR"] == pytest.approx(base["mR"])
 
 
-def test_marginal_is_recovered_from_the_modal_fallback_row(dump_path):
-    B = Bench(dump_path, "raw50")
-    assert B.marginal_support >= B.n_images        # one fallback row per image at least
+def test_marginal_is_read_from_the_prior_file_not_inferred(dump_path, PRIOR):
+    """The defect this pins: the modal prior row is the UNIFORM default_log_prob
+    fallback, not the class marginal. Inferring tau from it made tau a silent
+    no-op (a constant subtraction cannot move an argmax)."""
+    B = Bench(dump_path, "raw50", PRIOR)
+    raw = json.loads(PRIOR.read_text())
+    src = [str(x).strip().lower() for x in raw["predicate_vocab"]]
+    idx = {p: i for i, p in enumerate(src)}
+    for col, name in enumerate(B.fg_names_raw):
+        assert B.log_marginal[col] == pytest.approx(raw["global_log_probs"][idx[name]])
+    assert B.marginal_missing == []
+    # and it must NOT be uniform -- that was exactly the failure mode
+    assert float(B.log_marginal.max() - B.log_marginal.min()) > 1.0
+
+
+def test_bench_refuses_to_run_without_a_prior_file(dump_path, PRIOR):
+    with pytest.raises(ValueError):
+        Bench(dump_path, "raw50", None)
 
 
 # ------------------------------------------------------------------ 5 pareto
@@ -174,23 +203,23 @@ def test_pareto_refuses_to_extrapolate_below_the_frontier():
 
 
 # ------------------------------------------------------------------- 6 nulls
-def test_N1_permutes_only_within_each_image(dump_path):
-    B = Bench(dump_path, "raw50")
+def test_N1_permutes_only_within_each_image(dump_path, PRIOR):
+    B = Bench(dump_path, "raw50", PRIOR)
     idx = null_rows(B, "N1", 1)
     assert sorted(idx.tolist()) == list(range(int(B.model.shape[0])))
     assert torch.equal(B.img_of_row[idx], B.img_of_row)      # image membership kept
 
 
-def test_N2_permutes_across_the_whole_split(dump_path):
-    B = Bench(dump_path, "raw50")
+def test_N2_permutes_across_the_whole_split(dump_path, PRIOR):
+    B = Bench(dump_path, "raw50", PRIOR)
     idx = null_rows(B, "N2", 1)
     assert sorted(idx.tolist()) == list(range(int(B.model.shape[0])))
     assert not torch.equal(idx, torch.arange(int(B.model.shape[0])))
 
 
-def test_nulls_preserve_the_model_row_multiset(dump_path):
+def test_nulls_preserve_the_model_row_multiset(dump_path, PRIOR):
     """The null must change WHICH pair a row scores, never the rows themselves."""
-    B = Bench(dump_path, "raw50")
+    B = Bench(dump_path, "raw50", PRIOR)
     for kind in ("N1", "N2"):
         idx = null_rows(B, kind, 3)
         assert torch.equal(B.model[idx].sort(0).values, B.model.sort(0).values)
