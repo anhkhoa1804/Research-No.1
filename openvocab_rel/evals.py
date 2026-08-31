@@ -1183,10 +1183,11 @@ def _pair_dump_enabled(cfg: Any) -> str:
 def _collect_pair_dump(
     dump: Dict[str, Any],
     ex: Dict[str, Any],
-    gt: Dict[str, Any],
+    gt_raw: Dict[str, Any],
     pair_list: List[Tuple[int, int]],
     obj_labels: List[str],
     model_logits: torch.Tensor,
+    comps: Optional[Dict[str, Any]],
     freq_bias: Optional[Dict[str, Any]],
     device: torch.device,
 ) -> None:
@@ -1198,11 +1199,18 @@ def _collect_pair_dump(
 
     `model_logits` MUST be the output of _relation_predicate_logits BEFORE
     _apply_frequency_bias -- the model term on its own. The prior rows are
-    recomputed here by calling the same pure helper the composition uses, so
-    the two are guaranteed to be the pair of terms that were actually added.
+    recomputed here by the same pure helper the composition uses, so the two
+    are guaranteed to be the pair of terms that were actually added. Prior
+    rows are stored RAW: before the tau adjustment and before the alpha
+    scaling, so the CPU side can sweep both.
 
-    GT is stored RAW (no alias normalisation) so the CPU side can toggle the
-    alias scheme; see docs/research_sessions/POST_B_SOURCE_FORENSICS.md.
+    GT MUST be passed RAW -- `_collect_gt_triplets(ex, device)` WITHOUT
+    `_normalize_triplet_labels`. An earlier revision of this function was
+    handed the alias-normalised `gt`, which would have collapsed
+    `near`->`next to` and `wears`->`wearing` inside the cache itself and made
+    the 50-class arm unrecoverable from a 60-GPU-minute artifact. The alias
+    map is stored alongside so the CPU side can reproduce the 48-class scheme
+    exactly; the reverse direction is impossible.
     """
     n = len(pair_list)
     if n == 0 or int(model_logits.shape[0]) != n:
@@ -1214,17 +1222,42 @@ def _collect_pair_dump(
     boxes = ex.get("obj_boxes", None)
     dump["image_id"].append(str(ex.get("image_id", "")))
     dump["pairs"].append(torch.tensor([[int(a), int(b)] for a, b in pair_list], dtype=torch.long))
+    dump["pair_index"].append(torch.arange(n, dtype=torch.long))
     dump["model_logits"].append(model_logits.detach().float().cpu())
     dump["prior_rows"].append(prior_rows.detach().float().cpu())
     dump["obj_labels"].append([str(x) for x in obj_labels])
+    # Per-pair subject/object classes. Redundant with obj_labels[pairs] by
+    # construction; tools/validate_pair_dump.py re-derives and asserts equality,
+    # so the redundancy is a CHECKED invariant, not a drift risk.
+    dump["subj_label"].append([str(obj_labels[int(a)]) if 0 <= int(a) < len(obj_labels) else ""
+                               for a, _ in pair_list])
+    dump["obj_label"].append([str(obj_labels[int(b)]) if 0 <= int(b) < len(obj_labels) else ""
+                              for _, b in pair_list])
     dump["obj_boxes"].append(
         boxes.detach().float().cpu() if isinstance(boxes, torch.Tensor) else torch.zeros((0, 4))
     )
-    dump["gt_subj_idx"].append([int(x) for x in gt.get("subj_idx", [])])
-    dump["gt_obj_idx"].append([int(x) for x in gt.get("obj_idx", [])])
-    dump["gt_pred"].append([str(x) for x in gt.get("pred_labels", [])])
-    dump["gt_subj_label"].append([str(x) for x in gt.get("subj_labels", [])])
-    dump["gt_obj_label"].append([str(x) for x in gt.get("obj_labels", [])])
+    dump["gt_subj_idx"].append([int(x) for x in gt_raw.get("subj_idx", [])])
+    dump["gt_obj_idx"].append([int(x) for x in gt_raw.get("obj_idx", [])])
+    dump["gt_pred"].append([str(x) for x in gt_raw.get("pred_labels", [])])
+    dump["gt_subj_label"].append([str(x) for x in gt_raw.get("subj_labels", [])])
+    dump["gt_obj_label"].append([str(x) for x in gt_raw.get("obj_labels", [])])
+    # The two branches the composed term is built from. Under the historical
+    # protocol (ensemble_alpha = 0.0) `cls_logits` is discarded by the
+    # composition; storing it is the ONLY way C' can ask whether the discarded
+    # branch carries information the surviving one does not.
+    if comps is not None:
+        width = int(model_logits.shape[1])
+        for key in ("text_logits", "cls_logits"):
+            t = comps.get(key)
+            if isinstance(t, torch.Tensor) and tuple(t.shape) == (n, width):
+                dump[key].append(t.detach().float().cpu())
+            else:
+                dump[key].append(torch.full((n, width), float("nan")))
+                dump["missing_" + key] = int(dump.get("missing_" + key, 0)) + 1
+        a = comps.get("ensemble_alpha_used")
+        if isinstance(a, (int, float)):
+            dump["ensemble_alpha_used"] = float(a)
+        dump["branch"] = str(comps.get("branch") or dump.get("branch") or "")
     dump["n_pairs"] = int(dump.get("n_pairs", 0)) + n
 
 
@@ -1236,18 +1269,37 @@ def _write_pair_dump(dump: Dict[str, Any], path: str, cfg: Any, pred_vocab: List
             os.makedirs(parent, exist_ok=True)
         payload = dict(dump)
         payload["pred_vocab"] = list(pred_vocab)
-        payload["schema"] = "pair_logit_dump_v1"
+        payload["schema"] = "pair_logit_dump_v2"
+        payload["schema_doc"] = "runs/p10_model_recalibration/cache_schema.md"
         payload["composition"] = (
-            "final = model_logits + freq_bias_alpha * (prior_rows - tau * global_log_probs); "
-            "background column masked to -1e4; softmax; argmax per pair"
+            "model_term = ensemble_alpha*norm(cls_logits)/cls_temp + "
+            "(1-ensemble_alpha)*norm(text_logits)/text_temp   [mode=ensemble]; "
+            "final = model_term + freq_bias_alpha*(prior_rows - tau*global_log_probs); "
+            "background columns masked to -1e4; softmax; argmax per pair"
         )
+        payload["background_predicate_indices"] = list(_background_predicate_indices(list(pred_vocab)))
         payload["freq_bias_alpha"] = float(getattr(cfg, "freq_bias_alpha", 0.0))
+        payload["bayes_calibration_weight"] = float(getattr(cfg, "bayes_calibration_weight", 0.0))
         payload["eval_freq_bias_tau"] = float(getattr(cfg, "eval_freq_bias_tau", 0.0))
         payload["ensemble_alpha"] = float(getattr(cfg, "eval_sgg_predicate_ensemble_alpha", 0.5))
+        payload["classifier_temperature"] = float(getattr(cfg, "eval_sgg_classifier_temperature", 1.0))
+        payload["text_temperature"] = float(getattr(cfg, "eval_sgg_text_temperature", 1.0))
+        payload["adaptive_calibration_enabled"] = bool(getattr(cfg, "adaptive_calibration_enabled", False))
+        payload["eval_logit_adj_tau"] = float(getattr(cfg, "eval_logit_adj_tau", -1.0))
         payload["score_mode"] = str(getattr(cfg, "eval_sgg_predicate_score_mode", ""))
         payload["use_gt_pairs"] = bool(getattr(cfg, "eval_sgg_use_gt_pairs", False))
         payload["iou_thresh"] = float(getattr(cfg, "eval_sgg_iou_thresh", 0.5))
         payload["use_vg_aliases"] = bool(getattr(cfg, "eval_sgg_use_vg_aliases", True))
+        payload["freq_bias_path"] = str(getattr(cfg, "freq_bias_path", ""))
+        payload["resume_from"] = str(getattr(cfg, "resume_from", ""))
+        payload["vg150_root"] = str(getattr(cfg, "vg150_root", ""))
+        # The evaluator's own alias map, exported so the CPU side can reproduce
+        # the 48-class scheme from RAW GT. Only two entries fire on VG150's 50
+        # predicates: near -> next to, wears -> wearing.
+        payload["predicate_alias_map"] = {
+            k: v for k, v in _build_vg_aliases([], list(pred_vocab)).items() if k != v
+        }
+        payload["n_images"] = len(dump.get("image_id", []))
         torch.save(payload, str(path))
         print(f"[eval_sgg] pair-logit dump -> {path} "
               f"({len(dump.get('image_id', []))} images, {int(dump.get('n_pairs', 0))} pairs)", flush=True)
@@ -1391,6 +1443,75 @@ def _relation_predicate_logits(
     else:
         alpha = max(0.0, min(1.0, float(getattr(cfg, "eval_sgg_predicate_ensemble_alpha", 0.5))))
     return (alpha * cls_norm) + ((1.0 - alpha) * text_norm)
+
+
+def _predicate_logit_components(
+    cfg: Any,
+    out: Any,
+    rel_feat: torch.Tensor,
+    pred_emb: torch.Tensor,
+    pred_log_prior: Optional[torch.Tensor] = None,
+) -> Dict[str, Any]:
+    """Every intermediate the composed model term is built from. DUMP-ONLY.
+
+    This exists because the historical protocol sets
+    `eval_sgg_predicate_ensemble_alpha = 0.0`, which makes the composed model
+    term equal to the TEXT branch alone -- the trained predicate classifier is
+    multiplied by exactly zero and discarded by the ensemble return of
+    _relation_predicate_logits. Experiment C' has to be able to ask whether
+    that discarded branch carries information the surviving one does not, and
+    that question cannot be asked from the composed tensor.
+
+    It MIRRORS _relation_predicate_logits and must never diverge from it;
+    tests/test_pair_logit_dump.py pins bit-for-bit agreement in every mode.
+
+    Returns None for a branch the configuration genuinely does not build.
+    """
+    if hasattr(out, "text_predicate_logits"):
+        text_logits = out.text_predicate_logits(rel_feat, pred_emb).float()
+    else:
+        text_logits = out.score(rel_feat, pred_emb).float()
+    mode = str(getattr(cfg, "eval_sgg_predicate_score_mode", "ensemble")).strip().lower()
+    use_classifier = bool(getattr(cfg, "eval_sgg_use_predicate_classifier", False)) and hasattr(out, "predicate_logits")
+    comp: Dict[str, Any] = {
+        "text_logits": text_logits, "cls_logits": None,
+        "text_norm": None, "cls_norm": None,
+        "mode": mode, "ensemble_alpha_used": None, "branch": None,
+    }
+    if not use_classifier or mode in {"text", "cosine", "clip"}:
+        comp["branch"] = "text_only"
+        return comp
+    if bool(getattr(cfg, "adaptive_calibration_enabled", False)) and hasattr(out, "calibrated_predicate_logits"):
+        cls_logits = out.calibrated_predicate_logits(rel_feat, pred_log_prior).float()
+    else:
+        cls_logits = out.predicate_logits(rel_feat).float()
+    if int(cls_logits.shape[-1]) != int(pred_emb.shape[0]):
+        comp["branch"] = "text_only_shape_mismatch"
+        return comp
+    cls_logits = _apply_eval_logit_adjustment(cfg, cls_logits, pred_log_prior)
+    comp["cls_logits"] = cls_logits
+    if mode in {"classifier", "cls", "ce"}:
+        comp["branch"] = "classifier_only"
+        return comp
+    cls_norm = _normalize_eval_logits(cls_logits)
+    text_norm = _normalize_eval_logits(text_logits)
+    cls_temp = max(1e-4, float(getattr(cfg, "eval_sgg_classifier_temperature", 1.0)))
+    text_temp = max(1e-4, float(getattr(cfg, "eval_sgg_text_temperature", 1.0)))
+    cls_norm = cls_norm / cls_temp
+    text_norm = text_norm / text_temp
+    if mode == "auto":
+        top2 = cls_norm.topk(k=min(2, int(cls_norm.shape[-1])), dim=-1).values
+        if int(top2.shape[-1]) == 2:
+            alpha = (top2[:, 0] - top2[:, 1]).sigmoid().unsqueeze(1).clamp(0.25, 0.75)
+        else:
+            alpha = 0.5
+    else:
+        alpha = max(0.0, min(1.0, float(getattr(cfg, "eval_sgg_predicate_ensemble_alpha", 0.5))))
+    comp["cls_norm"] = cls_norm
+    comp["text_norm"] = text_norm
+    comp["ensemble_alpha_used"] = alpha
+    comp["branch"] = "ensemble"
+    return comp
 
 
 def _update_predicate_diag(diag: Dict[str, Any], pred_vocab: List[str], gt_labels: List[str], pair_pred_idx: torch.Tensor) -> None:
@@ -1638,7 +1759,8 @@ def eval_sgg_standard(
     # path is empty this stays None and every dump call site is skipped.
     _pair_dump_path = _pair_dump_enabled(cfg)
     pair_dump: Optional[Dict[str, Any]] = (
-        {k: [] for k in ("image_id", "pairs", "model_logits", "prior_rows", "obj_labels",
+        {k: [] for k in ("image_id", "pairs", "pair_index", "model_logits", "prior_rows",
+                         "text_logits", "cls_logits", "obj_labels", "subj_label", "obj_label",
                          "obj_boxes", "gt_subj_idx", "gt_obj_idx", "gt_pred",
                          "gt_subj_label", "gt_obj_label")}
         if _pair_dump_path else None
@@ -1883,7 +2005,8 @@ def eval_sgg_standard(
             if not valid:
                 continue
 
-            gt = _normalize_triplet_labels(_collect_gt_triplets(ex, device), label_aliases)
+            gt_raw = _collect_gt_triplets(ex, device)
+            gt = _normalize_triplet_labels(gt_raw, label_aliases)
             if len(gt["pred_labels"]) == 0:
                 continue
 
@@ -1899,7 +2022,11 @@ def eval_sgg_standard(
 
             rel_logits = _relation_predicate_logits(cfg, out, rel_feat, pred_emb, pred_log_prior)
             if pair_dump is not None:
-                _collect_pair_dump(pair_dump, ex, gt, pair_list, gt_labels, rel_logits, freq_bias, device)
+                _collect_pair_dump(
+                    pair_dump, ex, gt_raw, pair_list, gt_labels, rel_logits,
+                    _predicate_logit_components(cfg, out, rel_feat, pred_emb, pred_log_prior),
+                    freq_bias, device,
+                )
             rel_logits = _apply_frequency_bias(cfg, rel_logits, freq_bias, pair_list, gt_labels, device)
             rel_probs = _mask_background_logits(rel_logits, pred_vocab).softmax(dim=-1)
             relationness_scores = torch.ones((int(rel_feat.shape[0]),), dtype=torch.float32, device=device)
