@@ -143,8 +143,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     for i in range(n_img):
         seen.update(str(x).strip().lower() for x in d["gt_pred"][i])
     survived = [s for s in collapsed_sources if s in seen]
-    C.add("S7", len(collapsed_sources) == 0 or len(survived) == len(collapsed_sources),
-          f"aliased-away predicates {collapsed_sources} present in RAW GT: {survived}")
+    absent = [s for s in collapsed_sources if s not in seen]
+    # Presence of ANY collapsed source in GT is proof the cache was not
+    # alias-normalised -- normalisation would have rewritten every one of them.
+    # Absence of a particular one is a sampling fact (a rare predicate need not
+    # occur in a small image sample), not evidence of normalisation, so it is
+    # reported but does not fail the check.
+    C.add("S7", len(collapsed_sources) == 0 or len(survived) > 0,
+          f"RAW GT check: collapsed-away predicates {collapsed_sources}; "
+          f"present in GT: {survived}; not sampled: {absent} "
+          f"({len(seen)} distinct GT predicates over {n_img} images)")
     C.add("S8", len({amap.get(p, p) for p in pv50}) == 48 and len(pv50) == 50,
           f"alias map collapses {len(pv50)} -> {len({amap.get(p, p) for p in pv50})} classes "
           f"via {collapsed_sources}")

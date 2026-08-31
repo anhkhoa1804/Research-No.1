@@ -663,6 +663,11 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--freq_bias_path", type=str, default=getattr(TrainConfig, "freq_bias_path", ""))
     p.add_argument("--freq_bias_alpha", type=float, default=getattr(TrainConfig, "freq_bias_alpha", 0.5))
     p.add_argument("--freq_bias_smoothing", type=float, default=getattr(TrainConfig, "freq_bias_smoothing", 1.0))
+    # --- Experiment C-prime (docs/MODEL_RECALIBRATION_C_PREREGISTRATION.md) ---
+    # Both default to a strict no-op, so the historical protocol is unchanged
+    # when they are omitted. See runs/p10_model_recalibration/cache_schema.md.
+    p.add_argument("--eval_freq_bias_tau", type=float, default=getattr(TrainConfig, "eval_freq_bias_tau", 0.0))
+    p.add_argument("--eval_sgg_dump_pair_logits_path", type=str, default=getattr(TrainConfig, "eval_sgg_dump_pair_logits_path", ""))
     p.add_argument("--predicate_background_weight", type=float, default=TrainConfig.predicate_background_weight)
     p.add_argument("--predicate_ce_loss", type=str, default=TrainConfig.predicate_ce_loss)
     p.add_argument("--predicate_ce_gamma", type=float, default=TrainConfig.predicate_ce_gamma)
