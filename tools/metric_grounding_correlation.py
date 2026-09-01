@@ -95,6 +95,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--train-jsonl", default="datasets_vg150_clean/train.jsonl")
     ap.add_argument("--out", default="runs/p49_metric_grounding/corr.json")
     ap.add_argument("--tau", type=float, default=0.0)
+    ap.add_argument("--vg150-only", action="store_true",
+                    help="restrict to GT rows whose subject AND object are in "
+                         "the standard VG150 150-category vocabulary")
     ap.add_argument("--cap", type=int, default=64)
     ap.add_argument("--epochs", type=int, default=30)
     args = ap.parse_args(argv)
@@ -103,7 +106,16 @@ def main(argv: Optional[List[str]] = None) -> int:
     _log("METRIC vs GROUNDING RANK CORRELATION -- CPU only, NO GPU")
     _log("=" * 112)
     B = Mech(args.dump, args.prior, "raw50")
-    Gs = WPD.Groups(B)
+    VOCAB = None
+    if args.vg150_only:
+        vj = json.loads(Path("datasets_vg150_clean/vocabulary/objects.json")
+                        .read_text(encoding="utf-8"))
+        VOCAB = set(str(x).strip().lower() for x in vj["idx_to_label"].values())
+    Gs = WPD.Groups(B, VOCAB)
+    if VOCAB is not None:
+        _log(f"  RESTRICTED to standard VG150: {int(Gs.in_vocab.sum()):,} of "
+             f"{Gs.n:,} GT rows ({float(Gs.in_vocab.float().mean())*100:.1f}%), "
+             f"decidable {int(Gs.decidable.sum()):,}")
     N = CPA.Bench._norm
 
     Xr = GEO.geometry_features_raw(B)
@@ -153,13 +165,15 @@ def main(argv: Optional[List[str]] = None) -> int:
         "classifier + geometry": cls + geo_lin,
         "classifier + geoMLP": cls + geo_mlp,
     }
-    curve = [{"R": (m := B.metrics(B.score(t, ALPHA_HIST, None)))["R"], "mR": m["mR"]}
-             for t in CPA.TAUS]
+    MASK0 = Gs.in_vocab if VOCAB is not None else None
+    curve = [{"R": (m := B.metrics(B.score(t, ALPHA_HIST, None), MASK0))["R"],
+              "mR": m["mR"]} for t in CPA.TAUS]
     rows = []
     _log(f"\n  {'arm':>24} {'R@50':>8} {'mR@50':>8} {'pareto':>8} {'WPRD':>8}")
     _log(f"  {'-'*62}")
+    MASK = Gs.in_vocab if VOCAB is not None else None
     for name, term in arms.items():
-        m = B.metrics(B.score(args.tau, ALPHA_HIST, term))
+        m = B.metrics(B.score(args.tau, ALPHA_HIST, term), MASK)
         pg = CPA.pareto_gap(curve, m["R"], m["mR"])
         sc = B.prior if term is None else term
         w = WPD.wprd(Gs, sc, args.cap)["wprd_macro"]

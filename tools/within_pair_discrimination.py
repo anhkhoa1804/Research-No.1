@@ -113,9 +113,18 @@ def auc(pos: torch.Tensor, neg: torch.Tensor) -> float:
 
 
 class Groups:
-    """(subject, object) grouping of the GT rows, plus the decidable subset."""
+    """(subject, object) grouping of the GT rows, plus the decidable subset.
 
-    def __init__(self, B: Mech):
+    `vg150_only` restricts to GT rows whose subject AND object labels are in the
+    standard VG150 150-category vocabulary. The shipped datasets_vg150_clean
+    retains raw Visual Genome object names -- 16,929 distinct, 55.8% of mentions
+    outside the 150 -- so the unrestricted grouping is at RAW-NAME granularity.
+    See docs/DATASET_IDENTITY_OBJECT_VOCAB.md. Restricting makes every number
+    comparable with published VG150 work; not restricting is stricter for the
+    prior-cancellation property but is not the standard population.
+    """
+
+    def __init__(self, B: Mech, vg150_only=None):
         d = B.meta
         sl: List[str] = []
         ol: List[str] = []
@@ -125,6 +134,12 @@ class Groups:
         self.subj = [sl[int(r)] for r in B.gt_row.tolist()]
         self.obj = [ol[int(r)] for r in B.gt_row.tolist()]
         keys = [f"{a}||{b}" for a, b in zip(self.subj, self.obj)]
+        self.in_vocab = torch.ones(len(keys), dtype=torch.bool)
+        if vg150_only is not None:
+            V = set(vg150_only)
+            self.in_vocab = torch.tensor([(s in V) and (o in V)
+                                          for s, o in zip(self.subj, self.obj)],
+                                         dtype=torch.bool)
         uniq = {k: i for i, k in enumerate(dict.fromkeys(keys))}
         self.key_of = {v: k for k, v in uniq.items()}
         self.pair_id = torch.tensor([uniq[k] for k in keys])
@@ -134,14 +149,20 @@ class Groups:
         self.image_of = B.gt_row.clone()
 
         self.rows_of: Dict[int, List[int]] = defaultdict(list)
+        keep = self.in_vocab.tolist()
         for r, p in enumerate(self.pair_id.tolist()):
-            self.rows_of[p].append(r)
-        self.classes_of = {p: set(self.y[torch.tensor(rs)].tolist())
-                           for p, rs in self.rows_of.items()}
-        nd = torch.tensor([len(self.classes_of[p]) for p in range(self.G)])
-        gs = torch.tensor([len(self.rows_of[p]) for p in range(self.G)])
+            if keep[r]:
+                self.rows_of[p].append(r)
+        self.rows_of = defaultdict(list, {p: rs for p, rs in self.rows_of.items() if rs})
+        # defaultdicts, because restricting to a vocabulary empties some groups
+        # and every consumer iterates range(self.G).
+        self.classes_of = defaultdict(set, {
+            p: set(self.y[torch.tensor(rs)].tolist())
+            for p, rs in self.rows_of.items() if rs})
+        nd = torch.tensor([len(self.classes_of.get(p, ())) for p in range(self.G)])
+        gs = torch.tensor([len(self.rows_of.get(p, ())) for p in range(self.G)])
         self.ndist, self.gsize = nd[self.pair_id], gs[self.pair_id]
-        self.decidable = self.ndist >= 2
+        self.decidable = (self.ndist >= 2) & self.in_vocab
 
     def prior_is_constant(self, prior: torch.Tensor) -> float:
         cnt = torch.zeros(self.G).index_add_(
