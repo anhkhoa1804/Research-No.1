@@ -1,53 +1,58 @@
 # Live hypothesis matrix
 
-Updated **2026-09-01, after `p33`/`p34`/`p35`** (WPRD) and the source audit
-`docs/AUDIT_TEXT_BRANCH_IS_IMAGE_CONDITIONED.md`. `p32` and `p36` were still
-executing; rows depending on them are marked **PENDING**.
+Updated **2026-09-01, after `p42`–`p45`**. `p36`/`p37` still executing; rows
+depending on them are marked **PENDING**. Supersedes the post-`p26` matrix and
+the post-`p35` revision, both retained as history.
 
-Evidential classes: **VF** verified fact · **MR** measured result ·
-**INF** inference · **HYP** hypothesis.
+Classes: **VF** verified fact · **MR** measured · **INF** inference · **HYP** hypothesis.
 
-Supersedes `docs/HYPOTHESIS_MATRIX.md` (post-p26), which is retained as the
-historical record. **H4 and H9 changed status.**
+Changed this revision: **H4, H9, H12 (new), H13 (new)**. **H12 was raised and
+then partly withdrawn by its own test within the cycle.**
 
 ---
 
 | # | Hypothesis | Evidence FOR | Evidence AGAINST | Status | Next test |
 |---|---|---|---|---|---|
-| **H1** | Candidate generation is the bottleneck | none surviving | **MR** GT in prior top-5 for 89.5% of rows, top-3 85.2% (`p28`, full split). Learned scorer restricted to those candidates: EXHAUSTED 9/9 | **FALSIFIED** | none — settled |
-| **H2** | Frequency-prior dominance | **MR** prior alone = R@50 66.59 / mR 22.30 on full split; model adds only +0.575 R. **MR** tau moves mR 22.3→26.4 with no image access | — | **ESTABLISHED** | none — settled |
-| **H3** | Calibration/decision artifact explains the model-bearing effect | **MR** tau reproduces most mR movement | **MR** a *learned* per-class rule fails to even match tau: Pareto −1.167 ± 1.101, floor 0/5 (`p29`). **MR** `full` separates from both no-model arms by ≥ +2.37 on every partition | **PARTIALLY FALSIFIED** — calibration explains the *mR headline*, not the model-bearing increment | none — settled |
-| **H4** | Image-conditioned relational information exists | **MR** WPRD text head **0.5542** [0.5495, 0.5592]; classifier head **0.5728** [0.5681, 0.5779]; prior control exactly **0.5000**; random null 0.5046 (`p33`). **VF** both heads are functions of image-derived `rel_feat` | **MR** at the additive operating point it converts to ≈0: `full − pair_matched_null` = +0.031 ± 0.188 (`p29`) | **STATUS CHANGED → ESTABLISHED BUT WEAK.** Previously "not established". The nulls that said 0 were diluted: 43.1% of rows are structurally inert to a within-group permutation | `p37` — is the weakness readout or representation? **PENDING** |
-| **H5** | Text-semantic prior (the term is a lexical lookup) | **MR** 82.6% of model-term variance is *between* (s,o) groups | **VF** `text_logits = normalize(rel_feat) @ normalize(pred_emb).T` — a cosine against an image-derived feature, not a lookup. **MR** WPRD > 0.5 decisively | **FALSIFIED AS STATED.** The term is image-conditioned; it is *dominated* by pair identity, which is a different claim | `pred_emb` Gram matrix from `p36` — is the readout geometry degenerate? |
-| **H6** | Global ranking bottleneck | **MR** model worsens mean GT rank (1.83→2.78); raw model score as a ranker costs up to −16.0 R (`p28`) | — | **ESTABLISHED** | none — settled |
-| **H7** | Candidate reranking has headroom | — | **MR** REALIZABLE EXHAUSTED 9/9 on the full split (`p28`); oracle criterion non-falsifiable by construction | **FALSIFIED / branch closed** | none — settled |
-| **H8** | Annotation/data artifact | **MR** 48.7% of multi-row (s,o) groups have a CONSTANT GT; VG labels one instance pair with several predicates (those tie at 0.5 in WPRD) | **MR** excluding same-instance rows *raises* WPRD (0.5542→0.5592), so the artifact is diluting the signal, not creating it | **PRESENT BUT CONSERVATIVE** — it works against our finding | quantify multi-label rate per predicate bucket |
-| **H9** | Representation bottleneck | **MR** WPRD ceiling of both heads is ≈0.57 against a 1.0 ceiling. **MR** evaluated head has *no* measurable tail grounding (body–tail CI [0.4822, 0.5570] contains 0.5) | **MR** the two readouts differ by 0.0186 with non-overlapping CIs, so at least *some* of the loss is readout, not representation | **STATUS CHANGED → OPEN AND NOW DECIDABLE.** Previously conflated with H4 | **`p37` is exactly this test.** READOUT-LIMITED if a cross-fitted probe on `rel_feat` beats the classifier head by ≥0.03 |
-| **H10** *(new)* | The checkpoint runs a suboptimal readout | **MR** classifier head beats text head in 13/13 strata; ΔR over prior higher at α=0.5 for every tau; Pareto +0.864→+4.126 at tau=0.1 (`p34`) | **caveat** those α were read off validation with no held-out selection | **SUPPORTED for "better grounded"; NOT ESTABLISHED for "α=0.5 is right"** | nested α selection with held-out folds |
-| **H11** *(new)* | Grounding is absent specifically in the tail | **MR** text head body–tail 0.5230 [0.4822, 0.5570] and tail–tail 0.5126 [0.4174, 0.6246] both contain chance, while head–head 0.5612 [0.5549, 0.5665] does not | **MR** tail–tail has only 61 cells — wide interval, low power | **SUPPORTED, POWER-LIMITED in tail–tail** | more tail cells: run WPRD on the *test* split too, and on published checkpoints |
+| **H1** | Candidate generation is the bottleneck | — | **MR** GT in prior top-5 for 89.5% of rows; scorer EXHAUSTED 9/9 (`p28`) | **FALSIFIED** | settled |
+| **H2** | Frequency-prior dominance | **MR** prior alone 66.59 R@50; model adds +0.575. **MR** 85.8% of the model term's variance is between-group (`p42`) | — | **ESTABLISHED** | settled |
+| **H3** | Calibration/decision artifact explains the mR headline | **MR** tau moves mR 22.3→26.4 with no image access | **MR** a learned per-class rule cannot match tau (`p29`) | **ESTABLISHED for the mR headline**, not for the model increment | settled |
+| **H4** | Image-conditioned relational information exists | **MR** WPRD text 0.5542 [0.5495,0.5592], classifier 0.5728; prior control exactly 0.5000 (`p33`). **MR** the non-layout residual excludes chance in both heads (`p42`) | **MR** converts to ≈0 at the additive operating point (`p29`) | **ESTABLISHED BUT WEAK** | `p37` **PENDING** |
+| **H5** | The term is a lexical/text lookup | — | **VF** `text_logits = normalize(rel_feat)·normalize(pred_emb)ᵀ` — a cosine against an image feature | **FALSIFIED AS STATED** | `pred_emb` Gram matrix from `p36` |
+| **H6** | Global ranking bottleneck | **MR** worsens mean GT rank 1.83→2.78; −16 R as a ranker (`p28`) | — | **ESTABLISHED** | settled |
+| **H7** | Candidate reranking has headroom | — | **MR** EXHAUSTED 9/9 (`p28`) | **FALSIFIED** | settled |
+| **H8** | Annotation artifact manufactures the finding | **MR** VG multi-labels one instance pair | **MR** excluding same-instance rows *raises* WPRD 0.5542→0.5592 (`p35`) | **PRESENT BUT CONSERVATIVE** — cuts against us | quantify per bucket |
+| **H9** | Representation / objective bottleneck | **MR** both heads cap at ≈0.57 vs geometry's 0.5961 (`p39`). **MR** evaluated head's tail intervals contain chance (`p35`). **MR** `p45` shows the composition failure is *bounded by* this one | **MR** the two readouts differ by 0.0186 with disjoint CIs, so some loss is readout | **OPEN, NOW THE PRIMARY CANDIDATE** — promoted by `p45` | **`p37` is exactly this test** |
+| **H10** | The checkpoint runs a suboptimal readout | **MR** classifier head wins 13/13 strata; ΔR higher at α=0.5 for every tau (`p34`) | **caveat** α read off validation, no held-out selection | **SUPPORTED for "better grounded"**, not for "α=0.5 is right" | nested α selection |
+| **H11** | Grounding is absent specifically in the tail | **MR** evaluated head body–tail [0.4822,0.5570] and tail–tail [0.4174,0.6246] contain chance (`p35`); geometry's edge grows to +0.123 at tail–tail (`p40`) | **MR** tail–tail rests on 61 cells | **SUPPORTED, POWER-LIMITED** | WPRD on published checkpoints |
+| **H12** *(new)* | **Prior absorption** — the model over-absorbed the prior | — | **MR** the model term alone is 68.97% pair-constant-predictable vs reality's 69.23%; its weighted within-group entropy is *higher* than GT's (`p44`) | **FALSIFIED at the representation level** | settled |
+| **H13** *(new)* | **Prior overwrite** — composition discards usable within-pair evidence | **MR** deployed system 97.45% pair-determined vs reality 69.23%; ~91% of within-pair variation destroyed (`p44`) | **MR** restoring it gains only +1.07 pts vs a registered +2.0 threshold, at a ~1:1 cost in prior-correct rows (`p45`) | **DESCRIPTIVELY TRUE, PRESCRIPTIVELY WEAK** — composition discards the variation *because it is mostly wrong* | a different composition form would need its own registration |
 
 ---
 
-## The current best explanation
+## Current scientific model
 
-**MR + INF.** PURE's relational encoder produces a genuinely image-conditioned
-feature, and both predicate heads read it. But 82.6% of the resulting term's
-variance is between (subject, object) groups, and the image-conditioned
-remainder supports only ≈0.55–0.58 within-pair AUC — concentrated on head
-predicates and **statistically absent from the tail in the head actually used**.
+**MR + INF, and it is now constrained from both sides.**
 
-Composed additively with a prior that already decides most rows, that weak
-signal converts to +0.575 R and essentially zero Pareto movement beyond what
-pair identity alone achieves. `mR@K` rises anyway, because tau moves mass to
-rare predicates without looking at the image.
+1. The prior decides most rows and is 85.8% of the model term's variance.
+2. The model term's *within-pair* variation is roughly the right **magnitude**
+   (68.97% vs reality's 69.23% pair-constant predictability) but only weakly
+   correct in **direction** (WPRD 0.5542 vs a 0.5 floor and geometry's 0.5961).
+3. Composition at `alpha=3.75` discards ~91% of that variation — and `p45` shows
+   this is close to rational, because restoring it trades adversarial fixes for
+   prior-correct breaks at ~1:1.
+4. On the 33.4% of rows where the prior is wrong, the checkpoint fixes 7.9%,
+   geometry 6.8%, both together 10.5%. **~89% is recovered by nothing.**
+5. `mR@K` rises with tau, which needs no image; the evaluated head has no
+   measurable tail discrimination.
 
-So: **the metric improves for reasons unrelated to the mechanism it is taken to
-certify.** That is the diagnosis, and WPRD is the instrument that separates them.
+**The binding constraint is the quality of the within-pair signal.** Not its
+suppression (H13, tested and weak), not its absence (H4, falsified), not prior
+over-absorption (H12, falsified).
 
-## What would overturn it
+## What would overturn this
 
-- `p37` showing a probe on `rel_feat` reaching WPRD ≫ 0.6 ⇒ the encoder is fine
-  and this is a readout story, not a grounding story.
-- WPRD ≈ 0.5 on published checkpoints ⇒ our metric is measuring a PURE-specific
-  quirk rather than a field-wide property.
-- WPRD ≫ 0.5 in the tail for some other checkpoint ⇒ H11 is PURE-specific.
+- `p37`: a probe on `rel_feat` reaching WPRD ≫ 0.6 ⇒ readout story, H9 down,
+  H10 up, and a cheap successor becomes justified.
+- WPRD ≈ 0.5 on published checkpoints ⇒ we measured a PURE quirk, and the
+  benchmark claim collapses.
+- WPRD ≫ 0.5 in the tail on some other checkpoint ⇒ H11 is PURE-specific.
