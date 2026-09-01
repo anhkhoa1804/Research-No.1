@@ -49,16 +49,50 @@ tie-breaker on an argmax the prior has almost already decided.
 6. **Appearance scoring on frozen CLIP L/14-336 adds nothing beyond
    calibration.** (`docs/APPEARANCE_TAU_INTERACTION_RESULT.md`)
 
+## 2b. The result that reframes the project (`runs/p26`, 2026-09-01)
+
+**MEASURED, pre-registered verdict E2 SUPPORTED.** Permuting the model term only
+among rows sharing the same (subject, object) category — destroying image
+content, preserving pair identity — costs **−0.114 ± 0.265** Pareto points, with
+`full` ahead on **1 of 5** partitions. Destroying pair identity instead costs
+**+3.163**.
+
+| arm (5 partitions, nested, out-of-fold) | Pareto mean ± sd | R@50 | floor |
+|---|---|---|---|
+| `full` (prior + model) | +1.911 ± 1.056 | 66.656 ± 0.257 | 4/5 |
+| `pair_matched_null` (image destroyed) | **+2.026 ± 0.977** | 66.596 ± 0.236 | 4/5 |
+| `shuffled_model` (identity destroyed) | −1.137 ± 0.838 | 65.856 ± 0.278 | 0/5 |
+
+Two structural facts explain it:
+
+- **VF** `ensemble_alpha = 0.0` — the "model term" is **100% the CLIP text
+  branch**; the visual classifier head contributes **exactly zero**. Everything
+  the C′ work attributed to "the model" is the text path.
+- **MR** **86.87%** of the term's variance is *between* (subject, object) groups;
+  only 13.13% is within-group, and within-group is the only place image
+  conditioning can live.
+
+Effect-size bound: image conditioning ≲ **0.2** Pareto points, point estimate
+wrong-signed.
+
 ## 3. Current bottleneck
 
-**H6 (representation) for standalone ranking; the decision formulation for
-conversion.** MEASURED support: `model_only`, fitted optimally inside the
-candidate set, is negative in all four cells and fails the R floor at tau=0.05.
-The representation cannot rank on its own. What it carries is a stable
-complementary increment of **+0.68 to +0.79 R points** over prior-derived
-features — cross-fitted, out-of-fold, null-controlled.
+**The signal being converted is a pair prior, not visual evidence.**
+Superseded reading (pre-`p26`): "a representation bottleneck for ranking, with a
+decision-formulation bottleneck for conversion". That was correct about the
+mechanism and wrong about the source.
 
-The additive alpha/tau formulation is a poor converter of that increment.
+MEASURED: `model_only`, fitted optimally inside the candidate set, is negative in
+all four cells and fails the R floor at tau=0.05 — the representation cannot rank
+on its own. It carries a stable **+0.68 to +0.79 R points** over prior-derived
+features, cross-fitted and null-controlled. `runs/p26` establishes that this
+increment is **(subject, object) identity expressed in text-embedding space**,
+not image content.
+
+So the bottleneck is no longer "how do we convert the model's visual evidence".
+There is no visual evidence in this term to convert. What remains is a better
+*pair-conditioned* predicate distribution than the frequency prior supplies, and
+the open question is whether it can be distilled without vision at all.
 
 ## 4. Currently active hypothesis
 
@@ -104,7 +138,8 @@ This is a 3,000-image screening result and is **not** a headline.
 | `p21` | beta frontier, corrected, with null | full off-frontier at beta=0.20 |
 | `p22` | nested beta selection | operating-point-free, but ONE partition |
 | `p23` | throughput pilot, workers 7 | 0.95x -- GPU-bound, more workers cannot help |
-| `p25` | nested selection resampled over 5 partitions | **magnitude weakened, separation confirmed** |
+| `p25` | nested selection resampled over 5 partitions | magnitude weakened, separation confirmed |
+| `p26` | pair-matched null (image destroyed, identity kept) | **E2 SUPPORTED -- the effect is pair identity** |
 
 ## 6. Experiments pending
 
@@ -113,11 +148,28 @@ This is a 3,000-image screening result and is **not** a headline.
   remaining validation images, then p17/p21/p22 re-run unchanged. Criterion and
   all three outcomes committed before launch.
 
+## 6b. Live GPU work
+
+`runs/p24` — full-validation cache extension, pre-registered in
+`docs/FULL_VALIDATION_PREREGISTRATION.md` before launch, running at commit
+`9ab094d` with a clean tree (i.e. **including** the `cap_batches` sentinel fix,
+so there is no duplicated full-split sweep). Started 07:59 UTC, ~3.7 h expected.
+**No result at the time of writing.** Its criterion is registered and is not to
+be moved.
+
+Note its reduced weight after `p26`: it confirms the *magnitude* of an effect
+whose *source* is now established to be pair identity. A CONFIRMED verdict there
+would not resurrect H4.
+
 ## 7. Experiments explicitly abandoned
 
 - **Candidate-restricted learned reranker (GPU).** Pre-registered criterion
   returned EXHAUSTED 4/4 on ΔR and the raw score is negative as a ranker. Not
   built.
+- **The visual-architecture branch as currently posed** (`runs/p26`). The
+  quantity being converted is a pair prior in text-embedding space; the visual
+  head is at weight zero and is untrained in this checkpoint. Building an
+  architecture to exploit it would be building a second frequency prior.
 - **Architecture scaling / added visual capacity.** No measured failure mode
   demands it. `docs/PHASE4_SCIENTIFIC_REASSESSMENT.md`.
 - **Additive appearance scoring on frozen CLIP.** Falsified.
