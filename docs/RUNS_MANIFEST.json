@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 77,
-  "total_bytes": 957251580,
+  "n_runs": 84,
+  "total_bytes": 1312483965,
   "runs": [
     {
       "name": "p10_model_recalibration",
@@ -1559,6 +1559,9 @@
       "branch": "research/architecture-breakthrough",
       "working_tree_clean": true,
       "note": "GPU pass 2/2. Pre-registered in docs/READOUT_VS_REPRESENTATION_PREREGISTRATION.md before launch. Identical to runs/p24 in every flag except --eval_sgg_dump_rel_feat true and output paths. Frozen forward pass, no training, no gradient. Adds rel_feat (132556 x 768 fp16) and pred_emb (51 x 768) so the CPU side can ask whether the weak grounding measured in p33/p35 is a property of the READOUTS or of the REPRESENTATION. GPU verified idle (3 MiB, 0 percent, no compute apps) immediately before launch.",
+      "exit_code": 0,
+      "runtime_seconds": 13966.818,
+      "started_at_utc": "2026-09-01T16:00:18.131488+00:00",
       "files": [
         {
           "path": "runs/p36_relfeat_cache/command.txt",
@@ -1568,9 +1571,44 @@
           "mtime": null
         },
         {
+          "path": "runs/p36_relfeat_cache/epoch_metrics/epoch_000.json",
+          "size_bytes": 90962,
+          "sha256": "2faf44c2214b60685bf764ef235b8bb284a936536f3f715f100498e98cea116a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p36_relfeat_cache/latest_metrics.json",
+          "size_bytes": 90962,
+          "sha256": "2faf44c2214b60685bf764ef235b8bb284a936536f3f715f100498e98cea116a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p36_relfeat_cache/metrics.jsonl",
+          "size_bytes": 66339,
+          "sha256": "d7ea053f944e505635add97ee14de52310aadb20df5d169c0bef5c2654fa6525",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p36_relfeat_cache/pair_logits_relfeat.pt",
+          "size_bytes": 354800635,
+          "sha256": null,
+          "note": "large: size+mtime identity",
+          "mtime": 1788289159.0124722
+        },
+        {
           "path": "runs/p36_relfeat_cache/provenance.json",
           "size_bytes": 3127,
           "sha256": "d30ad189e98d55acd9362848c19d9c509b2183707e84a1232673a0986a672906",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p36_relfeat_cache/result.json",
+          "size_bytes": 1809,
+          "sha256": "faf4af9da49733bcf2f77ef67cbbc378f02b50ccc47bbd948bec21c3d04d7b6c",
           "note": null,
           "mtime": null
         },
@@ -1583,14 +1621,130 @@
         },
         {
           "path": "runs/p36_relfeat_cache/stdout.log",
-          "size_bytes": 4402,
-          "sha256": "8fb80cf321b40c7cb8bf303c77b576080e1752e72e09b66eb553be54ae2244dc",
+          "size_bytes": 4998,
+          "sha256": "43e50f32f9c9c691bd12f8472c5ae5ebcc0c7e1037831f45aa8fec2312e384c2",
           "note": null,
           "mtime": null
         }
       ],
-      "total_bytes": 9208,
-      "status": "NO_RESULT_JSON"
+      "total_bytes": 355060511,
+      "status": "OK"
+    },
+    {
+      "name": "p37_OOMKILLED_attempt1",
+      "path": "runs/p37_OOMKILLED_attempt1",
+      "command": ".venv/bin/python3 tools/readout_vs_representation.py --dump runs/p36_relfeat_cache/pair_logits_relfeat.pt --ref-dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p37_readout_vs_representation/rvr.json --hidden 512 --epochs 25",
+      "commit": "ee5f6c09bd99812e330e0d497a61a646faaef798",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "The decisive experiment. Pre-registered in docs/READOUT_VS_REPRESENTATION_PREREGISTRATION.md including its geometry addendum; thresholds quoted, not recomputed. Runs on the p36 rel_feat cache (355 MB, 10401 images, 132556 pairs, missing_rel_feat=0, pred_emb 51x768). Started while p36's final metrics phase was still running -- the cache file was written at 18:59 and unchanged for 24 minutes; p36's exit code is verified separately before any interpretation. CPU only.",
+      "exit_code": -9,
+      "runtime_seconds": 601.213,
+      "started_at_utc": "2026-09-01T19:24:11.360150+00:00",
+      "files": [
+        {
+          "path": "runs/p37_OOMKILLED_attempt1/STOPPED.md",
+          "size_bytes": 474,
+          "sha256": "f87a9264c7e9153c52164bfb6e736636aa8045000cc8fe4e4918ee9ed18ca51c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_OOMKILLED_attempt1/command.txt",
+          "size_bytes": 334,
+          "sha256": "552fa35a7885de488117ef5de9a3f64ce2bef4735faae5eaa5af48383971dbdd",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_OOMKILLED_attempt1/provenance.json",
+          "size_bytes": 3078,
+          "sha256": "7784e3b885eafe8ef3b889dbfdfffc042de56175fcdccff6e3fdbb270d66171b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_OOMKILLED_attempt1/result.json",
+          "size_bytes": 669,
+          "sha256": "bf51eebd269ac8132c8e24301c5d0457089a3a5251d653fb3586b5c2655af072",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_OOMKILLED_attempt1/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_OOMKILLED_attempt1/stdout.log",
+          "size_bytes": 1964,
+          "sha256": "a76e5ab753054de3205a1d06914068bd14d241c85d58fdab20fa7ec62679cfed",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6519,
+      "status": "FAILED"
+    },
+    {
+      "name": "p37_readout_vs_representation",
+      "path": "runs/p37_readout_vs_representation",
+      "command": ".venv/bin/python3 tools/readout_vs_representation.py --dump runs/p36_relfeat_cache/pair_logits_relfeat.pt --ref-dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p37_readout_vs_representation/rvr.json --hidden 512 --epochs 25",
+      "commit": "65e1105637e96ca8137fe7425a671cb8036b7f33",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Re-run of the decisive readout-vs-representation analysis to produce the JSON artifact and the collapse measure. Attempt 1 printed every arm and gate then was OOM-killed in the collapse measure, which one-hot encoded 16,929 raw object labels; the one-hot is now built over the standard 150-category vocabulary plus an 'other' bucket. No criterion or threshold changed. GPU note: the L4 is currently occupied by the other project (15.2 GB, 97%), so this is CPU-only and does not compete.",
+      "exit_code": 0,
+      "runtime_seconds": 504.436,
+      "started_at_utc": "2026-09-01T20:21:27.805752+00:00",
+      "files": [
+        {
+          "path": "runs/p37_readout_vs_representation/command.txt",
+          "size_bytes": 334,
+          "sha256": "552fa35a7885de488117ef5de9a3f64ce2bef4735faae5eaa5af48383971dbdd",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_readout_vs_representation/provenance.json",
+          "size_bytes": 3134,
+          "sha256": "5ab024b16878f5a78a0508b23afd4f48fc9ecb309d7b2df177ac29348632d164",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_readout_vs_representation/result.json",
+          "size_bytes": 668,
+          "sha256": "16a630bc009f5895f3ace99ba95291cf411c73772c4a3a3cee33b7ea4f486a95",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_readout_vs_representation/rvr.json",
+          "size_bytes": 3930,
+          "sha256": "2fe0801073df3fbf4af68b488cf4c8e24cbc0ff8f357e9869d7427b47f0ef41c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_readout_vs_representation/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p37_readout_vs_representation/stdout.log",
+          "size_bytes": 2637,
+          "sha256": "ac56299072e1d06fc434dace78b7f47efd8cc1659120c5d2d59a8528ac2ff7ee",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 10703,
+      "status": "OK"
     },
     {
       "name": "p38_wprd_geometry",
@@ -3369,6 +3523,296 @@
         }
       ],
       "total_bytes": 19979,
+      "status": "OK"
+    },
+    {
+      "name": "p50_supervision_structure",
+      "path": "runs/p50_supervision_structure",
+      "command": ".venv/bin/python3 tools/supervision_structure.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --root datasets_vg150_clean --out runs/p50_supervision_structure/sup.json",
+      "commit": "46c4d3c0f4399ce2e7978b1bd2a97bbf445cfb5f",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Dataset-level diagnosis prompted by p48. A model can only learn to distinguish predicate a from b WITHIN a fixed (s,o) group if training data contains rows of BOTH for the SAME group. Measures exactly how many such comparisons exist, per split and per predicate-bucket combination. No causal claim: this measures what supervision exists, not that its scarcity causes any model behaviour. CPU only; p36 owns the GPU.",
+      "exit_code": 0,
+      "runtime_seconds": 28.081,
+      "started_at_utc": "2026-09-01T18:38:47.727157+00:00",
+      "files": [
+        {
+          "path": "runs/p50_supervision_structure/command.txt",
+          "size_bytes": 225,
+          "sha256": "42fd57249f0e25add0991bb1608592c68065cd38289b29ca51cb6d792053ceb2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p50_supervision_structure/provenance.json",
+          "size_bytes": 3042,
+          "sha256": "a3f80bb49bba4df63f0afb1b1ba1631ada70f9ea811da964b16a1d9115da6a22",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p50_supervision_structure/result.json",
+          "size_bytes": 512,
+          "sha256": "529aaad6bd870f876795e4c62c54b0aa3c06b1786feb846733ab1733eb0e0016",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p50_supervision_structure/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p50_supervision_structure/stdout.log",
+          "size_bytes": 4559,
+          "sha256": "0154d924324a03dbbe46e78cadc35b589cc11e75a8b175af2c0bc2a54b023a90",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p50_supervision_structure/sup.json",
+          "size_bytes": 2827,
+          "sha256": "4f08ae84dcc7b84078143240cc83a98d3868e42215ec14c5313e3c38b7b7ff4e",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 11165,
+      "status": "OK"
+    },
+    {
+      "name": "p51_readout_geometry",
+      "path": "runs/p51_readout_geometry",
+      "command": ".venv/bin/python3 tools/readout_geometry.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p51_readout_geometry/geom.json --cap 64 --min-cells 20",
+      "commit": "3dbc4338e80901e7ba875fbc0f2b5e26b8703c27",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Tests the hypothesis p50 pointed to: the text head is a cosine against FIXED, never-trained CLIP predicate embeddings, so its ability to separate two predicates is bounded by the angle between them regardless of rel_feat or supervision. pred_emb lives only in the p36 cache, but the column correlation matrix of the stored logits is a proxy for the embedding Gram matrix, and var(logits[:,a] - logits[:,b]) is the discriminative BUDGET that readout has for the pair. Predicts a negative association for the text head and a weaker one for the learned classifier head.",
+      "exit_code": 0,
+      "runtime_seconds": 40.136,
+      "started_at_utc": "2026-09-01T18:43:17.728593+00:00",
+      "files": [
+        {
+          "path": "runs/p51_readout_geometry/command.txt",
+          "size_bytes": 212,
+          "sha256": "c9be5c1b4076932b7b5c6b7397a55ff79a62c5ddd2db97045428644067b91aa4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p51_readout_geometry/geom.json",
+          "size_bytes": 120255,
+          "sha256": "3f0dab34bfd3779e2937fc54cc61166243e623ca69f123678b52dd43d9c5d1d4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p51_readout_geometry/provenance.json",
+          "size_bytes": 3228,
+          "sha256": "1c0bd764ecfacdb9d37a995a9a3e61cc727fa6fdf18056dfd61739474ff47906",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p51_readout_geometry/result.json",
+          "size_bytes": 508,
+          "sha256": "d567906f17a3b9468e49dc9a1ac9603c3978938999119301bf417435466d303d",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p51_readout_geometry/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p51_readout_geometry/stdout.log",
+          "size_bytes": 3832,
+          "sha256": "e005bc399f7d9fd141ff1338d578ef883e7b8bddd18f2ea80ba7dfea5786302f",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 128035,
+      "status": "OK"
+    },
+    {
+      "name": "p52_supervision_vg150only",
+      "path": "runs/p52_supervision_vg150only",
+      "command": ".venv/bin/python3 tools/supervision_structure.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --root datasets_vg150_clean --out runs/p52_supervision_vg150only/sup.json --vg150-only",
+      "commit": "ee5f6c09bd99812e330e0d497a61a646faaef798",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "ROBUSTNESS CHECK on p50, prompted by discovering that datasets_vg150_clean retains RAW Visual Genome object names (16,929 distinct; 55.8% of object mentions outside the standard VG150 150-category vocabulary). p50's groups were therefore at raw-name granularity, which makes groups smaller and within-pair supervision look scarcer than standard VG150 would. This re-runs the identical analysis restricted to relationships whose BOTH endpoints are in the 150-category vocabulary.",
+      "exit_code": 0,
+      "runtime_seconds": 26.663,
+      "started_at_utc": "2026-09-01T19:39:21.963938+00:00",
+      "files": [
+        {
+          "path": "runs/p52_supervision_vg150only/command.txt",
+          "size_bytes": 238,
+          "sha256": "54fefcb66ccd5be2db68520e1b5b141908a864bc48e24eb39350fc48abde19bb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p52_supervision_vg150only/provenance.json",
+          "size_bytes": 3134,
+          "sha256": "3020ff1594314e3964bbd18b0f9f724726fa1ae4b990f416d7a754f22bda38e1",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p52_supervision_vg150only/result.json",
+          "size_bytes": 532,
+          "sha256": "6fc7a6be70cd115a572443f8c33f6438a7a761174e5b51e08ce71788fd394a7e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p52_supervision_vg150only/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p52_supervision_vg150only/stdout.log",
+          "size_bytes": 4622,
+          "sha256": "be45bebee7dff586697c4f91d2265591c80bee8555732a2033fb79cd784f1480",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p52_supervision_vg150only/sup.json",
+          "size_bytes": 2832,
+          "sha256": "cdd01ef5ffe17c22e814f1c39251d7203e067201b498d9bb5f4cedcf61ed8fe9",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 11358,
+      "status": "OK"
+    },
+    {
+      "name": "p53_FAILED_keyerror",
+      "path": "runs/p53_FAILED_keyerror",
+      "command": ".venv/bin/python3 tools/metric_grounding_correlation.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p53_metric_grounding_vg150only/corr.json --tau 0.0 --vg150-only",
+      "commit": "f34f4f6227d783d4d026e24ed55d3155602c1f34",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "ROBUSTNESS: replicate p49's metric-vs-grounding rank correlation on the STANDARD VG150 subset only (both endpoints in the 150-category vocabulary), after discovering datasets_vg150_clean retains raw VG object names. R@50/mR@50, the tau frontier and WPRD are ALL recomputed on the restricted population so the comparison is internally consistent. Tests whether the mR@50 anti-correlation is a property of the standard benchmark or of this dataset variant.",
+      "exit_code": 1,
+      "runtime_seconds": 292.322,
+      "started_at_utc": "2026-09-01T19:54:35.977979+00:00",
+      "files": [
+        {
+          "path": "runs/p53_FAILED_keyerror/STOPPED.md",
+          "size_bytes": 214,
+          "sha256": "0a6ad5f21db0f73f4034a2531b9d82b131431b2c78e990f47879bf8413eea311",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_FAILED_keyerror/command.txt",
+          "size_bytes": 280,
+          "sha256": "85ccfe63d82e5ed30471d3d391635525cf0f81938cfd4b4181f70b65a391f1bb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_FAILED_keyerror/provenance.json",
+          "size_bytes": 3165,
+          "sha256": "8c11ca8218bc8810c016debf9ec26a8772ba759c702aebc0bdc28a8b8be7b4c2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_FAILED_keyerror/result.json",
+          "size_bytes": 594,
+          "sha256": "5a95271c58cbf9a8fb54f3b8ff471366b80901ff93564ca28d8392e801299255",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_FAILED_keyerror/stderr.log",
+          "size_bytes": 468,
+          "sha256": "16fd4e8746a92b3ac193416cc19bc4187aeded924a820ce19f60a0f25f0c0bb2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_FAILED_keyerror/stdout.log",
+          "size_bytes": 532,
+          "sha256": "c82a7f79ea2b0551febc909e07eeda6f38f2eccdca98cb42b4ef52ebce75dae3",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 5253,
+      "status": "FAILED"
+    },
+    {
+      "name": "p53_metric_grounding_vg150only",
+      "path": "runs/p53_metric_grounding_vg150only",
+      "command": ".venv/bin/python3 tools/metric_grounding_correlation.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p53_metric_grounding_vg150only/corr.json --tau 0.0 --vg150-only",
+      "commit": "f34f4f6227d783d4d026e24ed55d3155602c1f34",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "ROBUSTNESS: replicate p49 on the STANDARD VG150 subset (both endpoints in the 150-category vocabulary) after discovering datasets_vg150_clean retains raw VG object names. R@50/mR@50, the tau frontier and WPRD are ALL recomputed on the restricted population. Attempt 1 crashed on an empty-group KeyError; see runs/p53_FAILED_keyerror. Unrestricted path regression-tested unchanged (text head 0.5542, prior 0.5000).",
+      "exit_code": 0,
+      "runtime_seconds": 309.086,
+      "started_at_utc": "2026-09-01T20:00:45.279215+00:00",
+      "files": [
+        {
+          "path": "runs/p53_metric_grounding_vg150only/command.txt",
+          "size_bytes": 280,
+          "sha256": "85ccfe63d82e5ed30471d3d391635525cf0f81938cfd4b4181f70b65a391f1bb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_metric_grounding_vg150only/corr.json",
+          "size_bytes": 2466,
+          "sha256": "50627e48c7f34c94893062e8e2a4720ab0cb891cc8e4200b6224592079dc3eeb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_metric_grounding_vg150only/provenance.json",
+          "size_bytes": 3124,
+          "sha256": "ab360fc1d0df541c51bbe3a9fd61c8ea2987b6b2a1d38ab2aed86fe0862b00d8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_metric_grounding_vg150only/result.json",
+          "size_bytes": 594,
+          "sha256": "04ad1369c013cc2232505d97888db8b3c9f572e918a1f490f702ca0318291b07",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_metric_grounding_vg150only/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p53_metric_grounding_vg150only/stdout.log",
+          "size_bytes": 1585,
+          "sha256": "14169747612c3113376b38730a794bd445e472d0ef9b9d01434ceebb8302d197",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8049,
       "status": "OK"
     },
     {
