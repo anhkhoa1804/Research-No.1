@@ -123,3 +123,75 @@ evaluated head actually read, not some other activation.
 - Either way, **no result here licenses claiming PURE "sees relations"**. WPRD
   0.55–0.60 against a 0.5 floor is weak in absolute terms and that framing
   survives every outcome below.
+
+---
+
+# Addendum — a geometry reference arm, added before `p37`'s numbers exist
+
+Added 2026-09-01 while `runs/p36` was still executing, after `runs/p38`/`p39`
+produced a result that changes what `p37` should be compared against.
+**No threshold in the pre-registration above is altered.** This adds a
+*reference arm and a second, clearly-labelled criterion*; the primary criterion
+in §5 stands exactly as registered and will be reported either way.
+
+## What changed
+
+`runs/p38`/`p39` fit a probe on **19 scale-invariant box-geometry features** —
+no pixels, no `rel_feat`, no predicate embeddings — and scored it with WPRD:
+
+| arm | WPRD macro | 95% CI |
+|---|---|---|
+| **geometry, TRAIN-FITTED** (no validation fit at all) | **0.5961** | [0.5921, 0.6014] |
+| geometry, cross-fitted on validation folds | 0.5883 | [0.5837, 0.5938] |
+| classifier head (discarded) | 0.5728 | [0.5681, 0.5779] |
+| text head (**evaluated**) | 0.5542 | [0.5495, 0.5592] |
+| geometry with SHUFFLED labels | 0.4872 | [0.4820, 0.4926] |
+| prior | 0.5000 | [0.5000, 0.5000] |
+
+Paired over cells, the trained checkpoint is **behind** train-fitted geometry:
+text **−0.0419** [−0.0489, −0.0354], classifier **−0.0232** [−0.0292, −0.0163].
+Both intervals exclude zero.
+
+The train-fitted probe is the fair comparison: it sees the same training split
+the model saw and the same validation split the model is scored on, and no
+validation statistic enters its fit. It also *beats* the cross-fitted version,
+so the result is not an artifact of fitting on validation.
+
+## Why this changes the right question for `p37`
+
+The §5 criterion asks whether `rel_feat` holds more than its own readouts
+extract. That is still worth answering. But the sharper question is now:
+
+> Does `rel_feat` hold anything **beyond box geometry** at all?
+
+Because if the answer is no, then PURE's visual encoder has learned spatial
+layout and nothing else, and "readout vs representation" is a question about
+how to better extract a signal that is *already inferior to two rectangles*.
+
+## Secondary criterion (additional, does not replace §5)
+
+Let `P*` be the best held-out probe on `rel_feat` (as defined in §4) and
+`G = 0.5961`, the train-fitted geometry probe.
+
+- **BEYOND GEOMETRY**: `P* >= G + 0.02`. The representation carries relational
+  evidence that boxes do not. A successor has something real to build on.
+- **GEOMETRY-EQUIVALENT**: `|P* − G| < 0.02`. The encoder's relational content
+  is spatial layout. This is the strongest form of the diagnosis and it argues
+  **against** a successor built on this representation.
+- **BELOW GEOMETRY**: `P* <= G − 0.02`. The encoder is actively worse than
+  boxes, and the finding is about the training objective, not the architecture.
+
+`0.02` is chosen as slightly larger than the classifier-vs-text gap
+(0.0186) that was already large enough to move the operating point in `p34`,
+and roughly four CI half-widths on these estimates.
+
+A further arm is added to §4 for this comparison, and is reported whatever the
+outcome:
+
+| arm | what it is |
+|---|---|
+| `R8_geom` | the train-fitted geometry probe (reference, 0.5961) |
+| `R9_relfeat_plus_geom` | probe on `[rel_feat, geometry]` — does the pair beat geometry alone? |
+
+`R9` is the direct test of incremental value: if `rel_feat` adds nothing on top
+of geometry, `R9 ≈ R8`.
