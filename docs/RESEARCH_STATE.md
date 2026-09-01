@@ -186,7 +186,7 @@ Detail: `docs/FULL_VALIDATION_RESULT.md`.
 | `p28` | oracle ceiling on the full split | REALIZABLE **EXHAUSTED** 9/9; tau-restoration falsified again |
 | `p29` | nested scorer on the full split | **PREREG CONFIRMED 3/3** -- and the image-destroying null passes too |
 | `p30` | audit of pair-arm fold coverage | 45.4% (3k) / 33.2% (full) of rows get NO pair information |
-| `p31` | learned R/mR frontier on the full split | reported, not a criterion |
+| `p31` | learned R/mR frontier on the full split | `full` has a usable region beta in [0.10,0.20], peak **+3.334**; no-model arms have none |
 
 ## 6. Experiments pending
 

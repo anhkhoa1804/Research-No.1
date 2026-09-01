@@ -106,6 +106,38 @@ This arm did not exist when the criterion was written — it was added by `p26`
 afterwards — so it is **not** part of the criterion and does not change the
 CONFIRMED verdict. What it establishes is what the verdict *means*.
 
+## 4b. Analysis 3/3 — the operating-point frontier (`runs/p31`)
+
+Reported, not a criterion. Exit 0, 345 s, same cache, tau=0, k=5, betas swept.
+Prior R@50 66.593 / mR 22.304; achieved additive C′ Pareto +0.900.
+
+| beta | `prior_only` | | `full` | | `shuffled_model` | |
+|---|---|---|---|---|---|---|
+| | Pareto | floor | Pareto | floor | Pareto | floor |
+| 0.00 | −1.872 | ok | −2.015 | ok | −1.870 | ok |
+| 0.05 | −1.333 | ok | −0.655 | ok | −1.374 | ok |
+| 0.10 | −0.133 | FAIL | **+0.685** | **ok** | −0.175 | FAIL |
+| 0.15 | −1.213 | FAIL | **+2.223** | **ok** | −1.126 | FAIL |
+| 0.20 | −1.058 | FAIL | **+3.334** | **ok** | −1.129 | FAIL |
+| 0.25 | +0.381 | FAIL | +1.100 | FAIL | +0.348 | FAIL |
+| 0.30 | +2.146 | FAIL | +2.783 | FAIL | +2.081 | FAIL |
+
+The structural fact this adds to the nested read: `full` has a **contiguous
+region** of usable operating points — beta ∈ [0.10, 0.20], three points that are
+simultaneously above the tau frontier and above the R@50 floor, peaking at
+**+3.334** (R@50 66.515, mR 25.919) at beta=0.20. Neither no-model arm has a
+single such point: wherever they clear the floor their Pareto gap is negative,
+and wherever their gap turns positive they have already failed the floor. That
+is exactly the signature of "everything without the model term is calibration".
+
+Screening (`runs/p21`, 3k) read +2.86 at beta=0.20. The full split reads
+**+3.334** — consistent, slightly stronger, same argmax beta.
+
+**Coverage limitation.** `--frontier` predates `p26` and does not carry the
+`pair_matched_null` arm, so this table cannot separate pair identity from image
+content. Only the nested run (§4) can, and it puts that difference at
++0.031 ± 0.188. Nothing here contradicts that; it simply does not test it.
+
 ## 5. How to state this result
 
 Correct: *the candidate-restricted decision rule reliably converts the
