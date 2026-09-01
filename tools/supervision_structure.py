@@ -56,8 +56,17 @@ def _log(m: str = "") -> None:
     print(m, flush=True)
 
 
-def read_split(path: str, classes: List[str]):
-    """(group key -> Counter(predicate)) for one split."""
+def read_split(path: str, classes: List[str], vocab=None):
+    """(group key -> Counter(predicate)) for one split.
+
+    `vocab`, if given, restricts to relationships whose BOTH endpoints are in
+    the standard VG150 150-object vocabulary. The shipped
+    datasets_vg150_clean retains raw Visual Genome object names (16,929
+    distinct, 55.8% of mentions outside the 150), so the unrestricted numbers
+    are at RAW-NAME granularity and the restricted ones are at standard VG150
+    granularity. The two are reported side by side because the granularity
+    changes the group sizes and therefore the supervision counts.
+    """
     idx = {c: i for i, c in enumerate(classes)}
     groups: Dict[str, Counter] = defaultdict(Counter)
     n_rows = 0
@@ -71,6 +80,9 @@ def read_split(path: str, classes: List[str]):
                 a, b = int(r.get("subject_id", -1)), int(r.get("object_id", -1))
                 if c is None or not (0 <= a < len(names) and 0 <= b < len(names)):
                     continue
+                if vocab is not None and (names[a] not in vocab
+                                          or names[b] not in vocab):
+                    continue
                 groups[f"{names[a]}||{names[b]}"][c] += 1
                 n_rows += 1
     return groups, n_rows
@@ -83,6 +95,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--prior", default="datasets_vg150_clean/frequency_prior_train.json")
     ap.add_argument("--root", default="datasets_vg150_clean")
     ap.add_argument("--out", default="runs/p50_supervision_structure/sup.json")
+    ap.add_argument("--vg150-only", action="store_true",
+                    help="restrict to relationships whose both endpoints are in "
+                         "the standard VG150 150-object vocabulary")
     args = ap.parse_args(argv)
 
     _log("=" * 106)
@@ -96,13 +111,21 @@ def main(argv: Optional[List[str]] = None) -> int:
          f"body {sum(1 for c in bucket.values() if c=='body')} / "
          f"tail {sum(1 for c in bucket.values() if c=='tail')}")
 
-    res: Dict[str, Any] = {"tool": "supervision_structure", "splits": {}}
+    VOCAB = None
+    if args.vg150_only:
+        vj = json.loads((Path(args.root) / "vocabulary" / "objects.json")
+                        .read_text(encoding="utf-8"))
+        VOCAB = set(str(x).strip().lower() for x in vj["idx_to_label"].values())
+        _log(f"  RESTRICTED to the standard VG150 object vocabulary "
+             f"({len(VOCAB)} categories)")
+    res: Dict[str, Any] = {"tool": "supervision_structure",
+                           "vg150_only": bool(args.vg150_only), "splits": {}}
     for split in ("train", "validation", "test"):
         path = str(Path(args.root) / f"{split}.jsonl")
         if not Path(path).exists():
             _log(f"  [skip] {path} absent")
             continue
-        G, n_rows = read_split(path, classes)
+        G, n_rows = read_split(path, classes, VOCAB)
         n_groups = len(G)
         sizes = {k: sum(v.values()) for k, v in G.items()}
         ndist = {k: len(v) for k, v in G.items()}

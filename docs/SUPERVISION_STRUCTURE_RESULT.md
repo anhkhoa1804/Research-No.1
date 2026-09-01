@@ -118,3 +118,48 @@ data and architecture provide limited within-pair supervision* — is now
   use within-pair evidence. One of this very checkpoint's two readouts does so in
   the scarcest buckets. The constraint binds on the readout that was deployed,
   not on the family.
+
+---
+
+# CORRECTION — `runs/p52`: the 19% figure was a granularity artifact
+
+`p50` measured groups at **raw object-name** granularity. That dataset retains
+16,929 distinct object labels, of which only 150 are the VG150 vocabulary
+(`docs/DATASET_IDENTITY_OBJECT_VOCAB.md`). Re-run restricted to relationships
+whose **both** endpoints are in the standard 150 categories:
+
+| | raw-name (`p50`) | **VG150-only (`p52`)** |
+|---|---|---|
+| train rows | 1,046,427 | **293,376** |
+| train groups | 212,981 | **8,392** |
+| mean group size | 4.91 | **34.96** |
+| **P(group ≥2 distinct predicates)** | **19.0%** | **58.1%** |
+| P(group ≥3 distinct predicates) | 7.2% | 37.4% |
+| rows in decidable groups | 74.8% | **96.8%** |
+| within-group entropy | 0.4209 | 0.7171 |
+
+**The scarcity headline is WITHDRAWN.** At standard VG150 granularity, 58.1% of
+training groups carry ≥2 distinct predicates and 96.8% of rows live in such
+groups. Within-pair supervision is **not scarce** in the sense `p50` claimed,
+and the "supervision-scarcity" reading of `p48` loses its main support.
+
+**The bucket skew SURVIVES, and is slightly worse:**
+
+| buckets | raw-name train | **VG150-only train** | VG150 val | VG150 test |
+|---|---|---|---|---|
+| head–head | 80.64% | **84.70%** | 87.29% | 85.05% |
+| body–head | 12.24% | 8.53% | 7.93% | 9.44% |
+| head–tail | 6.30% | 6.14% | 4.20% | 4.81% |
+| body–body | 0.53% | 0.40% | 0.38% | 0.48% |
+| body–tail | 0.25% | 0.19% | 0.14% | 0.21% |
+| **tail–tail** | **0.04%** | **0.05%** | 0.05% | 0.02% |
+
+**~1,700× head–head vs tail–tail, robust to granularity and reproduced on all
+three splits.** That is the finding that stands: not that within-pair
+supervision is scarce overall, but that it is **overwhelmingly concentrated on
+head-vs-head contrasts**, with essentially none for distinguishing one rare
+predicate from another.
+
+The `p50` dissociation (text head tracks supply, classifier head does not) was
+computed against the raw-name supply figures and should be recomputed against
+`p52`'s before being relied on.
