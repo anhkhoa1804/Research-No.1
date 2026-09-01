@@ -1254,6 +1254,19 @@ def _collect_pair_dump(
             else:
                 dump[key].append(torch.full((n, width), float("nan")))
                 dump["missing_" + key] = int(dump.get("missing_" + key, 0)) + 1
+        if dump.get("_want_rel_feat"):
+            if "pred_emb" not in dump:
+                pe = comps.get("pred_emb")
+                if isinstance(pe, torch.Tensor):
+                    dump["pred_emb"] = pe.detach().float().cpu()
+            rf = comps.get("rel_feat")
+            if isinstance(rf, torch.Tensor) and int(rf.shape[0]) == n:
+                # fp16 halves a 132k x D artifact and costs ~1e-3 relative
+                # precision, far below the effect sizes this is used to measure.
+                dump["rel_feat"].append(rf.detach().half().cpu())
+            else:
+                dump["rel_feat"].append(torch.full((n, 1), float("nan"), dtype=torch.half))
+                dump["missing_rel_feat"] = int(dump.get("missing_rel_feat", 0)) + 1
         a = comps.get("ensemble_alpha_used")
         if isinstance(a, (int, float)):
             dump["ensemble_alpha_used"] = float(a)
@@ -1477,6 +1490,19 @@ def _predicate_logit_components(
         "text_logits": text_logits, "cls_logits": None,
         "text_norm": None, "cls_norm": None,
         "mode": mode, "ensemble_alpha_used": None, "branch": None,
+        # The relational feature BOTH heads read. text_logits is
+        # normalize(rel_feat) @ normalize(pred_emb).T and cls_logits is
+        # predicate_classifier(rel_feat), so both are low-dimensional readouts
+        # of this one tensor. Storing it is the only way to ask whether the
+        # weak grounding measured in runs/p33 is a property of the READOUTS or
+        # of the REPRESENTATION. Set on every return path.
+        "rel_feat": rel_feat,
+        # The predicate text embeddings the cosine readout scores against.
+        # 51 x D and identical for every pair, so it is stored once. If these
+        # are near-collinear the text head CANNOT separate those predicates no
+        # matter how good rel_feat is -- a readout-geometry failure that is
+        # invisible from the logits alone.
+        "pred_emb": pred_emb,
     }
     if not use_classifier or mode in {"text", "cosine", "clip"}:
         comp["branch"] = "text_only"
@@ -1781,6 +1807,11 @@ def eval_sgg_standard(
                          "gt_subj_label", "gt_obj_label")}
         if _pair_dump_path else None
     )
+    if pair_dump is not None and bool(getattr(cfg, "eval_sgg_dump_rel_feat", False)):
+        # Default OFF. When off, the dump dict has no "rel_feat" key at all and
+        # the artifact is byte-comparable with the p24 schema.
+        pair_dump["rel_feat"] = []
+        pair_dump["_want_rel_feat"] = True
     global_hits = {t: {k: {p: 0 for p in pred_vocab} for k in ks} for t in tasks}
     zs_gt_counts = {p: 0 for p in pred_vocab}
     zs_hits = {t: {k: {p: 0 for p in pred_vocab} for k in ks} for t in tasks}

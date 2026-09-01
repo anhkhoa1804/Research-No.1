@@ -668,6 +668,7 @@ def build_argparser() -> argparse.ArgumentParser:
     # when they are omitted. See runs/p10_model_recalibration/cache_schema.md.
     p.add_argument("--eval_freq_bias_tau", type=float, default=getattr(TrainConfig, "eval_freq_bias_tau", 0.0))
     p.add_argument("--eval_sgg_dump_pair_logits_path", type=str, default=getattr(TrainConfig, "eval_sgg_dump_pair_logits_path", ""))
+    p.add_argument("--eval_sgg_dump_rel_feat", type=_str2bool, default=getattr(TrainConfig, "eval_sgg_dump_rel_feat", False))
     p.add_argument("--predicate_background_weight", type=float, default=TrainConfig.predicate_background_weight)
     p.add_argument("--predicate_ce_loss", type=str, default=TrainConfig.predicate_ce_loss)
     p.add_argument("--predicate_ce_gamma", type=float, default=TrainConfig.predicate_ce_gamma)

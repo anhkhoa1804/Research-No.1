@@ -296,6 +296,10 @@ class TrainConfig:
     # to this .pt path, so the decision rule can be re-derived on CPU without a
     # second GPU pass. Purely observational: it changes no metric.
     eval_sgg_dump_pair_logits_path: str = ""
+    # Also store the relational feature both predicate heads read.
+    # Default OFF: when off the dump carries no "rel_feat" key and is
+    # schema-comparable with runs/p24.
+    eval_sgg_dump_rel_feat: bool = False
     predicate_background_weight: float = 0.1
     predicate_ce_loss: str = "focal"  # ce, weighted_ce, focal
     predicate_ce_gamma: float = 1.5

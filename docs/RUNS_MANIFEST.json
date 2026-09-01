@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 51,
-  "total_bytes": 809600814,
+  "n_runs": 58,
+  "total_bytes": 956980958,
   "runs": [
     {
       "name": "p10_model_recalibration",
@@ -815,7 +815,17 @@
       "branch": "research/architecture-breakthrough",
       "working_tree_clean": true,
       "note": "FULL VALIDATION cache extension. Pre-registered in docs/FULL_VALIDATION_PREREGISTRATION.md. Identical to p10 except --eval_batches 0 (whole 10401-image split) and output paths. Frozen forward pass, no training.",
+      "exit_code": 0,
+      "runtime_seconds": 12423.192,
+      "started_at_utc": "2026-09-01T07:59:23.497304+00:00",
       "files": [
+        {
+          "path": "runs/p24_full_val_cache/cache_validation.json",
+          "size_bytes": 2526,
+          "sha256": "b17d70456cc3051d3529d73277ff6bdff73b5bb8d565adddd6293dafddbb8605",
+          "note": null,
+          "mtime": null
+        },
         {
           "path": "runs/p24_full_val_cache/command.txt",
           "size_bytes": 1059,
@@ -824,9 +834,44 @@
           "mtime": null
         },
         {
+          "path": "runs/p24_full_val_cache/epoch_metrics/epoch_000.json",
+          "size_bytes": 90881,
+          "sha256": "67ed9be623ae4de2cc6831f0b031a20d46fbeab2307204b01a726c808fc694a0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p24_full_val_cache/latest_metrics.json",
+          "size_bytes": 90881,
+          "sha256": "67ed9be623ae4de2cc6831f0b031a20d46fbeab2307204b01a726c808fc694a0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p24_full_val_cache/metrics.jsonl",
+          "size_bytes": 66268,
+          "sha256": "5e62c5064f80b307775514934c037725b124fa2d2d4ffb1af48a39d35f204303",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p24_full_val_cache/pair_logits.pt",
+          "size_bytes": 146925755,
+          "sha256": null,
+          "note": "large: size+mtime identity",
+          "mtime": 1788259252.3137445
+        },
+        {
           "path": "runs/p24_full_val_cache/provenance.json",
           "size_bytes": 2831,
           "sha256": "5f10c379f790c64ac6f69d97af2fa6e6623358de56b13c2acfde2734ee48c08b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p24_full_val_cache/result.json",
+          "size_bytes": 1762,
+          "sha256": "028bcb67f20b764482496c10e6fd65514df1fc21377e40dea9344d01b86cb843",
           "note": null,
           "mtime": null
         },
@@ -839,14 +884,14 @@
         },
         {
           "path": "runs/p24_full_val_cache/stdout.log",
-          "size_bytes": 4402,
-          "sha256": "8fb80cf321b40c7cb8bf303c77b576080e1752e72e09b66eb553be54ae2244dc",
+          "size_bytes": 4991,
+          "sha256": "5527a176b931f028a3d893b5a087f7bfa46bcb96b7e63a3843c4e5cdc95175e5",
           "note": null,
           "mtime": null
         }
       ],
-      "total_bytes": 8878,
-      "status": "NO_RESULT_JSON"
+      "total_bytes": 147187540,
+      "status": "OK"
     },
     {
       "name": "p25_scorer_nested_resampled",
@@ -970,6 +1015,350 @@
       ],
       "total_bytes": 19110,
       "status": "OK"
+    },
+    {
+      "name": "p27_pair_prior_distillation",
+      "path": "runs/p27_pair_prior_distillation",
+      "command": ".venv/bin/python3 tools/pair_prior_distillation.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p27_pair_prior_distillation/distill.json --repeats 5 --betas 0.0,0.1,0.2,0.3 --epochs 150",
+      "commit": "c72c3fb139dd708b6709955f275a01e046d68615",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Pair-prior distillation: how much of the checkpoint's contribution is reproducible from subject/object-conditioned statistics alone? Ladder A-G plus the pairmean/residual decomposition of the model term, nested + resampled over 5 partitions. MECHANISTIC DECOMPOSITION, not a confirmatory claim. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 1330.607,
+      "started_at_utc": "2026-09-01T08:45:16.396878+00:00",
+      "files": [
+        {
+          "path": "runs/p27_pair_prior_distillation/command.txt",
+          "size_bytes": 259,
+          "sha256": "a885928d8e9a9b86e92615ad53927b5ad51fb6c77595fa8ba9d987754656f063",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p27_pair_prior_distillation/distill.json",
+          "size_bytes": 52181,
+          "sha256": "9b00e92c73d4712b52d2b9562ea427c1eafe5a36973c4d1472708ce2042ae51c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p27_pair_prior_distillation/provenance.json",
+          "size_bytes": 2937,
+          "sha256": "9b9e4050f1ba4d20a0bd01e48fe31e8999537fef29fba32ebb1eb32285f0f530",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p27_pair_prior_distillation/result.json",
+          "size_bytes": 578,
+          "sha256": "be8325649d4e258abe598b40b4c3fdb8d32743e3359592c65ab55238aa55f205",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p27_pair_prior_distillation/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p27_pair_prior_distillation/stdout.log",
+          "size_bytes": 4355,
+          "sha256": "a908b123ef38a76aefb821a40be1139d4381a9e1e22e903baca182b0678a4e91",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 60310,
+      "status": "OK"
+    },
+    {
+      "name": "p28_full_oracle_ceiling",
+      "path": "runs/p28_full_oracle_ceiling",
+      "command": ".venv/bin/python3 tools/cprime_oracle_ceiling.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p28_full_oracle_ceiling/oracle.json --taus 0.0,0.05",
+      "commit": "e659494cd1ec2d63b178b89d6c21cd9ed6083c42",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "PREREG full-validation analysis 1/3: p17 re-run unchanged on the p24 full-split cache (10401 images). Cache passed validate_pair_dump.py 12/12.",
+      "exit_code": 0,
+      "runtime_seconds": 23.405,
+      "started_at_utc": "2026-09-01T11:47:22.967003+00:00",
+      "files": [
+        {
+          "path": "runs/p28_full_oracle_ceiling/command.txt",
+          "size_bytes": 214,
+          "sha256": "b19c25b961c3c6f2563bc64aaf567de116a970287f177b1ee085f70343a7867b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p28_full_oracle_ceiling/oracle.json",
+          "size_bytes": 67131,
+          "sha256": "f4787c02197a4996037ff44ffbd177b650bfcbe55381cd9dbe26cdef23571e8f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p28_full_oracle_ceiling/provenance.json",
+          "size_bytes": 2752,
+          "sha256": "f286af7cd2e8e065a13926fc6e4de2f6ab8c430ce895d5dae828b9117d1225f4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p28_full_oracle_ceiling/result.json",
+          "size_bytes": 499,
+          "sha256": "15a4de214619c8d23041283776c48f2ac999a6c12145da80b68ff9a9b2e8ad31",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p28_full_oracle_ceiling/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p28_full_oracle_ceiling/stdout.log",
+          "size_bytes": 6350,
+          "sha256": "4a5f6a6ea4fb0903d5183db6bc42dfe0763d0e7c5bccf77fa93ed17f18084377",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 76946,
+      "status": "OK"
+    },
+    {
+      "name": "p29_full_scorer_nested",
+      "path": "runs/p29_full_scorer_nested",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p29_full_scorer_nested/nested.json --nested --repeats 5 --taus 0.0 --ks 5 --betas 0.0,0.05,0.1,0.15,0.2,0.25,0.3 --epochs 200",
+      "commit": "7b59564f89f13025fa1bd90b1cf2d138f41cf08c",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "PREREG full-validation analysis 2/3 (RELAUNCH). Attempt 1 was killed by a VM shutdown at 12:06 UTC with no result; see runs/p29_full_scorer_nested_KILLED_BY_VM_REBOOT/STOPPED.md. Byte-identical argv. p22 re-run on the p24 full-split cache (10401 images). Salt 0 IS the registered partition (fold_of_image salt=0); --repeats 5 only ADDS partitions 1-4 as the secondary resampled read. Registered criterion is read off the salt-0 table. Also replicates p26's pair_matched_null arm at full scale.",
+      "exit_code": 0,
+      "runtime_seconds": 1879.217,
+      "started_at_utc": "2026-09-01T14:41:06.829006+00:00",
+      "files": [
+        {
+          "path": "runs/p29_full_scorer_nested/command.txt",
+          "size_bytes": 289,
+          "sha256": "c965fcf7942da265608c88e3c5451d896b1e12b2713308e530cf0db127937985",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p29_full_scorer_nested/nested.json",
+          "size_bytes": 11258,
+          "sha256": "8715f794616428b1e3d9db0785c2c2cacfe9508210fd6c38a56989daca208b2f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p29_full_scorer_nested/provenance.json",
+          "size_bytes": 3097,
+          "sha256": "def8e5bd4e78f7ab900b4f18fbf23a3010a45a774a9b9fd8a18f2d51d833d526",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p29_full_scorer_nested/result.json",
+          "size_bytes": 638,
+          "sha256": "5f2c1022ef480c17dc7aacf059655c037799600f572a97a39deb78786f0a55b7",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p29_full_scorer_nested/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p29_full_scorer_nested/stdout.log",
+          "size_bytes": 2037,
+          "sha256": "471912567cc49aa8582f40aba0761f0d7255eec5765260d38c204b979b412ece",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 17319,
+      "status": "OK"
+    },
+    {
+      "name": "p29_full_scorer_nested_KILLED_BY_VM_REBOOT",
+      "path": "runs/p29_full_scorer_nested_KILLED_BY_VM_REBOOT",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p29_full_scorer_nested/nested.json --nested --repeats 5 --taus 0.0 --ks 5 --betas 0.0,0.05,0.1,0.15,0.2,0.25,0.3 --epochs 200",
+      "commit": "e659494cd1ec2d63b178b89d6c21cd9ed6083c42",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "PREREG full-validation analysis 2/3: p22 re-run on the p24 full-split cache. Salt 0 IS the registered partition (fold_of_image salt=0); --repeats 5 only ADDS partitions 1-4 as the secondary resampled read. Registered criterion is read off the salt-0 table. Also replicates p26's pair_matched_null arm at full scale.",
+      "files": [
+        {
+          "path": "runs/p29_full_scorer_nested_KILLED_BY_VM_REBOOT/STOPPED.md",
+          "size_bytes": 839,
+          "sha256": "3a248dde9ecfbfa2f362eed0f0e3469191e7ba20ffa6582e3f904d0752f55543",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p29_full_scorer_nested_KILLED_BY_VM_REBOOT/command.txt",
+          "size_bytes": 289,
+          "sha256": "c965fcf7942da265608c88e3c5451d896b1e12b2713308e530cf0db127937985",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p29_full_scorer_nested_KILLED_BY_VM_REBOOT/provenance.json",
+          "size_bytes": 2924,
+          "sha256": "6ec4739009e8deb13cd04f240a04efa77cd1dd59be5721a706b24304e52b398c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p29_full_scorer_nested_KILLED_BY_VM_REBOOT/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p29_full_scorer_nested_KILLED_BY_VM_REBOOT/stdout.log",
+          "size_bytes": 439,
+          "sha256": "20007852dfbd4b2c186c091ae38ff32006c3c4ed015f13eeaa0762842f833a35",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 4491,
+      "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p30_pair_fold_coverage",
+      "path": "runs/p30_pair_fold_coverage",
+      "command": null,
+      "files": [
+        {
+          "path": "runs/p30_pair_fold_coverage/fold_coverage.json",
+          "size_bytes": 8765,
+          "sha256": "d2150139aaddff5bc8b410b547278b149bb878f1017cc37a0bef7d5ac180be69",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p30_pair_fold_coverage/fold_coverage_full.json",
+          "size_bytes": 8834,
+          "sha256": "9a07cdac005ac4dc71b674372ecee932d04843f1564f8b4c949e29275b7541b1",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 17599,
+      "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p31_full_scorer_frontier",
+      "path": "runs/p31_full_scorer_frontier",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p31_full_scorer_frontier/frontier.json --frontier --taus 0.0 --ks 5 --betas 0.0,0.05,0.1,0.15,0.2,0.25,0.3 --epochs 200",
+      "commit": "7b59564f89f13025fa1bd90b1cf2d138f41cf08c",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "PREREG full-validation analysis 3/3: p21 re-run unchanged on the p24 full-split cache (10401 images, 132556 rows). Traces the learned scorer's own R/mR frontier against tau's. Registered in docs/FULL_VALIDATION_PREREGISTRATION.md; reported, not a criterion.",
+      "exit_code": 0,
+      "runtime_seconds": 345.049,
+      "started_at_utc": "2026-09-01T15:14:18.681388+00:00",
+      "files": [
+        {
+          "path": "runs/p31_full_scorer_frontier/command.txt",
+          "size_bytes": 283,
+          "sha256": "65e4fcbb982f687712ada3f59faea15dc86c994a7b15c5344f4275bdc67a6306",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p31_full_scorer_frontier/frontier.json",
+          "size_bytes": 13313,
+          "sha256": "7911768931024cdb9a7c76e7675a8cdf97ec7cfb9f6f366fb890604705dd7395",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p31_full_scorer_frontier/provenance.json",
+          "size_bytes": 2861,
+          "sha256": "f0fcc28b60d6d559aae6760787596f09dc38b7afd154c1116bee9bd428a697d3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p31_full_scorer_frontier/result.json",
+          "size_bytes": 619,
+          "sha256": "1bb004e62374966790ba560b8a84cbc0dad3d8c58481f2e46a761435cc289fb3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p31_full_scorer_frontier/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p31_full_scorer_frontier/stdout.log",
+          "size_bytes": 3027,
+          "sha256": "3510f077a2d1b975184690d326ae305ef7c01c0746d4ac15a79adb3b11b483eb",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 20103,
+      "status": "OK"
+    },
+    {
+      "name": "p32_pair_prior_estimable",
+      "path": "runs/p32_pair_prior_estimable",
+      "command": ".venv/bin/python3 tools/pair_prior_distillation.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p32_pair_prior_estimable/distill.json --repeats 5 --betas 0.0,0.1,0.2,0.3 --epochs 150 --estimable-only",
+      "commit": "ab83712b4583af10eb2b2f09d8ef45b2586c858a",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Corrected pair-prior distillation, pre-registered in docs/PAIR_PRIOR_DISTILLATION_PREREGISTRATION.md (committed 91d33b8, before the tool existed). Supersedes the withdrawn runs/p27. Estimable subset of the p24 full-validation cache (~88.6k rows), CPU only, no GPU. Baseline, tau frontier and R@50 floor all recomputed on the subset per partition. Registered partition is salt 0; salts 1-4 are the secondary resampled read.",
+      "files": [
+        {
+          "path": "runs/p32_pair_prior_estimable/command.txt",
+          "size_bytes": 268,
+          "sha256": "93925c282cca9eed0c6d0e9cceef3bce81bbbe998665a3e6fddc2723ef2869b3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p32_pair_prior_estimable/provenance.json",
+          "size_bytes": 3017,
+          "sha256": "1a4e63b3d7333b5829474770797028417270553dd4d89d37a26edc3ce84803f8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p32_pair_prior_estimable/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p32_pair_prior_estimable/stdout.log",
+          "size_bytes": 1429,
+          "sha256": "c192d4728ee8c407c49472fd9da573b4aca025eaddce7ffb15095937e5f7ae2e",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 4714,
+      "status": "NO_RESULT_JSON"
     },
     {
       "name": "p3_build_train_prior",
