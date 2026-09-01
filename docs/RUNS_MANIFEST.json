@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 49,
-  "total_bytes": 809567318,
+  "n_runs": 51,
+  "total_bytes": 809600814,
   "runs": [
     {
       "name": "p10_model_recalibration",
@@ -847,6 +847,129 @@
       ],
       "total_bytes": 8878,
       "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p25_scorer_nested_resampled",
+      "path": "runs/p25_scorer_nested_resampled",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p25_scorer_nested_resampled/nested.json --nested --repeats 5 --taus 0.0 --ks 5 --betas 0.0,0.05,0.1,0.15,0.2,0.25,0.3 --epochs 200",
+      "commit": "fa4e43dfa29d480b88f0c48a66d5a8e302dfaea8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Nested selection resampled over 5 independent fold partitions. Tests whether the p22 Pareto gap is a property of the data or of one split. CPU only, 3 threads (GPU job is concurrent).",
+      "exit_code": 0,
+      "runtime_seconds": 531.548,
+      "started_at_utc": "2026-09-01T08:04:29.602145+00:00",
+      "files": [
+        {
+          "path": "runs/p25_scorer_nested_resampled/command.txt",
+          "size_bytes": 299,
+          "sha256": "54c4b93f60153ea712a2df76d4b91e217e06cda395bb7fdd8c80f846b4b6bbe4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p25_scorer_nested_resampled/nested.json",
+          "size_bytes": 8828,
+          "sha256": "67d6feda1b4eecfb515a18a9fcfff354a3dc9df832942b340fbeffcbed9898b0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p25_scorer_nested_resampled/provenance.json",
+          "size_bytes": 2789,
+          "sha256": "05a28443b2351863c88bc8ccb2c2594b6be6d0f053e490d73b68ef29991bb54b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p25_scorer_nested_resampled/result.json",
+          "size_bytes": 652,
+          "sha256": "7775927776790188d09424fd71c97030ee850c174f87645f5b78f1e4f8ea03e6",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p25_scorer_nested_resampled/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p25_scorer_nested_resampled/stdout.log",
+          "size_bytes": 1818,
+          "sha256": "dcd4c91b3c6b6460686c70c398211612293e9e369a19001f48a3560b0cee8386",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 14386,
+      "status": "OK"
+    },
+    {
+      "name": "p26_pair_matched_null",
+      "path": "runs/p26_pair_matched_null",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p26_pair_matched_null/nested.json --nested --repeats 5 --taus 0.0 --ks 5 --betas 0.0,0.05,0.1,0.15,0.2,0.25,0.3 --epochs 200",
+      "commit": "fdc643d4c20a6321be6d4af7e5b5fd700934890a",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "E1 vs E2: is the model's contribution visual, or a re-parameterised (subject,object) prior? pair_matched_null permutes the model term only within identical (subj,obj) groups. Nested + resampled over 5 partitions. Criterion pre-registered in CANDIDATE_SCORER_PREREGISTRATION.md addendum. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 740.035,
+      "started_at_utc": "2026-09-01T08:16:15.897964+00:00",
+      "files": [
+        {
+          "path": "runs/p26_pair_matched_null/command.txt",
+          "size_bytes": 293,
+          "sha256": "5f1a5cfa14d63bad8630309abee6dd37c42404f017b71cc3b95c068c8f44189e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p26_pair_matched_null/nested.json",
+          "size_bytes": 11253,
+          "sha256": "8898f3a9bee236e1d0f596cd303471ae42df032a17199b4cfbd676daf834c76f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p26_pair_matched_null/provenance.json",
+          "size_bytes": 2910,
+          "sha256": "bdf72b9faf5bf74526ac388e8f04b0a78ab669136394824df56106204f752e54",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p26_pair_matched_null/result.json",
+          "size_bytes": 640,
+          "sha256": "3dccb24c9dedca4a624b73d2aa28b1a94e323385afe74227fe2f22ddf0fa1e33",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p26_pair_matched_null/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p26_pair_matched_null/stdout.log",
+          "size_bytes": 2030,
+          "sha256": "53476c22c00e6a9ed594006d7f144f0f6d4c77dca90bbae5d9a245bcdda33916",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p26_pair_matched_null/verification.json",
+          "size_bytes": 1984,
+          "sha256": "6df01ee8860b5fbdb9b30b4cc76cbb4d191c7af77b6df4df0bbde25edd2829ea",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 19110,
+      "status": "OK"
     },
     {
       "name": "p3_build_train_prior",
