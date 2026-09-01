@@ -68,7 +68,25 @@ points at a successor.
 It does **not** change the verdict: R5 is a separately registered arm, the
 primary criterion is defined on `max(R3, R4)`, and R5 still sits below geometry.
 
-## Execution note — the run was OOM-killed after producing every number above
+## Collapse measure (reported, not a criterion)
+
+Out-of-fold R² of (subject, object) one-hots — over the standard 150-category
+vocabulary plus an "other" bucket — predicting `rel_feat`: **18.25%**.
+
+So `rel_feat` is **not** a trivial re-encoding of object identity: 82% of its
+variance is not linearly explained by the object labels. Yet no probe on it
+beats geometry. **The representation carries a great deal of variance that is
+neither object identity nor useful for predicate discrimination** — which is the
+same conclusion `p42` reached from the other direction, where most within-group
+variance supported barely more discrimination than the layout-predictable 18%
+alone.
+
+Note this is *not* directly comparable to `p42`'s "85.8% between-group variance"
+of the model term: that is computed over the 45,607 actual (s,o) groups, a far
+richer partition than 150+150 one-hots. The two measure different things and are
+reported separately.
+
+## Execution note — attempt 1 was OOM-killed after producing every number above
 
 `p37` exited **-9 (SIGKILL)** at 601 s. Confirmed OOM from the kernel log
 (`anon-rss 21.9 GB`, alongside `p36`'s 6 GB on a 31 GB host). The cause: the
@@ -77,10 +95,16 @@ primary criterion is defined on `max(R3, R4)`, and R5 still sits below geometry.
 (`docs/DATASET_IDENTITY_OBJECT_VOCAB.md`).
 
 **Every arm and every gate had already been computed and printed** before the
-kill; the verdict above is arithmetic on those printed values against thresholds
-fixed in advance. What was lost is the JSON artifact and the collapse measure —
-neither a criterion. This is recorded rather than smoothed over, and the run
-should be repeated with a memory-safe collapse measure to produce the artifact.
+kill; what was lost was the JSON artifact and the collapse measure — neither a
+criterion.
+
+**The run was then repeated** with the one-hot built over the 150-category
+vocabulary instead of the raw labels. No criterion or threshold changed. It
+completed **exit 0 in 504 s, `gates all pass: True`**, and returned the
+**identical verdict** — `P* − C = −0.0127`, `P* − G = −0.0359`,
+REPRESENTATION-LIMITED / BELOW GEOMETRY — so the numbers reported above are now
+backed by a clean run and a written artifact (`runs/p37.../rvr.json`). Attempt 1
+is archived at `runs/p37_OOMKILLED_attempt1/` with a `STOPPED.md`.
 
 ## Consequence
 
