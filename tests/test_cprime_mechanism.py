@@ -236,3 +236,17 @@ def test_leave_best_class_out_reduces_the_mr_delta(B):
     j = analysis_J_stability(B, 0.0, n_boot=8, seed=1)["leave_best_classes_out"]
     assert j["dmR_without_best"] <= j["dmR_full"] + 1e-9
     assert j["dmR_without_best_two"] <= j["dmR_without_best"] + 1e-9
+
+
+# --------------------------------------------- 7. the tie-breaking convention
+def test_margin_analysis_uses_argmax_for_the_prior_top1(B):
+    """analysis_C_margins must agree with analysis_A_flips on how many rows change.
+
+    They disagreed (7.79% vs 7.70% on the real cache) because C took the prior's
+    top-1 from topk(2).indices[:, 0] while A took it from argmax, and 522 GT
+    rows tie for the prior maximum. argmax is the evaluator's convention.
+    """
+    from tools.cprime_mechanism import analysis_A_flips, analysis_C_margins
+    a = analysis_A_flips(B, 0.0)
+    c = analysis_C_margins(B, 0.0)
+    assert c["changed_frac_overall"] == pytest.approx(a["argmax_changed_frac"], abs=1e-9)

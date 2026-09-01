@@ -218,7 +218,12 @@ def analysis_C_margins(B: Mech, tau: float) -> Dict[str, Any]:
     sc = pr + md
     t2 = pr.topk(2, dim=-1)
     margin = (t2.values[:, 0] - t2.values[:, 1])
-    ptop = t2.indices[:, 0]
+    # The prior's top-1 must be argmax, NOT topk(2).indices[:, 0]. 522 GT rows
+    # have an exact tie for the maximum, and torch breaks that tie differently
+    # in the two calls -- topk there gives prior R@50 66.7543 where the
+    # evaluator (and therefore C') gives 66.8016. `margin` is read off topk
+    # VALUES, which are tie-order invariant, so only the index moves.
+    ptop = pr.argmax(-1)
     ctop = sc.argmax(-1)
     changed = (ctop != ptop)
     # model differential across the actually-competing pair

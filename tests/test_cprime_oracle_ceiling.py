@@ -181,3 +181,27 @@ def test_region_decomposition_net_matches_the_global_net(B):
     rd = region_decomposition(B, 0.0)
     widest = [r for r in rd["regions"] if r["k"] == B.n_classes and r["budget"] == "unrestricted"]
     assert widest and widest[0]["net_flips_inside"] == rd["net_flips_total"]
+
+
+# --------------------------------------------- 6. the tie-breaking convention
+def test_prior_top1_is_argmax_not_topk_index(O):
+    """522 real GT rows tie for the prior's maximum; the two calls disagree.
+
+    argmax is the evaluator's convention (`Bench.predict`), so it is the one
+    that reproduces C'. Using topk(2).indices[:, 0] instead moved the prior
+    baseline from R@50 66.8016 to 66.7543 and shifted every oracle gap in the
+    ceiling table. Pinned on both sides so neither can drift back.
+    """
+    assert torch.equal(O.prior_top1_col, O.pr.argmax(-1))
+
+
+def test_prior_arm_reproduces_the_evaluator_baseline(O, B):
+    ref = B.metrics(B.score(0.0, ALPHA_HIST, None))
+    assert O.arm("prior", 5, float("inf"))["R"] == pytest.approx(ref["R"], abs=1e-9)
+
+
+def test_margin_is_tie_order_invariant(O):
+    """The budget must not depend on how a tie happened to be broken."""
+    v = O.pr.topk(2, dim=-1).values
+    assert torch.allclose(O.margin, v[:, 0] - v[:, 1])
+    assert bool((O.margin >= 0).all())

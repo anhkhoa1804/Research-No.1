@@ -98,7 +98,13 @@ class Oracle:
         self.gt_col = B.gt_col_of()
         t2 = self.pr.topk(2, dim=-1)
         self.margin = t2.values[:, 0] - t2.values[:, 1]
-        self.prior_top1_col = t2.indices[:, 0]
+        # argmax, NOT topk(2).indices[:, 0]: 522 GT rows tie for the prior's
+        # maximum and the two calls break that tie differently. topk there
+        # yields prior R@50 66.7543 against the evaluator's -- and C's --
+        # 66.8016, which would have shifted every baseline, every achieved dR
+        # and therefore every oracle gap in this table. `margin` comes from the
+        # topk VALUES and is tie-order invariant.
+        self.prior_top1_col = self.pr.argmax(-1)
 
     def _metrics(self, pred_col: torch.Tensor) -> Dict[str, float]:
         pred = self.B.col_to_class[pred_col]
