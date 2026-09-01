@@ -343,7 +343,7 @@ def nested(B: Mech, tau: float, k: int, betas: List[float],
     P = CandidateProbe(B, tau, k, SEED, fold_salt)
     bl = P.baselines()
     Xc = {a: P._blocks(a, torch.Generator().manual_seed(SEED))
-          for a in ("prior_only", "full", "shuffled_model")}
+          for a in ("prior_only", "full", "shuffled_model", "pair_matched_null")}
     out: Dict[str, Any] = {"tau": tau, "k": k, "betas": betas, "floor": floor,
                            "fold_salt": fold_salt, "baselines": bl, "arms": {}}
     for arm, X in Xc.items():
@@ -429,7 +429,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                 if args.repeats > 1:
                     import statistics as _st
                     agg = {}
-                    for a in ("prior_only", "full", "shuffled_model"):
+                    for a in ("prior_only", "full", "shuffled_model", "pair_matched_null"):
                         for f in ("R", "mR", "pareto_dmR_points"):
                             vs = [r["arms"][a][f] for r in reps
                                   if r["arms"][a][f] is not None]
@@ -444,7 +444,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                                                          "mR": r["arms"][a]["mR"],
                                                          "pareto": r["arms"][a]["pareto_dmR_points"],
                                                          "floor": r["arms"][a]["meets_R_floor"]}
-                                                     for a in ("prior_only", "full", "shuffled_model")}}
+                                                     for a in ("prior_only", "full", "shuffled_model", "pair_matched_null")}}
                                            for r in reps]}
                 _log(f"\n{'-'*104}\n  NESTED (beta chosen inside training folds)  tau={tau} k={k}"
                      f"\n  prior R@50 {bl['prior']['R']*100:.3f} mR {bl['prior']['mR']*100:.3f}"
@@ -471,7 +471,7 @@ def main(argv: Optional[List[str]] = None) -> int:
                     _log(f"\n    RESAMPLED over {args.repeats} independent fold partitions:")
                     _log(f"      {'arm':>16} {'R@50 mean+-sd':>20} {'pareto mean+-sd':>20}"
                          f" {'pareto min':>11} {'floor held':>11}")
-                    for a in ("prior_only", "full", "shuffled_model"):
+                    for a in ("prior_only", "full", "shuffled_model", "pair_matched_null"):
                         r_, p_ = st[f"{a}.R"], st[f"{a}.pareto_dmR_points"]
                         held = sum(1 for x in nr["resampled"]["per_salt"]
                                    if x["arms"][a]["floor"])
