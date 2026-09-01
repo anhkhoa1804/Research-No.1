@@ -205,3 +205,53 @@ def test_margin_is_tie_order_invariant(O):
     v = O.pr.topk(2, dim=-1).values
     assert torch.allclose(O.margin, v[:, 0] - v[:, 1])
     assert bool((O.margin >= 0).all())
+
+
+# ------------------- 7. the pre-registered gate is non-falsifiable, by design
+# These tests do not assert that the gate is CORRECT. They assert the structural
+# property that makes its SUCCESS verdict uninformative, so that nobody -- me
+# included -- can later read "SUCCESS in 27/27 cells" as evidence of headroom.
+def test_oracle_arm_can_never_lose_recall_so_its_floor_cannot_bind(O, B):
+    """The oracle substitutes GT only where GT is present, so R is monotone.
+
+    Consequence: `oracle_R >= prior_R` identically, hence the pre-registered
+    R@50 floor is satisfied in every cell whenever the PRIOR clears it, and the
+    floor cannot reject a degenerate operating point on that arm. The floor has
+    to bind on `model_rerank`, which is the only arm here that can lose recall.
+    """
+    prior_R = O.arm("prior", B.n_classes, float("inf"))["R"]
+    for k in (2, 3, 5):
+        for b in (float("inf"), 5.08, 0.93):
+            assert O.arm("oracle", k, b)["R"] >= prior_R - 1e-12
+
+
+def test_model_rerank_arm_can_lose_recall_so_its_floor_does_bind(O, B):
+    """The realizable arm is the one a floor is meaningful on: it really does
+    fall below the 0.665 floor at k=5 unrestricted, by a wide margin."""
+    prior_R = O.arm("prior", B.n_classes, float("inf"))["R"]
+    wide = O.arm("model_rerank", 5, float("inf"))["R"]
+    assert wide < prior_R, "raw model score reranking must be measured, not assumed"
+    assert wide < 0.665, "this cell is exactly what the corrected floor rejects"
+
+
+def test_oracle_gap_tracks_coverage_not_scorer_quality(O):
+    """`gap_oracle_minus_achieved` grows with k purely because coverage does.
+
+    This is the mechanism behind the non-falsifiability: the oracle arm reports
+    P(GT in prior top-k), a property of the PRIOR, and carries no information
+    about any scorer that would have to choose among those candidates.
+    """
+    prev_cov = prev_gap = -1.0
+    for k in (2, 3, 5):
+        cov = O.coverage(k, float("inf"))["coverage_all_rows"]
+        gap = O.arm("oracle", k, float("inf"))["R"]
+        assert cov > prev_cov and gap > prev_gap
+        prev_cov, prev_gap = cov, gap
+
+
+def test_head_body_tail_partitions_every_present_class(O, B):
+    m = O.arm("prior", B.n_classes, float("inf"))
+    per = m["_per_class_recall"]
+    buckets = [B.bucket_of[c] for c in per]
+    assert set(buckets) <= {"head", "body", "tail"}
+    assert len(per) == m["n_classes"]

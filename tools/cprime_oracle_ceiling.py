@@ -113,9 +113,30 @@ class Oracle:
         num = torch.zeros(K).index_add_(0, self.y, hit)
         den = torch.zeros(K).index_add_(0, self.y, torch.ones_like(hit))
         pres = den > 0
-        return {"R": float(hit.mean()),
-                "mR": float((num[pres] / den[pres]).mean()),
-                "n_classes": int(pres.sum())}
+        rec = num[pres] / den[pres]
+        out = {"R": float(hit.mean()),
+               "mR": float(rec.mean()),
+               "n_classes": int(pres.sum())}
+        # head/body/tail on the SAME bucket definition Bench uses, so these are
+        # comparable with every other C' table. Buckets come from GT counts and
+        # GT is fixed across arms, so cross-arm comparison is sound.
+        cls_ids = pres.nonzero().squeeze(1).tolist()
+        per = {c: float(num[c] / den[c]) for c in cls_ids}
+        for b in ("head", "body", "tail"):
+            ks = [c for c in cls_ids if self.B.bucket_of[c] == b]
+            out[f"{b}_mR"] = float(sum(per[c] for c in ks) / len(ks)) if ks else 0.0
+        out["_per_class_recall"] = per
+        return out
+
+    def coverage(self, k: int, budget: float) -> Dict[str, float]:
+        """P(GT in the prior top-k). This is what the oracle arm actually
+        measures, and it is NOT evidence about any realizable scorer."""
+        cand = self.candidates(k)
+        gt_in = cand.gather(1, self.gt_col.unsqueeze(1)).squeeze(1)
+        el = self.eligible(budget)
+        return {"coverage_all_rows": float(gt_in.float().mean()),
+                "coverage_eligible_rows": float(gt_in[el].float().mean()) if int(el.sum()) else 0.0,
+                "n_eligible": int(el.sum())}
 
     def eligible(self, budget: float) -> torch.Tensor:
         return self.margin < budget
@@ -234,8 +255,9 @@ def main(argv: Optional[List[str]] = None) -> int:
         _log(f"\n{'-'*92}\n  tau={tau}  prior R@50 {prior_m['R']*100:.3f} mR {prior_m['mR']*100:.3f}"
              f"   |  ACHIEVED (real model, alpha=3.75) R@50 {achieved['R']*100:.3f}"
              f" mR {achieved['mR']*100:.3f}  dR {achieved_dR:+.3f}\n{'-'*92}")
-        _log(f"  {'k':>3} {'budget':>14} {'elig%':>7} | {'rerank R':>9} {'rerank dR':>10} |"
-             f" {'oracle R':>9} {'oracle mR':>10} {'oracle dR':>10} {'gap vs ach':>11} {'floor':>6} {'verdict':>12}")
+        _log(f"  {'k':>3} {'budget':>14} {'elig%':>7} {'cover%':>7} | {'rerank R':>9} {'rerank dR':>10}"
+             f" {'r.floor':>8} | {'oracle R':>9} {'oracle mR':>10} {'oracle dR':>10} {'gap vs ach':>11}"
+             f" | {'PREREG':>7} {'REALIZABLE':>11}")
         rows = []
         for k in KS:
             for bname, b in BUDGETS:
@@ -248,30 +270,67 @@ def main(argv: Optional[List[str]] = None) -> int:
                 verdict = ("SUCCESS" if (gap > SUCCESS_PTS and floor_ok) else
                            "INCONCLUSIVE" if (gap >= INCONCLUSIVE_PTS and floor_ok) else
                            "EXHAUSTED")
+                cov = O.coverage(k, b)
+                # CORRECTED GATE (documented in docs/ORACLE_CEILING_RESULT.md).
+                # The pre-registered gate above cannot fail: the oracle never
+                # makes a wrong decision, so oracle_R >= prior_R >= floor holds
+                # by construction and `gap` is mechanically large -- it measures
+                # candidate COVERAGE, not tie-breaker headroom. The floor was
+                # meant to stop a degenerate operating point masquerading as
+                # headroom, so it must bind on the arm that can actually BE
+                # degenerate: model_rerank, the only realizable arm here.
+                rerank_floor_ok = rr["R"] >= R_FLOOR
+                realizable_verdict = ("SUCCESS" if (rerank_floor_ok and r_dR > achieved_dR + SUCCESS_PTS)
+                                      else "INCONCLUSIVE" if (rerank_floor_ok and r_dR > achieved_dR + INCONCLUSIVE_PTS)
+                                      else "EXHAUSTED")
                 row = {"k": k, "budget_name": bname, "budget": b,
                        "frac_eligible": orc["frac_eligible"],
                        "prior_R": prior_m["R"], "prior_mR": prior_m["mR"],
+                       "prior_head_mR": prior_m["head_mR"], "prior_body_mR": prior_m["body_mR"],
+                       "prior_tail_mR": prior_m["tail_mR"],
                        "achieved_R": achieved["R"], "achieved_mR": achieved["mR"],
                        "achieved_dR_points": achieved_dR,
                        "model_rerank_R": rr["R"], "model_rerank_mR": rr["mR"],
                        "model_rerank_dR_points": r_dR,
+                       "model_rerank_head_mR": rr["head_mR"], "model_rerank_body_mR": rr["body_mR"],
+                       "model_rerank_tail_mR": rr["tail_mR"],
                        "oracle_R": orc["R"], "oracle_mR": orc["mR"],
                        "oracle_dR_points": o_dR,
+                       "oracle_head_mR": orc["head_mR"], "oracle_body_mR": orc["body_mR"],
+                       "oracle_tail_mR": orc["tail_mR"],
                        "gap_oracle_minus_achieved_points": gap,
                        "gap_oracle_minus_rerank_points": o_dR - r_dR,
                        "gap_rerank_minus_achieved_points": r_dR - achieved_dR,
-                       "meets_R_floor": bool(floor_ok), "verdict": verdict}
+                       "candidate_coverage_all_rows": cov["coverage_all_rows"],
+                       "candidate_coverage_eligible_rows": cov["coverage_eligible_rows"],
+                       "meets_R_floor": bool(floor_ok),
+                       "model_rerank_meets_R_floor": bool(rerank_floor_ok),
+                       "verdict": verdict,
+                       "realizable_verdict": realizable_verdict}
+                # per-predicate oracle contribution: which classes the ceiling
+                # is actually built out of, in recall points.
+                pr_per, or_per = prior_m["_per_class_recall"], orc["_per_class_recall"]
+                contrib = sorted(((B.classes[c], (or_per[c] - pr_per[c]) * 100.0,
+                                   B.bucket_of[c]) for c in or_per),
+                                 key=lambda t: -t[1])
+                row["per_predicate_oracle_gain_points"] = [
+                    {"predicate": n, "d_recall_points": d, "bucket": bk}
+                    for n, d, bk in contrib[:10]]
                 rows.append(row)
-                _log(f"  {k:>3} {bname:>14} {orc['frac_eligible']*100:>6.1f}% |"
-                     f" {rr['R']*100:>9.3f} {r_dR:>+10.3f} |"
+                _log(f"  {k:>3} {bname:>14} {orc['frac_eligible']*100:>6.1f}%"
+                     f" {cov['coverage_eligible_rows']*100:>6.1f}% |"
+                     f" {rr['R']*100:>9.3f} {r_dR:>+10.3f}"
+                     f" {'ok' if rerank_floor_ok else 'FAIL':>8} |"
                      f" {orc['R']*100:>9.3f} {orc['mR']*100:>10.3f} {o_dR:>+10.3f}"
-                     f" {gap:>+11.3f} {'ok' if floor_ok else 'FAIL':>6} {verdict:>12}")
+                     f" {gap:>+11.3f} | {verdict:>7} {realizable_verdict:>11}")
         rd = region_decomposition(B, tau)
         _log(f"\n  model's actual net flips = {rd['net_flips_total']:+d}; share inside each region:")
         for r in rd["regions"]:
             if r["frac_of_total_net"] is not None:
                 _log(f"    k={r['k']:<3} budget={r['budget']:<14} net_inside={r['net_flips_inside']:+5d} "
                      f"({r['frac_of_total_net']*100:5.1f}% of total)")
+        for _m in (prior_m, achieved):
+            _m.pop("_per_class_recall", None)
         res["by_tau"][str(tau)] = {"prior": prior_m, "achieved": achieved,
                                    "achieved_dR_points": achieved_dR,
                                    "ladder": rows, "region_decomposition": rd}
