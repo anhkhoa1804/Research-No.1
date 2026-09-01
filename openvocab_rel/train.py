@@ -669,6 +669,7 @@ def build_argparser() -> argparse.ArgumentParser:
     p.add_argument("--eval_freq_bias_tau", type=float, default=getattr(TrainConfig, "eval_freq_bias_tau", 0.0))
     p.add_argument("--eval_sgg_dump_pair_logits_path", type=str, default=getattr(TrainConfig, "eval_sgg_dump_pair_logits_path", ""))
     p.add_argument("--eval_sgg_dump_rel_feat", type=_str2bool, default=getattr(TrainConfig, "eval_sgg_dump_rel_feat", False))
+    p.add_argument("--eval_split_name", type=str, default=getattr(TrainConfig, "eval_split_name", "validation"))
     p.add_argument("--predicate_background_weight", type=float, default=TrainConfig.predicate_background_weight)
     p.add_argument("--predicate_ce_loss", type=str, default=TrainConfig.predicate_ce_loss)
     p.add_argument("--predicate_ce_gamma", type=float, default=TrainConfig.predicate_ce_gamma)
@@ -1468,7 +1469,8 @@ def main(argv: Optional[List[str]] = None) -> None:
                 f"predicate_sampler={bool(getattr(joint_loader, 'predicate_sampler_active', False))}"
             )
         
-        eval_split = "train" if bool(getattr(cfg, "eval_on_train_split", False)) else "validation"
+        eval_split = ("train" if bool(getattr(cfg, "eval_on_train_split", False))
+                      else str(getattr(cfg, "eval_split_name", "validation") or "validation"))
         vg150_val_cfg = VG150LoaderConfig(
             vg150_root=str(cfg.vg150_root),
             source=str(getattr(cfg, "vg150_source", "auto")),

@@ -300,6 +300,10 @@ class TrainConfig:
     # Default OFF: when off the dump carries no "rel_feat" key and is
     # schema-comparable with runs/p24.
     eval_sgg_dump_rel_feat: bool = False
+    # Which split to evaluate. Default "validation" preserves the
+    # historical behaviour exactly; "test" enables held-out replication.
+    # eval_on_train_split still takes precedence when set.
+    eval_split_name: str = "validation"
     predicate_background_weight: float = 0.1
     predicate_ce_loss: str = "focal"  # ce, weighted_ce, focal
     predicate_ce_gamma: float = 1.5
