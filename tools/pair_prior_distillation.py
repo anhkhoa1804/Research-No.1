@@ -60,6 +60,7 @@ from __future__ import annotations
 import argparse
 import importlib.util
 import json
+import math
 import statistics
 import sys
 from collections import Counter
@@ -159,6 +160,65 @@ class Distill:
         self.cand_mask.scatter_(1, P.cand, True)
         self.prior_top1_col = P.prior_top1_col
         self.margin, self.entropy = P.margin, B.prior_entropy
+
+    # --------------------------------------------------- estimable subset
+    def estimable_mask(self) -> torch.Tensor:
+        """Rows whose (subject, object) group HAS a training row out of fold.
+
+        `_fold_pair_mean` falls back to the training GLOBAL mean for a group
+        with no training row, so those rows are scored by a "pair-conditioned"
+        arm that carries no pair information at all. A singleton group is always
+        in that state. `runs/p27` was scored on them anyway and was withdrawn
+        for it (docs/PAIR_PRIOR_DISTILLATION_RESULT.md).
+
+        This mask is the analysis population of the corrected experiment. It
+        reads `pair_id` and the fold assignment only -- never `y`, never the
+        model term -- so conditioning on it is not label leakage. It is NOT a
+        random subsample: it over-represents frequent pairs by construction, so
+        every baseline and the tau frontier must be recomputed under it.
+        """
+        G = int(self.pair_id.max()) + 1
+        total = torch.zeros(G).index_add_(
+            0, self.pair_id, torch.ones(self.n))
+        est = torch.zeros(self.n, dtype=torch.bool)
+        for f in range(N_FOLDS):
+            te = self.fold == f
+            in_fold = torch.zeros(G).index_add_(
+                0, self.pair_id[te], torch.ones(int(te.sum())))
+            has_train = (total - in_fold) > 0            # >=1 row outside fold f
+            est |= te & has_train[self.pair_id]
+        return est
+
+    def fallback_frac(self, train: torch.Tensor,
+                      rows: Optional[torch.Tensor] = None) -> float:
+        """Fraction of `rows` whose group has NO training row in `train`."""
+        G = int(self.pair_id.max()) + 1
+        cnt = torch.zeros(G).index_add_(
+            0, self.pair_id[train], torch.ones(int(train.sum())))
+        fb = cnt[self.pair_id] == 0
+        sel = fb if rows is None else fb[rows]
+        return float(sel.float().mean()) if sel.numel() else 0.0
+
+    def residual_cosine(self, rows: torch.Tensor) -> float:
+        """Class-centred cosine of G_residual against the REAL model term.
+
+        Gate G2. On fallback rows the group mean IS the global mean, so the
+        "residual" is a recentred copy of the whole term and this reads ~0.94
+        (runs/p30). On genuinely estimable rows p30 measured ~0.46.
+        """
+        out = []
+        for f in range(N_FOLDS):
+            te = (self.fold == f) & rows
+            if not bool(te.any()):
+                continue
+            gm = self._fold_pair_mean(self.md, ~(self.fold == f))
+            res = (self.md - gm)[te]
+            real = self.md[te]
+            res = res - res.mean(-1, keepdim=True)
+            real = real - real.mean(-1, keepdim=True)
+            cs = torch.nn.functional.cosine_similarity(res, real, dim=-1)
+            out.append(cs)
+        return float(torch.cat(out).mean()) if out else float("nan")
 
     def _lookup(self, table: Dict[str, Any], keys: List[str]) -> torch.Tensor:
         out = torch.full((len(keys), self.C), self.default)
@@ -260,30 +320,38 @@ class Distill:
         return w.detach()
 
     # ------------------------------------------------------------- metrics
-    def metrics(self, pred_col: torch.Tensor, full_score: torch.Tensor) -> Dict[str, Any]:
+    def metrics(self, pred_col: torch.Tensor, full_score: torch.Tensor,
+                mask: Optional[torch.Tensor] = None) -> Dict[str, Any]:
+        if mask is not None:
+            pred_col, full_score = pred_col[mask], full_score[mask]
+        y = self.y if mask is None else self.y[mask]
+        gt_col = self.gt_col if mask is None else self.gt_col[mask]
+        prior_top1 = (self.prior_top1_col if mask is None
+                      else self.prior_top1_col[mask])
         pred = self.B.col_to_class[pred_col]
-        hit = (pred == self.y).float()
-        num = torch.zeros(self.C).index_add_(0, self.y, hit)
-        den = torch.zeros(self.C).index_add_(0, self.y, torch.ones_like(hit))
+        hit = (pred == y).float()
+        num = torch.zeros(self.C).index_add_(0, y, hit)
+        den = torch.zeros(self.C).index_add_(0, y, torch.ones_like(hit))
         pres = den > 0
         ids = pres.nonzero().squeeze(1).tolist()
         per = {c: float(num[c] / den[c]) for c in ids}
-        gt_s = full_score.gather(1, self.gt_col.unsqueeze(1))
+        gt_s = full_score.gather(1, gt_col.unsqueeze(1))
         rank = (full_score > gt_s).sum(-1) + 1
         out = {"R": float(hit.mean()), "mR": float((num[pres] / den[pres]).mean()),
-               "n_classes": int(pres.sum()),
+               "n_classes": int(pres.sum()), "n_rows": int(y.numel()),
                "top1": float(hit.mean()),
                "mean_gt_rank": float(rank.float().mean()),
                "MRR": float((1.0 / rank.float()).mean()),
                "R_at_5": float((rank <= 5).float().mean()),
-               "frac_argmax_changed": float((pred_col != self.prior_top1_col).float().mean())}
+               "frac_argmax_changed": float((pred_col != prior_top1).float().mean())}
         for b in ("head", "body", "tail"):
             ks = [c for c in ids if self.B.bucket_of[c] == b]
             out[f"{b}_mR"] = float(sum(per[c] for c in ks) / len(ks)) if ks else 0.0
         return out
 
     def run_arm(self, arm: str, betas: List[float], epochs: int,
-                l2: float, floor: float) -> Dict[str, Any]:
+                l2: float, floor: float,
+                mask: Optional[torch.Tensor] = None) -> Dict[str, Any]:
         pred_col = self.prior_top1_col.clone()
         full_score = torch.zeros(self.n, self.C)
         picks = []
@@ -298,7 +366,14 @@ class Distill:
                 sc = X_in[inner_sel] @ w
                 sc = sc.masked_fill(~self.cand_mask[inner_sel], -1e30)
                 pc = sc.argmax(-1)
-                m = self.P._metrics_on(pc, self.y[inner_sel])
+                # beta is selected on the SAME population the arm is scored on,
+                # otherwise the inner criterion optimises rows the outer read
+                # never sees.
+                keep = (torch.ones(int(inner_sel.sum()), dtype=torch.bool)
+                        if mask is None else mask[inner_sel])
+                m = (self.P._metrics_on(pc[keep], self.y[inner_sel][keep])
+                     if bool(keep.any())
+                     else self.P._metrics_on(pc, self.y[inner_sel]))
                 key = (m["R"] >= floor, m["mR"])
                 if best_key is None or key > best_key:
                     best_key, best_b = key, b
@@ -308,7 +383,7 @@ class Distill:
             sc = X_out[te] @ w
             full_score[te] = sc
             pred_col[te] = sc.masked_fill(~self.cand_mask[te], -1e30).argmax(-1)
-        m = self.metrics(pred_col, full_score)
+        m = self.metrics(pred_col, full_score, mask)
         m["arm"] = arm
         m["betas_chosen"] = picks
         return m
@@ -407,6 +482,17 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--epochs", type=int, default=150)
     ap.add_argument("--l2", type=float, default=1e-4)
     ap.add_argument("--arms", default=",".join(ARMS))
+    ap.add_argument("--estimable-only", action="store_true",
+                    help="restrict every arm to rows whose (s,o) group is "
+                         "estimable out of fold (docs/PAIR_PRIOR_DISTILLATION_"
+                         "PREREGISTRATION.md). Recomputes the baseline, the tau "
+                         "frontier and the R@50 floor on that subset.")
+    ap.add_argument("--floor-delta", type=float, default=0.30,
+                    help="registered floor = prior R@50(subset) - this, in "
+                         "points. 0.30 reproduces R_FLOOR's own construction "
+                         "(3k baseline 66.802 - 0.302 = 66.5).")
+    ap.add_argument("--min-rows", type=int, default=80000,
+                    help="gate G4: minimum estimable rows per partition.")
     args = ap.parse_args(argv)
 
     betas = [float(b) for b in args.betas.split(",")]
@@ -450,22 +536,79 @@ def main(argv: Optional[List[str]] = None) -> int:
                            "pair_support": ps, "within_group": wg,
                            "per_salt": [], "arms": {}}
 
+    res["estimable_only"] = bool(args.estimable_only)
+    if args.estimable_only:
+        _log(f"\n{'-'*116}\n  ESTIMABLE-SUBSET MODE "
+             f"(docs/PAIR_PRIOR_DISTILLATION_PREREGISTRATION.md)\n{'-'*116}")
+        res["gates"] = []
+
     for salt in range(args.repeats):
         D = D0 if salt == 0 else Distill(B, args.prior, args.tau, args.k, salt)
         row: Dict[str, Any] = {"salt": salt, "arms": {}}
+
+        if args.estimable_only:
+            mask = D.estimable_mask()
+            n_est = int(mask.sum())
+            # Baseline, tau frontier and floor are ALL recomputed on the subset.
+            s_base = B.metrics(B.score(args.tau, ALPHA_HIST, None), mask)
+            s_ach = B.metrics(B.score(args.tau, ALPHA_HIST, B.model), mask)
+            s_curve = [{"R": (mm := B.metrics(B.score(tt, ALPHA_HIST, None), mask))["R"],
+                        "mR": mm["mR"]} for tt in CPA.TAUS]
+            floor = s_base["R"] - args.floor_delta / 100.0
+
+            # ---- validity gates, prereg §8 ----
+            fb_out = max(D.fallback_frac(~(D.fold == f), mask & (D.fold == f))
+                         for f in range(N_FOLDS))
+            fb_in = max(D.fallback_frac(
+                (~(D.fold == f)) & (~(D.fold == ((f + 1) % N_FOLDS))),
+                mask & (D.fold == f)) for f in range(N_FOLDS))
+            cos = D.residual_cosine(mask)
+            g = {"salt": salt,
+                 "G1_outer_fallback_frac": fb_out, "G1_pass": fb_out == 0.0,
+                 "G2_residual_cosine": cos, "G2_pass": bool(cos < 0.70),
+                 "G4_rows": n_est, "G4_pass": bool(n_est >= args.min_rows),
+                 "inner_fallback_frac_reported_not_gated": fb_in}
+            res["gates"].append(g)
+            row.update({"n_rows": n_est,
+                        "subset_prior": s_base, "subset_achieved": s_ach,
+                        "subset_floor": floor,
+                        "subset_achieved_pareto":
+                            CPA.pareto_gap(s_curve, s_ach["R"], s_ach["mR"])})
+            _log(f"\n  [salt {salt}] estimable rows {n_est:,} "
+                 f"({n_est/D.n*100:.1f}% of {D.n:,})  "
+                 f"subset prior R@50 {s_base['R']*100:.3f} mR {s_base['mR']*100:.3f}  "
+                 f"floor {floor*100:.3f}")
+            _log(f"    GATES  G1 outer fallback {fb_out*100:.3f}% "
+                 f"{'PASS' if g['G1_pass'] else 'FAIL'}   "
+                 f"G2 residual cosine {cos:.3f} {'PASS' if g['G2_pass'] else 'FAIL'}   "
+                 f"G4 rows {'PASS' if g['G4_pass'] else 'FAIL'}   "
+                 f"(inner fallback {fb_in*100:.2f}%, reported not gated)")
+        else:
+            mask, floor, s_base, s_curve = None, R_FLOOR, base, curve
+
         for arm in arms:
-            m = D.run_arm(arm, betas, args.epochs, args.l2, R_FLOOR)
-            m["pareto"] = CPA.pareto_gap(curve, m["R"], m["mR"])
-            m["dR_points"] = (m["R"] - base["R"]) * 100.0
-            m["dmR_points"] = (m["mR"] - base["mR"]) * 100.0
-            m["meets_R_floor"] = bool(m["R"] >= R_FLOOR)
+            m = D.run_arm(arm, betas, args.epochs, args.l2, floor, mask)
+            m["pareto"] = CPA.pareto_gap(s_curve, m["R"], m["mR"])
+            m["dR_points"] = (m["R"] - s_base["R"]) * 100.0
+            m["dmR_points"] = (m["mR"] - s_base["mR"]) * 100.0
+            m["meets_R_floor"] = bool(m["R"] >= floor)
             row["arms"][arm] = m
         res["per_salt"].append(row)
         _log(f"\n  [salt {salt}] " + "  ".join(
             f"{a}:{row['arms'][a]['pareto']:+.2f}" for a in arms))
 
+    if args.estimable_only:
+        ref = {"R": statistics.mean(r["subset_prior"]["R"] for r in res["per_salt"]),
+               "mR": statistics.mean(r["subset_prior"]["mR"] for r in res["per_salt"])}
+        res["subset_baseline_mean"] = ref
+        res["subset_rows_mean"] = statistics.mean(r["n_rows"] for r in res["per_salt"])
+        scope = (f"ESTIMABLE SUBSET, {res['subset_rows_mean']:,.0f} rows mean; "
+                 f"floor = subset prior - {args.floor_delta:.2f} pts")
+    else:
+        ref, scope = base, f"FULL population; floor {R_FLOOR*100:.1f}"
     _log(f"\n{'-'*116}\n  ARMS, mean over {args.repeats} fold partitions "
-         f"(prior-only baseline R@50 {base['R']*100:.3f} mR {base['mR']*100:.3f})\n{'-'*116}")
+         f"(prior-only baseline R@50 {ref['R']*100:.3f} mR {ref['mR']*100:.3f})"
+         f"\n  scope: {scope}\n{'-'*116}")
     _log(f"  {'arm':>18} {'R@50':>8} {'mR@50':>8} {'pareto':>8} {'floor':>7} {'head':>6} "
          f"{'body':>6} {'tail':>6} {'meanRank':>9} {'MRR':>6} {'R@5':>6} {'chg%':>6}")
     for arm in arms:
@@ -475,8 +618,8 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "mean_gt_rank", "MRR", "R_at_5", "frac_argmax_changed")}
         agg["pareto_sd"] = statistics.stdev([v["pareto"] for v in vals]) if len(vals) > 1 else 0.0
         agg["floor_held"] = sum(1 for v in vals if v["meets_R_floor"])
-        agg["dR_points"] = (agg["R"] - base["R"]) * 100.0
-        agg["dmR_points"] = (agg["mR"] - base["mR"]) * 100.0
+        agg["dR_points"] = (agg["R"] - ref["R"]) * 100.0
+        agg["dmR_points"] = (agg["mR"] - ref["mR"]) * 100.0
         res["arms"][arm] = agg
         _log(f"  {arm:>18} {agg['R']*100:>8.3f} {agg['mR']*100:>8.3f} {agg['pareto']:>+8.3f}"
              f" {agg['floor_held']:>4}/{args.repeats} {agg['head_mR']*100:>6.2f}"
@@ -502,6 +645,64 @@ def main(argv: Optional[List[str]] = None) -> int:
         if g is not None:
             res.setdefault("contrasts", {})[f"{a}_minus_{b}"] = g
             _log(f"    {a:>16} - {b:<18} {g:>+8.3f}   {why}")
+
+    if args.estimable_only:
+        VISION_FREE = ["A_global", "B_subject", "C_object",
+                       "D_pair", "E_backoff", "F_pair_foldfit"]
+        gates_pass = all(g["G1_pass"] and g["G2_pass"] and g["G4_pass"]
+                         for g in res["gates"])
+        # G5: the identity-destroying null must sit at or below the frontier.
+        g5 = ("null_shuffled" not in res["arms"]
+              or res["arms"]["null_shuffled"]["pareto"] <= 0.0)
+        for g in res["gates"]:
+            g["G5_pass"] = bool(g5)
+        P_G = res["arms"].get("G_model", {}).get("pareto")
+        elig, inelig = [], []
+        for a in VISION_FREE:
+            if a not in res["arms"]:
+                continue
+            # prereg §7: floor held on ">= 4 of 5" partitions. Expressed as a
+            # fraction so a smoke run with --repeats 1 does not silently make
+            # every arm ineligible; at the registered --repeats 5 this is 4.
+            need = max(1, math.ceil(0.8 * args.repeats))
+            (elig if res["arms"][a]["floor_held"] >= need else inelig).append(
+                (res["arms"][a]["pareto"], a))
+        best_e = max(elig) if elig else None
+        best_any = max(elig + inelig) if (elig or inelig) else None
+        if P_G is None or best_any is None:
+            verdict, P_V, who = "VOID (missing arms)", None, None
+        elif best_e is None:
+            verdict, (P_V, who) = "NOT EXPLAINED", best_any
+        else:
+            P_V, who = best_e
+            verdict = ("EXPLAINED" if P_V >= P_G - 0.50
+                       else "MOSTLY EXPLAINED" if P_V >= P_G - 1.50
+                       else "NOT EXPLAINED")
+        if not (gates_pass and g5):
+            verdict = "VOID (validity gate failed)"
+        res["verdict"] = {
+            "floor_partitions_required": max(1, math.ceil(0.8 * args.repeats)),
+            "verdict": verdict, "P_G_model": P_G, "P_V_best_vision_free": P_V,
+            "best_vision_free_arm": who,
+            "best_arm_floor_eligible": bool(best_e is not None),
+            "gap_P_G_minus_P_V": (None if (P_G is None or P_V is None) else P_G - P_V),
+            "gates_all_pass": bool(gates_pass and g5),
+            "thresholds": {"EXPLAINED": "P_V >= P_G - 0.50",
+                           "MOSTLY": "P_V in [P_G - 1.50, P_G - 0.50)",
+                           "NOT_EXPLAINED": "P_V < P_G - 1.50"}}
+        _log(f"\n{'-'*116}\n  PRE-REGISTERED VERDICT\n{'-'*116}")
+        _log(f"    P_G  (G_model)                 {P_G:+.3f}" if P_G is not None else "    P_G  n/a")
+        _log(f"    P_V  (best floor-eligible      {P_V:+.3f}   [{who}]"
+             if P_V is not None else "    P_V  n/a")
+        _log(f"          vision-free pair arm)")
+        if P_G is not None and P_V is not None:
+            _log(f"    P_G - P_V                      {P_G - P_V:+.3f}")
+        _log(f"    gates all pass                 {gates_pass and g5}")
+        _log(f"\n    VERDICT: {verdict}")
+        _log(f"\n    Scope: frequent-pair rows only. The ~{100 - res['subset_rows_mean']/D0.n*100:.0f}% "
+             f"singleton-pair rows are unaddressable by ANY pair-conditioned\n"
+             f"    estimator and are excluded here; that is a property of VG150's "
+             f"pair distribution, not an estimator detail.")
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(res, indent=2), encoding="utf-8")
