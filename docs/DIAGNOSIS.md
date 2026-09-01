@@ -101,8 +101,25 @@ VG150 training split and applied to validation:
 Paired: text **−0.0419** [−0.0489, −0.0354]; classifier **−0.0232**
 [−0.0292, −0.0163]. *(`p38`, `p39`)*
 
-**PURE's image-conditioned relational contribution is worse than what two
+**PURE's image-conditioned relational *discrimination* is worse than what two
 bounding boxes give you for free.**
+
+**Corrected by `runs/p41`, and the correction matters.** On the field's own
+metric (R@50/mR@50 under the evaluator's composition) the model *beats*
+geometry at tau = 0 and 0.05 — its actual operating region — by +1.95 and +1.72
+Pareto points. Discrimination is not calibration: geometry separates tail
+predicates better and still lowers tail mR, because its scores are not scaled to
+compete with the prior for the argmax. The defensible claim is therefore
+narrower than "geometry beats the model":
+
+> The checkpoint's advantage on the field's metric does not come from relational
+> discrimination — rectangles discriminate better, especially in the tail. What
+> it supplies that geometry does not is a term already calibrated against the
+> prior.
+
+At tau >= 0.1 the best arm measured anywhere in this cycle is **model +
+geometry** (+4.051 at tau=0.2), so the two carry partially complementary
+information. See `docs/GEOMETRY_SGG_BASELINE_RESULT.md`.
 
 ---
 
@@ -115,13 +132,16 @@ bounding boxes give you for free.**
 | frequency prior P(p \| s,o) | decides most rows; 82.6% of model-term variance is between-group | no |
 | calibration (tau) | moves mR 22.3 → 26.4 | no |
 | spatial layout | ≈0.596 WPRD available from boxes alone | yes |
-| **what the model adds over layout** | **negative** (−0.023 to −0.042) | — |
+| **what the model adds over layout, on WPRD** | **negative** (−0.023 to −0.042) | — |
+| what the model adds over layout, on R@50/mR@50 at tau<=0.05 | **positive** (+1.7 to +1.9 Pareto) | — |
 | appearance / semantic relational evidence | **no evidence of any** | — |
 
 The 79.9M-parameter visual pathway is real, runs on real images, and produces a
 feature both heads read. What it contributes, after the prior is removed, is a
-weak layout-like signal that a 20-parameter-per-class linear model on rectangles
-exceeds.
+weak layout-like signal whose *discriminative* quality a 20-parameter-per-class
+linear model on rectangles exceeds. Its value at the operating point comes from
+being *calibrated against the prior*, not from discriminating relations
+(`runs/p41`).
 
 ## Corollary: the checkpoint runs the worse of its two readouts
 
