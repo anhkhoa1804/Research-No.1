@@ -76,3 +76,28 @@ and the Paper-1 table, and it is the reason no novelty claim has been made.
 The p49 rank-inversion result — `Spearman(mR@50, WPRD) = −0.650` — is the one
 that most needs this, because its interest is entirely in whether it generalises
 beyond a family of scoring functions built from a single cache.
+
+---
+
+# GPU contention log — 2026-09-01 20:2x UTC
+
+Checked before launching the pre-registered test-split pass, as the resource
+policy requires:
+
+```
+pid 26415  /home/leanhkhoa150204/.venvs/vlm-screen/bin/python
+           research/experiments/screen_vlm.py --device cuda --role page region
+           15,242 MiB of 23,034 MiB   97% utilisation
+```
+
+Different venv (`vlm-screen`), different script, different session scratchpad —
+**this is the other project.** It is a substantial process by any reading: 66% of
+VRAM and 97% utilisation.
+
+**Action: did not launch.** `runs/p54_test_relfeat_cache` is pre-registered
+(`docs/TEST_SPLIT_REPLICATION_PREREGISTRATION.md`) and stays unlaunched until the
+L4 is free. ~7.8 GB of VRAM was technically available and `p36` only needed
+~4.75 GB, so the job would have *fit* — but at 97% utilisation both jobs would
+have roughly halved in throughput, which is competing, not sharing.
+
+All work continued on CPU.

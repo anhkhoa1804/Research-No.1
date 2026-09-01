@@ -255,14 +255,24 @@ def main(argv: Optional[List[str]] = None) -> int:
     _log(f"\n  V3 R6_shuffled={r6:.4f}  R7_prior={r7:.4f}  {'PASS' if v3 else 'FAIL'}")
 
     # ---- collapse measure: how much of rel_feat is (s,o) identity? ----
-    subj = sorted(set(Gs.subj)); obj = sorted(set(Gs.obj))
-    si = {v: i for i, v in enumerate(subj)}
-    oi = {v: i for i, v in enumerate(obj)}
-    OH = torch.zeros(RFs.shape[0], len(subj) + len(obj))
-    OH[torch.arange(RFs.shape[0]), torch.tensor([si[v] for v in Gs.subj])] = 1
-    OH[torch.arange(RFs.shape[0]),
-       len(subj) + torch.tensor([oi[v] for v in Gs.obj])] = 1
-    OH = torch.cat([OH, torch.ones(OH.shape[0], 1)], 1)
+    # The one-hot is built over the STANDARD VG150 150-object vocabulary plus a
+    # single "other" bucket. Building it over the raw labels instead produces a
+    # 132,556 x 14,503 matrix (~7.7 GB) because this dataset retains 16,929 raw
+    # Visual Genome object names -- that is what OOM-killed the first attempt.
+    # See docs/DATASET_IDENTITY_OBJECT_VOCAB.md.
+    vj = json.loads((Path(args.train_jsonl).parent / "vocabulary" /
+                     "objects.json").read_text(encoding="utf-8"))
+    cats = sorted(set(str(x).strip().lower() for x in vj["idx_to_label"].values()))
+    ci = {v: i for i, v in enumerate(cats)}
+    K = len(cats) + 1                       # + "other"
+    n_rows = RFs.shape[0]
+    OH = torch.zeros(n_rows, 2 * K)
+    ar = torch.arange(n_rows)
+    OH[ar, torch.tensor([ci.get(v, len(cats)) for v in Gs.subj])] = 1
+    OH[ar, K + torch.tensor([ci.get(v, len(cats)) for v in Gs.obj])] = 1
+    OH = torch.cat([OH, torch.ones(n_rows, 1)], 1)
+    _log(f"  collapse one-hot width {OH.shape[1]} "
+         f"(150 categories + other, per role)")
     r2s = []
     for f in range(N_FOLDS):
         te = fold == f
