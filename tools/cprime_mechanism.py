@@ -113,6 +113,20 @@ class Mech(CPA.Bench):
         """Score matrix restricted to GT rows: (n_gt, n_classes)."""
         return s[self.gt_row]
 
+    def canonical_topk(self, rows: torch.Tensor, k: int) -> torch.Tensor:
+        """Top-k columns under a TOTAL order: score descending, column index
+        ascending. Returns (n, k) indices, candidate 0 == argmax.
+
+        torch.topk leaves ties at the k-th slot to an unspecified order, and two
+        tools that both looked correct disagreed on 4 GT rows at k=2 and 2 rows
+        at k=3 because of it. A stable argsort on the negated score breaks every
+        tie by ascending index, which is also the convention torch.argmax uses --
+        so candidate 0 is the evaluator's top-1 for free, on the 522 rows that
+        tie for the maximum as well as everywhere else.
+        """
+        order = torch.argsort(-rows, dim=-1, stable=True)
+        return order[:, : min(k, rows.shape[1])]
+
     def gt_col_of(self) -> torch.Tensor:
         """Column index of the GT class (raw50: col_to_class is a bijection)."""
         inv = torch.zeros(self.n_classes, dtype=torch.long)

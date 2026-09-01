@@ -144,7 +144,7 @@ class Oracle:
     def candidates(self, k: int) -> torch.Tensor:
         """Boolean mask of the prior's top-k columns, per row."""
         m = torch.zeros_like(self.pr, dtype=torch.bool)
-        m.scatter_(1, self.pr.topk(min(k, self.pr.shape[1]), dim=-1).indices, True)
+        m.scatter_(1, self.B.canonical_topk(self.pr, k), True)
         return m
 
     def arm(self, kind: str, k: int, budget: float) -> Dict[str, Any]:
