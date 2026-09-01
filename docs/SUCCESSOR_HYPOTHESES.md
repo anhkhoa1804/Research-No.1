@@ -46,10 +46,18 @@ The measured facts every hypothesis must respect:
   *without any claim about architecture*.
 - **Failure criterion:** contrastive head ≤ CE head + 0.01 WPRD ⇒ H2 dead.
 - **GPU cost:** ~0.5 h (or CPU-feasible on 768-d frozen features).
-- **Status:** **READY** — becomes the highest-value experiment if H1 fails, and
-  is the one I would run next.
-- **Note:** this is the hypothesis most consistent with the current evidence,
-  because `p44` showed the encoder's within-pair variation has roughly the right
+- **Status:** **REFUTED ON THE BOX CHANNEL** (`runs/p48`). Run exactly as
+  specified above, on geometry features: contrastive **0.6020** vs CE
+  **0.6163**, paired **−0.0143** [−0.0198, −0.0094]. Directly optimising WPRD's
+  own surrogate scored *worse* on it than plain CE. Must be re-run on `rel_feat`
+  before H2 is refuted for PURE, but plain CE now looks near-optimal at
+  *extracting* within-pair signal from a given feature set — which points at H4.
+  Likely mechanism, from the run's own output: only **19%** of train groups have
+  ≥2 distinct predicates, so the contrastive arm trains on a small biased slice
+  while CE uses every row. This may be a **supervision-scarcity** result about
+  VG150 rather than an objective result.
+- **Note (now outdated by `p48`):** this had been the hypothesis most consistent
+  with the evidence, because `p44` showed the encoder's within-pair variation has roughly the right
   *magnitude* and the wrong *direction* — a signature of "never trained toward
   it" rather than "cannot represent it".
 
