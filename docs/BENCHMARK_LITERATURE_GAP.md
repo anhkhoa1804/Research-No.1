@@ -54,6 +54,72 @@ These are **image–text matching** benchmarks over constructed caption negative
 They do not measure a scene-graph model's per-pair predicate decision, and they
 do not control the (subject, object) prior — they control *text* plausibility.
 
+## 1b. Deeper pass — the decisive enumeration (added 2026-09-01)
+
+The directive's question is exact, so the check must be:
+
+> **Has any existing SGG evaluation explicitly conditioned predicate
+> discrimination on the subject-object category pair, so that P(p | s,o) becomes
+> non-informative?**
+
+### Every metric in the field's reference implementation
+
+`Scene-Graph-Benchmark.pytorch/METRICS.md` (Tang et al.) is the de-facto
+standard. Enumerated in full:
+
+| metric | what is pooled | conditions on (s,o) category pair? |
+|---|---|---|
+| `R@K` | all pairs, top predicate | **no** |
+| `ngR@K` | all pairs, all 50 predicates per pair | **no** |
+| `mR@K` | per **predicate** category, then averaged | **no** — stratifies by predicate |
+| `ng-mR@K` | per predicate, no graph constraint | **no** — stratifies by predicate |
+| `zR@K` | triplets unseen in training | **no** |
+| `ng-zR@K` | as above, no graph constraint | **no** |
+| `A@K` | GT subject-object pairs only | **no** |
+| `S2G` | graph↔sentence retrieval | **no** |
+
+`zR@K` is the nearest miss and is worth being precise about: it conditions on the
+**triplet** being unseen in training, which is a *dataset-level* novelty
+condition. It does not make P(p | s,o) non-informative — a zero-shot triplet
+still sits in an (s,o) group whose prior is perfectly informative about the
+*other* rows of that group.
+
+Adding Lorenz et al. (CVPRW 2024): `Pair Recall` pools across all (s,o) pairs;
+`Predicate Rank` conditions on the pair being **correct**, not on its
+**identity**. Neither cancels the prior.
+
+### The closest prior work, and what it actually does
+
+- **SpatialSense (ICCV 2019)** — the closest in spirit, and it must be cited
+  prominently. It reduces prior informativeness by **adversarial crowdsourcing**:
+  annotators are asked to find relations hard to predict from 2D configuration
+  or language. It reports **language-only** and **2D-only** baselines — which are
+  precisely the prior baseline and the geometry baseline this project
+  reconstructed independently. **Those baselines are not novel and must be
+  credited to SpatialSense.** The differences: it builds a *new dataset* and
+  reduces bias *empirically by curation*; it is *binary relation verification*,
+  not predicate ranking; and it does not condition on the (s,o) pair.
+- **Plesse et al. (WACV 2020)** — states the confound explicitly: "the majority
+  relation for each object category pair often represents from 50% to 75% of the
+  examples … the evaluation does not reflect that." This project measured the
+  same thing independently (69.23% ceiling for a pair-constant predictor on
+  decidable rows; 48.7% of multi-row groups have a constant GT). **The
+  observation is theirs, not ours.** Their contribution is a relevance model and
+  a detector that beats MotifNet, not a pair-conditioned metric.
+- **VG-OOD** — a *re-split*. Changes the data distribution; does not neutralise
+  the prior within an evaluation.
+- **Haystack (ICCVW 2023)** — rare-predicate PSG data with explicit *negative*
+  annotations. Addresses tail measurability, not prior conditioning.
+
+### Verdict of the deeper pass
+
+**No existing SGG/VRD evaluation conditions predicate discrimination on the
+(s,o) category pair.** The confound is named in the literature (Zellers, Plesse)
+and attacked by *curation* (SpatialSense), *re-splitting* (VG-OOD), *predicate
+stratification* (mR@K), and *causal adjustment* (TDE) — but never by
+**conditioning**, which is the one route that makes the prior exactly
+non-informative rather than approximately less informative.
+
 ## 2. The gap, stated precisely
 
 > SugarCrepe made **blind text** models chance-level on image–text
@@ -64,7 +130,8 @@ That is what WPRD does, and it does it *by construction* rather than by dataset
 curation: conditioning on the (s,o) group makes the prior cancel exactly, and
 the prior control measures **0.5000** with CI [0.5000, 0.5000] in every stratum.
 
-Three properties that, in combination, we did not find in the literature:
+Three properties that, in combination, we did not find in the literature — and
+the emphasis is on *in combination*, since each has relatives:
 
 1. **Exact analytic cancellation** of the subject-object prior, verified by a
    control that reads exactly chance — not a re-split, not a reweighting, not a
@@ -77,6 +144,11 @@ Three properties that, in combination, we did not find in the literature:
 ## 3. What is NOT novel, and must be said so
 
 - That the frequency prior dominates VG150. **Known since Neural Motifs.**
+- That the per-pair majority relation is 50–75% of examples and that evaluation
+  hides it. **Plesse et al., WACV 2020, say this explicitly.**
+- The **prior-only baseline** and the **geometry/2D-only baseline**.
+  **SpatialSense (ICCV 2019) introduced both** as language-only and 2D-only
+  probes. This project rediscovered them; it did not invent them.
 - That mR@K is gameable by calibration. **Known**, and part of why the
   Tang et al. toolkit exists.
 - That tail predicates are hard/under-measured. **Known**; Haystack is
@@ -113,6 +185,12 @@ What the metric does not cover, and what a dataset would eventually have to add:
    single highest-value cheap test for the benchmark claim.**
 2. Implement the **role-swap** WPRD variant on existing VG150 data.
 3. Only then consider collecting anything.
+
+## Sources (deeper pass appended)
+- [Scene-Graph-Benchmark METRICS.md](https://github.com/KaihuaTang/Scene-Graph-Benchmark.pytorch/blob/master/METRICS.md)
+- [SpatialSense: An Adversarially Crowdsourced Benchmark for Spatial Relation Recognition](https://arxiv.org/abs/1908.02660)
+- [Focusing Visual Relation Detection on Relevant Relations with Prior Potentials (Plesse et al., WACV 2020)](https://openaccess.thecvf.com/content_WACV_2020/papers/PLESSE_Focusing_Visual_Relation_Detection_on_Relevant_Relations_with_Prior_Potentials_WACV_2020_paper.pdf)
+- [Visual Relationship Detection with Language Priors](https://arxiv.org/abs/1608.00187)
 
 ## Sources
 - [Unbiased Scene Graph Generation from Biased Training](https://arxiv.org/abs/2002.11949)
