@@ -4,13 +4,14 @@ Updated: 2026-09-01. Branch: `research/architecture-breakthrough`.
 This file is the single place that says what is currently believed, what is not,
 and what is running. Every claim carries its evidential class.
 
-> **Denominator warning.** Two incompatible baselines appear in this project's
+> **Denominator warning.** Three incompatible baselines appear in this project's
 > history and must never be compared. `docs/EXPERIMENT_MATRIX.md` quotes the
 > **historical** prior on the **full 10,401-image** validation split
 > (64.37 / 20.30). Everything in sections 2–4 below uses the **train-derived
-> leak-free** prior on the **3,000-image** analysis subset (66.80 / 21.98).
-> Different prior, different N. A delta against one is not a delta against the
-> other.
+> leak-free** prior on the **3,000-image** analysis subset (66.80 / 21.98), and
+> section 4b uses that same leak-free prior on the **full 10,401-image** split
+> (66.59 / 22.30). Different prior, different N. A delta against one is not a
+> delta against the other.
 
 ---
 
@@ -126,6 +127,46 @@ Two findings of opposite sign, both load-bearing:
 
 This is a 3,000-image screening result and is **not** a headline.
 
+## 4b. Full-split confirmation of that hypothesis (`runs/p29`, 2026-09-01)
+
+**MEASURED, pre-registered verdict CONFIRMED.** The section-4 screening result
+re-run unchanged on the full 10,401-image cache. Prior-only baseline on this
+split: R@50 **66.593** / mR **22.304**.
+
+Registered partition (salt 0), tau=0, k=5:
+
+| arm | R@50 | mR@50 | Pareto gap | floor 66.5 |
+|---|---|---|---|---|
+| `prior_only` (no vision) | 65.357 | 27.178 | +0.378 | **FAIL** |
+| **`full`** | **66.760** | 25.049 | **+2.745** | **ok** |
+| `shuffled_model` | 65.348 | 27.157 | +0.352 | **FAIL** |
+| `pair_matched_null` (image destroyed) | 66.704 | 25.009 | **+2.705** | **ok** |
+
+All three registered conditions pass: floor 66.760 >= 66.5; gap +2.745 > +1.5;
+separation +2.368 over `prior_only` and +2.394 over `shuffled_model`, both > +1.0.
+
+Resampled over 5 partitions, `full` = **+2.947 ± 0.190**, floor **5/5** — against
+screening's +1.911 ± 1.056 and 4/5. The sd falls 5.6x. **The screening
+instability was a small-sample artifact, not a fragile effect**, and the
+pre-registration's addendum was wrong in the conservative direction.
+
+**And the criterion could not test what mattered.** `pair_matched_null` passes
+every registered condition as well. Paired over partitions,
+`full − pair_matched_null` = **+0.031 ± 0.188** (negative on 1 of 5; t-based 95%
+interval [−0.20, +0.26]). This replicates `p26`'s −0.114 ± 0.265 at 3.48x the
+rows with a tighter bound: **image conditioning contributes <= ~0.26 Pareto
+points, point estimate indistinguishable from zero.**
+
+Correct statement: *the decision rule reliably converts the checkpoint's
+contribution, and that contribution is (subject, object) identity in
+text-embedding space.* Incorrect: *the visual model adds +2.9 mR* — an arm with
+every image association destroyed adds +2.9 too.
+
+`full` also buys head/body movement at a **tail cost**: tail mR 9.89 vs
+`prior_only`'s 14.49. It is not a long-tail gain.
+
+Detail: `docs/FULL_VALIDATION_RESULT.md`.
+
 ## 5. Experiments completed this cycle
 
 | run | question | verdict |
@@ -140,26 +181,43 @@ This is a 3,000-image screening result and is **not** a headline.
 | `p23` | throughput pilot, workers 7 | 0.95x -- GPU-bound, more workers cannot help |
 | `p25` | nested selection resampled over 5 partitions | magnitude weakened, separation confirmed |
 | `p26` | pair-matched null (image destroyed, identity kept) | **E2 SUPPORTED -- the effect is pair identity** |
+| `p24` | full-validation cache extension (GPU, frozen forward pass) | COMPLETE, cache **VALID 12/12** |
+| `p27` | pair-prior distillation | **WITHDRAWN** -- pair arms blindfolded on 45% of rows |
+| `p28` | oracle ceiling on the full split | REALIZABLE **EXHAUSTED** 9/9; tau-restoration falsified again |
+| `p29` | nested scorer on the full split | **PREREG CONFIRMED 3/3** -- and the image-destroying null passes too |
+| `p30` | audit of pair-arm fold coverage | 45.4% (3k) / 33.2% (full) of rows get NO pair information |
+| `p31` | learned R/mR frontier on the full split | reported, not a criterion |
 
 ## 6. Experiments pending
 
-- **Full-validation confirmation** — pre-registered in
-  `docs/FULL_VALIDATION_PREREGISTRATION.md`. One frozen forward pass over the
-  remaining validation images, then p17/p21/p22 re-run unchanged. Criterion and
-  all three outcomes committed before launch.
+- **Corrected pair-prior distillation (CPU, no GPU).** `runs/p27` was withdrawn;
+  the estimable-subset design is specified in
+  `docs/PAIR_PRIOR_DISTILLATION_RESULT.md` §6. ~88.6k rows of the full `p24`
+  cache — larger than the entire 3k screening set. Must recompute the prior-only
+  baseline and tau frontier **on the subset**, and must report that the ~33%
+  singleton-pair rows remain unaddressable by any pair-conditioned estimator.
+  Open question: can a vision-free pair-conditioned model reproduce C′?
 
-## 6b. Live GPU work
+(The full-validation confirmation that was listed here is complete — see §4b/§6b.)
 
-`runs/p24` — full-validation cache extension, pre-registered in
-`docs/FULL_VALIDATION_PREREGISTRATION.md` before launch, running at commit
-`9ab094d` with a clean tree (i.e. **including** the `cap_batches` sentinel fix,
-so there is no duplicated full-split sweep). Started 07:59 UTC, ~3.7 h expected.
-**No result at the time of writing.** Its criterion is registered and is not to
-be moved.
+## 6b. Full-validation confirmation — COMPLETE
 
-Note its reduced weight after `p26`: it confirms the *magnitude* of an effect
-whose *source* is now established to be pair identity. A CONFIRMED verdict there
-would not resurrect H4.
+`runs/p24` finished (exit 0, 12,423 s, 10,401 images, 132,556 rows, cache
+validated 12/12). All three registered analyses have now run: `p28` (oracle
+ceiling), `p29` (nested scorer — carries the criterion), `p31` (frontier).
+
+**Verdict: CONFIRMED**, 3/3 registered conditions on the registered partition.
+See section 4b and `docs/FULL_VALIDATION_RESULT.md`.
+
+Its reduced weight after `p26` stands, and the full-split data reinforces it
+rather than softening it: the image-destroying `pair_matched_null` passes every
+registered condition too, at `full − null = +0.031 ± 0.188`. A CONFIRMED verdict
+here does not resurrect H4.
+
+Note on execution: the first `p29` attempt was killed by a VM shutdown at
+12:06 UTC with no `result.json` written. It produced no number; it was archived
+as `runs/p29_full_scorer_nested_KILLED_BY_VM_REBOOT/` with a `STOPPED.md` and
+relaunched with byte-identical argv. Nothing was re-run that had completed.
 
 ## 7. Experiments explicitly abandoned
 
