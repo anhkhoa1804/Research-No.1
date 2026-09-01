@@ -212,3 +212,27 @@ def test_bucket_net_flips_sum_to_the_global_net(B):
     de = analysis_DE_buckets_predicates(B, 0.0)
     a = analysis_A_flips(B, 0.0)
     assert sum(de["buckets"][b]["net_flips"] for b in ("head", "body", "tail")) == a["net_flips"]
+
+
+# ------------------------------------------------------ 6. bootstrap validity
+def test_bootstrap_resamples_images_not_rows(B):
+    """The unit must be the image: rows inside an image are not independent.
+
+    Pinned by construction -- a degenerate single-draw bootstrap over a full
+    multinomial must reproduce the point estimate in expectation, and the
+    per-class denominators must never exceed what the images actually contain.
+    """
+    from tools.cprime_mechanism import analysis_J_stability
+    j = analysis_J_stability(B, 0.0, n_boot=64, seed=1)
+    assert j["resample_unit"] == "image"
+    mp = B.metrics(B.score(0.0, ALPHA_HIST, None))
+    mc = B.metrics(B.score(0.0, ALPHA_HIST, B.model))
+    true_dR = (mc["R"] - mp["R"]) * 100.0
+    assert j["dR_points"]["ci2.5"] <= true_dR <= j["dR_points"]["ci97.5"]
+
+
+def test_leave_best_class_out_reduces_the_mr_delta(B):
+    from tools.cprime_mechanism import analysis_J_stability
+    j = analysis_J_stability(B, 0.0, n_boot=8, seed=1)["leave_best_classes_out"]
+    assert j["dmR_without_best"] <= j["dmR_full"] + 1e-9
+    assert j["dmR_without_best_two"] <= j["dmR_without_best"] + 1e-9

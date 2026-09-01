@@ -523,6 +523,74 @@ def heldout(B: Mech, seeds: int, select_seed: int) -> Dict[str, Any]:
             "grid": grid}
 
 
+def analysis_J_stability(B: Mech, tau: float, n_boot: int, seed: int) -> Dict[str, Any]:
+    """J. Is the effect carried by enough rows to survive resampling?
+
+    E shows the mR delta is concentrated on a few low-count predicates, and mR
+    weights a 56-row class exactly as heavily as a 13,902-row class. So the
+    headline deltas need a sampling distribution, and the resampling unit must
+    be the IMAGE -- rows inside an image are not independent.
+
+    Implemented as a multinomial reweighting of per-image, per-class hit and
+    count matrices, which is algebraically identical to resampling images with
+    replacement but costs one matmul per draw instead of a gather.
+    """
+    sp = B.score(tau, ALPHA_HIST, None)
+    sc = B.score(tau, ALPHA_HIST, B.model)
+    y = B.gt_y
+    okp = (B.predict(sp) == y).float()
+    okc = (B.predict(sc) == y).float()
+    I, K = B.n_images, B.n_classes
+    idx = B.gt_img * K + y
+    Hp = torch.zeros(I * K).index_add_(0, idx, okp).view(I, K)
+    Hc = torch.zeros(I * K).index_add_(0, idx, okc).view(I, K)
+    N = torch.zeros(I * K).index_add_(0, idx, torch.ones_like(okp)).view(I, K)
+
+    def agg(w: torch.Tensor) -> Tuple[float, float, float, float]:
+        np_, nc_, nn = w @ Hp, w @ Hc, w @ N
+        pres = nn > 0
+        R_p = float(np_.sum() / nn.sum()); R_c = float(nc_.sum() / nn.sum())
+        mR_p = float((np_[pres] / nn[pres]).mean()); mR_c = float((nc_[pres] / nn[pres]).mean())
+        return R_p, R_c, mR_p, mR_c
+
+    g = torch.Generator().manual_seed(seed)
+    probs = torch.full((I,), 1.0 / I)
+    dR, dmR = [], []
+    for _ in range(n_boot):
+        w = torch.multinomial(probs, I, replacement=True, generator=g).bincount(minlength=I).float()
+        Rp, Rc, mp, mc = agg(w)
+        dR.append((Rc - Rp) * 100.0); dmR.append((mc - mp) * 100.0)
+    dR_t, dmR_t = torch.tensor(dR), torch.tensor(dmR)
+
+    # leave-one-class-out: how much of dmR survives dropping its best class?
+    npc_p, den = B.per_class_recall_vec(sp)
+    npc_c, _ = B.per_class_recall_vec(sc)
+    pres = den > 0
+    rp = torch.where(pres, npc_p / den.clamp_min(1), torch.zeros_like(den))
+    rc = torch.where(pres, npc_c / den.clamp_min(1), torch.zeros_like(den))
+    delta = (rc - rp)[pres]
+    names = [B.classes[c] for c in range(K) if bool(pres[c])]
+    Kp = int(pres.sum())
+    full = float(delta.sum() / Kp * 100.0)
+    order = torch.argsort(delta, descending=True)
+    drop1 = float((delta.sum() - delta[order[0]]) / (Kp - 1) * 100.0)
+    drop2 = float((delta.sum() - delta[order[:2]].sum()) / (Kp - 2) * 100.0)
+    return {
+        "tau": tau, "n_boot": n_boot, "seed": seed, "resample_unit": "image",
+        "dR_points": {"point": float(dR_t.mean()), "sd": float(dR_t.std()),
+                      "ci2.5": float(torch.quantile(dR_t, 0.025)),
+                      "ci97.5": float(torch.quantile(dR_t, 0.975)),
+                      "frac_draws_positive": float((dR_t > 0).float().mean())},
+        "dmR_points": {"point": float(dmR_t.mean()), "sd": float(dmR_t.std()),
+                       "ci2.5": float(torch.quantile(dmR_t, 0.025)),
+                       "ci97.5": float(torch.quantile(dmR_t, 0.975)),
+                       "frac_draws_positive": float((dmR_t > 0).float().mean())},
+        "leave_best_classes_out": {
+            "dmR_full": full,
+            "best_class": names[int(order[0])], "dmR_without_best": drop1,
+            "second_class": names[int(order[1])], "dmR_without_best_two": drop2},
+    }
+
 def reconcile(B: Mech) -> Dict[str, Any]:
     """The normalisation defect in cprime_analysis.Bench.ensemble_term."""
     buggy = B.ensemble_term(0.0)
@@ -566,6 +634,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--out", default="runs/p12_cprime_mechanism/mechanism.json")
     ap.add_argument("--null_seeds", type=int, default=5)
     ap.add_argument("--select_seed", type=int, default=20260901)
+    ap.add_argument("--n_boot", type=int, default=2000)
+    ap.add_argument("--boot_seed", type=int, default=4242)
     ap.add_argument("--assert-fix", dest="assert_fix", action="store_true", default=True)
     args = ap.parse_args(argv)
 
@@ -614,6 +684,17 @@ def main(argv: Optional[List[str]] = None) -> int:
         H = analysis_H_beneficial_vs_harmful(B, tau)
         _log(f"  G  rescue rate by prior GT rank: " + "  ".join(
             f"{r['prior_gt_rank']}:{r['rescue_rate']*100:.1f}%" for r in G["rescue_by_prior_gt_rank"]))
+        J = analysis_J_stability(B, tau, args.n_boot, args.boot_seed)
+        _log(f"  J  bootstrap over images (n={args.n_boot}): "
+             f"dR {J['dR_points']['point']:+.3f} [{J['dR_points']['ci2.5']:+.3f},{J['dR_points']['ci97.5']:+.3f}] "
+             f"pos {J['dR_points']['frac_draws_positive']*100:.1f}%  |  "
+             f"dmR {J['dmR_points']['point']:+.3f} [{J['dmR_points']['ci2.5']:+.3f},{J['dmR_points']['ci97.5']:+.3f}] "
+             f"pos {J['dmR_points']['frac_draws_positive']*100:.1f}%")
+        _log(f"     dmR {J['leave_best_classes_out']['dmR_full']:+.3f} -> "
+             f"{J['leave_best_classes_out']['dmR_without_best']:+.3f} without "
+             f"'{J['leave_best_classes_out']['best_class']}' -> "
+             f"{J['leave_best_classes_out']['dmR_without_best_two']:+.3f} without it and "
+             f"'{J['leave_best_classes_out']['second_class']}'")
         I = controls(B, tau, args.null_seeds, curve)
         _log(f"  I  real net {I['real']['net_flips']:+d} / dmR {I['real']['dmR_points']:+.3f}  |  "
              f"N1 net {I['null_N1']['mean_net_flips']:+.1f} / dmR {I['null_N1']['mean_dmR_points']:+.3f}  |  "
@@ -622,7 +703,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         res["by_tau"][str(tau)] = {"A_flips": A, "B_ranks": Bk, "C_margins": C,
                                    "DE_buckets_predicates": DE, "F_entropy": F,
                                    "G_rescue": G, "H_beneficial_vs_harmful": H,
-                                   "I_controls": I}
+                                   "I_controls": I, "J_stability": J}
 
     _log(f"\n{'-'*88}\n  HELD-OUT SELECTION (image-level 50/50)\n{'-'*88}")
     ho = heldout(B, args.null_seeds, args.select_seed)
