@@ -167,6 +167,55 @@ every image association destroyed adds +2.9 too.
 
 Detail: `docs/FULL_VALIDATION_RESULT.md`.
 
+## 4c. THE CYCLE'S PRINCIPAL RESULT — a prior-free grounding metric (`p33`–`p41`)
+
+**MEASURED.** Superseding the reading in §2b/§3 that "there is no visual
+evidence in this term". See `docs/DIAGNOSIS.md`,
+`docs/AUDIT_TEXT_BRANCH_IS_IMAGE_CONDITIONED.md`.
+
+Within one (s,o) group the prior is constant to **9.4e-05**, so in the double
+difference it cancels exactly, along with any per-class calibration, tau and any
+temperature. WPRD is the AUC of that difference. **Its prior control reads
+exactly 0.5000, CI [0.5000, 0.5000], in every stratum.**
+
+| arm | WPRD | 95% CI |
+|---|---|---|
+| geometry probe, TRAIN-FITTED (19 numbers from 2 boxes) | **0.5961** | [0.5921, 0.6014] |
+| classifier head (stored, **discarded** at alpha=0) | 0.5728 | [0.5681, 0.5779] |
+| text head (**the evaluated model term**) | 0.5542 | [0.5495, 0.5592] |
+| prior (control) | **0.5000** | [0.5000, 0.5000] |
+
+Four findings:
+
+1. **Image-conditioned relational signal EXISTS** (CI excludes 0.5 by 9
+   half-widths) and is **weak**. H4 moves from "not established" to
+   **ESTABLISHED BUT WEAK**.
+2. **`p26`/`p29`'s "+0.031 ± 0.188" was diluted**: 23.3% singleton groups +
+   19.8% constant-GT groups = **43.1% of rows structurally inert** to a
+   within-group permutation.
+3. **The evaluated head has no measurable tail grounding** — body–tail
+   [0.4822, 0.5570] and tail–tail [0.4174, 0.6246] both contain chance. The
+   discarded head does (body–tail 0.5918, clear of 0.5) and wins **13/13**
+   strata.
+4. **Box geometry out-discriminates the checkpoint**, and the margin *grows*
+   toward the tail (+0.033 head–head → +0.123 tail–tail).
+
+**Corrected by `p41`, which used the FIELD's metric instead of ours.** At
+tau ≤ 0.05 — the checkpoint's operating region — prior+MODEL **beats**
+prior+GEOMETRY (+1.95, +1.72 Pareto). Discrimination is not calibration.
+The narrow, defensible claim: *the checkpoint's advantage on R@50/mR@50 does not
+come from relational discrimination; it comes from being calibrated against the
+prior.* At tau ≥ 0.1 model+geometry beats both (**+4.051**).
+
+`p32` reaches the same place independently: on the estimable subset the model
+term is beaten by every pair-conditioned statistic tested
+(`G_model − F_pair_foldfit = −1.706`).
+
+**Answer to the founding question.** mR@K rises when mass moves to rare
+predicates, which tau does without looking at the image, while the head actually
+run cannot tell tail relations apart at all. The metric and the mechanism are
+decoupled.
+
 ## 5. Experiments completed this cycle
 
 | run | question | verdict |
@@ -187,6 +236,14 @@ Detail: `docs/FULL_VALIDATION_RESULT.md`.
 | `p29` | nested scorer on the full split | **PREREG CONFIRMED 3/3** -- and the image-destroying null passes too |
 | `p30` | audit of pair-arm fold coverage | 45.4% (3k) / 33.2% (full) of rows get NO pair information |
 | `p31` | learned R/mR frontier on the full split | `full` has a usable region beta in [0.10,0.20], peak **+3.334**; no-model arms have none |
+| `p32` | corrected pair-prior distillation, estimable subset | registered NOT EXPLAINED — but model is **worse** than every pair statistic |
+| `p33` | WPRD, a prior-free grounding metric | signal EXISTS (0.5542) and is WEAK; prior control exactly 0.5000 |
+| `p34` | ensemble_alpha sweep | WPRD rises monotonically with alpha; discarded head is better |
+| `p35` | WPRD stratified | classifier head wins 13/13; evaluated head has NO tail grounding |
+| `p36` | rel_feat + pred_emb GPU cache | **RUNNING** |
+| `p38`/`p39` | box-geometry control (cross-fit / train-fit) | geometry **0.5961** > both heads |
+| `p40` | where geometry wins | margin grows toward the tail, +0.123 at tail–tail |
+| `p41` | geometry on the FIELD's metric | **corrective**: model wins at tau<=0.05 |
 
 ## 6. Experiments pending
 

@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 58,
-  "total_bytes": 956980958,
+  "n_runs": 69,
+  "total_bytes": 957177439,
   "runs": [
     {
       "name": "p10_model_recalibration",
@@ -1327,6 +1327,9 @@
       "branch": "research/architecture-breakthrough",
       "working_tree_clean": true,
       "note": "Corrected pair-prior distillation, pre-registered in docs/PAIR_PRIOR_DISTILLATION_PREREGISTRATION.md (committed 91d33b8, before the tool existed). Supersedes the withdrawn runs/p27. Estimable subset of the p24 full-validation cache (~88.6k rows), CPU only, no GPU. Baseline, tau frontier and R@50 floor all recomputed on the subset per partition. Registered partition is salt 0; salts 1-4 are the secondary resampled read.",
+      "exit_code": 0,
+      "runtime_seconds": 5350.871,
+      "started_at_utc": "2026-09-01T15:29:37.446600+00:00",
       "files": [
         {
           "path": "runs/p32_pair_prior_estimable/command.txt",
@@ -1336,9 +1339,23 @@
           "mtime": null
         },
         {
+          "path": "runs/p32_pair_prior_estimable/distill.json",
+          "size_bytes": 59080,
+          "sha256": "df47b3eeac2fd084c20a06b214aa618a2631279e0e5029944aba881128105dd3",
+          "note": null,
+          "mtime": null
+        },
+        {
           "path": "runs/p32_pair_prior_estimable/provenance.json",
           "size_bytes": 3017,
           "sha256": "1a4e63b3d7333b5829474770797028417270553dd4d89d37a26edc3ce84803f8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p32_pair_prior_estimable/result.json",
+          "size_bytes": 591,
+          "sha256": "ed74d5caf2508bc6779d71c6966a00fe24244303b15e34498f55c07b887111a0",
           "note": null,
           "mtime": null
         },
@@ -1351,14 +1368,461 @@
         },
         {
           "path": "runs/p32_pair_prior_estimable/stdout.log",
-          "size_bytes": 1429,
-          "sha256": "c192d4728ee8c407c49472fd9da573b4aca025eaddce7ffb15095937e5f7ae2e",
+          "size_bytes": 6646,
+          "sha256": "96d58711f1c939a8b8f69bd43421abf39428db94338f6c375a1d9ca5803832f3",
           "note": null,
           "mtime": null
         }
       ],
-      "total_bytes": 4714,
+      "total_bytes": 69602,
+      "status": "OK"
+    },
+    {
+      "name": "p33_within_pair_discrimination",
+      "path": "runs/p33_within_pair_discrimination",
+      "command": ".venv/bin/python3 tools/within_pair_discrimination.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p33_within_pair_discrimination/wprd.json --cap 64 --boot 200",
+      "commit": "ab83712b4583af10eb2b2f09d8ef45b2586c858a",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "WPRD: a prior-free relational-grounding metric. Within an (s,o) group the train-derived prior is constant to 9.4e-05, so in the double difference (score[i,a]-score[i,b]) - (score[j,a]-score[j,b]) the prior, any per-class calibration, tau and any global temperature all cancel EXACTLY. What survives varies only with the image. Scores both predicate heads, including the classifier head the checkpoint discards at ensemble_alpha=0. Motivated by the finding that 43.1% of rows are structurally inert to the p26/p29 pair-matched null.",
+      "exit_code": 0,
+      "runtime_seconds": 69.775,
+      "started_at_utc": "2026-09-01T15:42:27.518284+00:00",
+      "files": [
+        {
+          "path": "runs/p33_within_pair_discrimination/command.txt",
+          "size_bytes": 228,
+          "sha256": "c44dec41620794b7882901023af7627fe06445f2f9d4d521e1dd045df7e2b57c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p33_within_pair_discrimination/provenance.json",
+          "size_bytes": 3214,
+          "sha256": "f88c851504f53759291f46f045b7d0d2e31578834150a13b53bd631a249c47e2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p33_within_pair_discrimination/result.json",
+          "size_bytes": 534,
+          "sha256": "89f11665bc114916d2dd4dad96127d41286cfa26c6cf5aa2a76766b442b5b621",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p33_within_pair_discrimination/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p33_within_pair_discrimination/stdout.log",
+          "size_bytes": 1881,
+          "sha256": "60313dc31f411e22542105b7d65e5aa860cac9b6b0ec1ea27b2be814b834adad",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p33_within_pair_discrimination/wprd.json",
+          "size_bytes": 1451,
+          "sha256": "804a1e4d09803877071d4e71d0a70c2e65bad9e5d7578dd3be6c269a1465df5a",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7308,
+      "status": "OK"
+    },
+    {
+      "name": "p34_ensemble_alpha_sweep",
+      "path": "runs/p34_ensemble_alpha_sweep",
+      "command": ".venv/bin/python3 tools/ensemble_alpha_sweep.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p34_ensemble_alpha_sweep/sweep.json --alphas 0.0,0.1,0.25,0.5,0.75,0.9,1.0 --taus 0.0,0.05,0.1 --wprd",
+      "commit": "ab83712b4583af10eb2b2f09d8ef45b2586c858a",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Does the predicate head the checkpoint discards at ensemble_alpha=0 actually help at the operating point? runs/p33 found the discarded classifier head has strictly better prior-free within-pair relational discrimination (WPRD 0.5728 vs 0.5542, non-overlapping CIs). This sweeps ea and reports R@50/mR@50/Pareto plus WPRD per alpha on the same p24 full cache.",
+      "exit_code": 0,
+      "runtime_seconds": 92.226,
+      "started_at_utc": "2026-09-01T15:45:37.765388+00:00",
+      "files": [
+        {
+          "path": "runs/p34_ensemble_alpha_sweep/command.txt",
+          "size_bytes": 263,
+          "sha256": "221eaf69663ff591ccbfc360155488d1aa7cc9ca066e846d2975dc821bcdce75",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p34_ensemble_alpha_sweep/provenance.json",
+          "size_bytes": 3083,
+          "sha256": "0cad469465b840d042a16afba9221c6d59167df65efa15ddd2c2ed1bd9b466e2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p34_ensemble_alpha_sweep/result.json",
+          "size_bytes": 570,
+          "sha256": "69cbb68665a6952bb76133648c111f161ba720ee204800c9173e530f4c8f5cd5",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p34_ensemble_alpha_sweep/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p34_ensemble_alpha_sweep/stdout.log",
+          "size_bytes": 3942,
+          "sha256": "377e926fc1e1d7c5f097b3898f4fd15035215457cbc0e43be2f534b82bba56bf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p34_ensemble_alpha_sweep/sweep.json",
+          "size_bytes": 9686,
+          "sha256": "3aba25203824029dbd7c596cafd563cc252ac913085d3759fcc501424048c815",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 17544,
+      "status": "OK"
+    },
+    {
+      "name": "p35_wprd_stratified",
+      "path": "runs/p35_wprd_stratified",
+      "command": ".venv/bin/python3 tools/wprd_stratified.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p35_wprd_stratified/strat.json --cap 64 --boot 200",
+      "commit": "ab83712b4583af10eb2b2f09d8ef45b2586c858a",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Where does relational grounding live? p33's macro (0.5542) and weighted (0.5266) WPRD disagree, and weighting by cell size pulls toward chance. Tests whether the model's image-conditioned discrimination is INVERSELY related to pair support -- weakest where the pair prior is strongest. Also bounds the dilution from same-instance rows (VG annotates one instance pair with several predicates; those tie at 0.5 by construction).",
+      "exit_code": 0,
+      "runtime_seconds": 100.39,
+      "started_at_utc": "2026-09-01T15:50:21.538250+00:00",
+      "files": [
+        {
+          "path": "runs/p35_wprd_stratified/command.txt",
+          "size_bytes": 207,
+          "sha256": "b5cc469df820b8df40751959311bbbadb6bb026ce7ec10b6cf43664aebec85f0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p35_wprd_stratified/provenance.json",
+          "size_bytes": 3188,
+          "sha256": "be671c384d6265cc78262fee8f83c0d708a4293bbcf8e7f17ca80e3c5f811e1e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p35_wprd_stratified/result.json",
+          "size_bytes": 502,
+          "sha256": "0fa39d36d0976017cb8b59f4236d50b38f47b6cd5a99ec99c3e19edf482a2aea",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p35_wprd_stratified/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p35_wprd_stratified/stdout.log",
+          "size_bytes": 4995,
+          "sha256": "81c51b3846639ce68ac5fc90a810d7fbced09ffc0260ecc4ff51b9d418d78fd3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p35_wprd_stratified/strat.json",
+          "size_bytes": 11478,
+          "sha256": "81f1782edd0f197f7f22b8b43811f7707f93b949cfd9c45cf6a8f8107ce7d746",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 20370,
+      "status": "OK"
+    },
+    {
+      "name": "p36_relfeat_cache",
+      "path": "runs/p36_relfeat_cache",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 0 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path datasets_vg150_clean/frequency_prior_train.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --eval_sgg_dump_pair_logits_path runs/p36_relfeat_cache/pair_logits_relfeat.pt --eval_sgg_dump_rel_feat true --run_name p36_relfeat_cache --out_dir runs/p36_relfeat_cache --save_metrics_json runs/p36_relfeat_cache/metrics.jsonl",
+      "commit": "35774c094e47d63df28cbf9801cc4ef5a33636fb",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "GPU pass 2/2. Pre-registered in docs/READOUT_VS_REPRESENTATION_PREREGISTRATION.md before launch. Identical to runs/p24 in every flag except --eval_sgg_dump_rel_feat true and output paths. Frozen forward pass, no training, no gradient. Adds rel_feat (132556 x 768 fp16) and pred_emb (51 x 768) so the CPU side can ask whether the weak grounding measured in p33/p35 is a property of the READOUTS or of the REPRESENTATION. GPU verified idle (3 MiB, 0 percent, no compute apps) immediately before launch.",
+      "files": [
+        {
+          "path": "runs/p36_relfeat_cache/command.txt",
+          "size_bytes": 1093,
+          "sha256": "7b1d49ed74eb4d753595ae136c679578ff690c73b12e9bb87330e2a522f35879",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p36_relfeat_cache/provenance.json",
+          "size_bytes": 3127,
+          "sha256": "d30ad189e98d55acd9362848c19d9c509b2183707e84a1232673a0986a672906",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p36_relfeat_cache/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p36_relfeat_cache/stdout.log",
+          "size_bytes": 4402,
+          "sha256": "8fb80cf321b40c7cb8bf303c77b576080e1752e72e09b66eb553be54ae2244dc",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 9208,
       "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p38_wprd_geometry",
+      "path": "runs/p38_wprd_geometry",
+      "command": ".venv/bin/python3 tools/wprd_geometry_control.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p38_wprd_geometry/geom.json --cap 64 --boot 200 --epochs 200",
+      "commit": "af0ac70eac7cda64d8e9906c60c9f18ea87fb827",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Geometry control for WPRD. Is the checkpoint's image-conditioned relational grounding anything more than subject/object box layout? Cross-fitted probe on 19 scale-invariant geometry features (no pixels, no rel_feat, no predicate embeddings) over the SAME 5 image-level folds (candidate_scorer_probe.fold_of_image, salt 0), scored with the same WPRD. Shuffled-label geometry and prior arms are controls that must both read 0.5. Attempt 1 crashed on a gt_row/image indexing bug; see runs/p38_wprd_geometry_FAILED_indexerror.",
+      "exit_code": 0,
+      "runtime_seconds": 141.576,
+      "started_at_utc": "2026-09-01T16:14:27.284286+00:00",
+      "files": [
+        {
+          "path": "runs/p38_wprd_geometry/command.txt",
+          "size_bytes": 223,
+          "sha256": "6a857a15c2bb9f8291a78f288453dd5d45769659bb786e04c2a1f8be438d9356",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry/geom.json",
+          "size_bytes": 1800,
+          "sha256": "4c761024da6aa2480971c09d5dad78c4499481679a6e83d94dde139c7d8bdbd2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry/provenance.json",
+          "size_bytes": 3165,
+          "sha256": "b8d30ff51bd38493bb6bce82d231c9703fe8b1a045c0562d9a4a24038a1ad153",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry/result.json",
+          "size_bytes": 531,
+          "sha256": "c62b30d8de528027a583a81d95c3c02e88e84102f790d60ad1eb67325f116de4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry/stdout.log",
+          "size_bytes": 1675,
+          "sha256": "5c416460ec52f1c59ffeb9976003a47a6a38e0880fa6a2865e537e82a930cea1",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7394,
+      "status": "OK"
+    },
+    {
+      "name": "p38_wprd_geometry_FAILED_indexerror",
+      "path": "runs/p38_wprd_geometry_FAILED_indexerror",
+      "command": ".venv/bin/python3 tools/wprd_geometry_control.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p38_wprd_geometry/geom.json --cap 64 --boot 200 --epochs 200",
+      "commit": "af0ac70eac7cda64d8e9906c60c9f18ea87fb827",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Geometry control for WPRD. Is the checkpoint's image-conditioned relational grounding anything more than subject/object box layout? Fits a cross-fitted probe on 19 scale-invariant geometry features (no pixels, no rel_feat, no predicate embeddings) over the SAME 5 image-level folds (candidate_scorer_probe.fold_of_image, salt 0) and scores it with the same WPRD. Includes a shuffled-label geometry arm and the prior arm as controls that must both read 0.5.",
+      "exit_code": 1,
+      "runtime_seconds": 45.044,
+      "started_at_utc": "2026-09-01T16:09:51.827724+00:00",
+      "files": [
+        {
+          "path": "runs/p38_wprd_geometry_FAILED_indexerror/STOPPED.md",
+          "size_bytes": 510,
+          "sha256": "82d2b165ae2ffff771bd338a5e31b2829d7ee1e97e7b78dca0bbbcd8e891e43e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry_FAILED_indexerror/command.txt",
+          "size_bytes": 223,
+          "sha256": "6a857a15c2bb9f8291a78f288453dd5d45769659bb786e04c2a1f8be438d9356",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry_FAILED_indexerror/provenance.json",
+          "size_bytes": 3099,
+          "sha256": "71708b85119ed148adec64621af7cf86b86d9cc4890dcaf71fad2103c0bc2c14",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry_FAILED_indexerror/result.json",
+          "size_bytes": 530,
+          "sha256": "e27c98a555a77d9c58ed1dde56c91e5c3e349600bdd7ab0b1f2a15d2e5cb308e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry_FAILED_indexerror/stderr.log",
+          "size_bytes": 489,
+          "sha256": "adc198fa5e091da0728636abcc541459a23ba2809e6b785438227f8f351d65ec",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p38_wprd_geometry_FAILED_indexerror/stdout.log",
+          "size_bytes": 373,
+          "sha256": "87e33245a2e91fcadbea2bb05be1406e265e5162bfdb8aa5dc7f19b4b9beff80",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 5224,
+      "status": "FAILED"
+    },
+    {
+      "name": "p39_FAILED_unboundlocal",
+      "path": "runs/p39_FAILED_unboundlocal",
+      "command": ".venv/bin/python3 tools/wprd_geometry_control.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p39_wprd_geometry_trainfit/geom.json --cap 64 --boot 200 --epochs 200 --train-jsonl datasets_vg150_clean/train.jsonl",
+      "commit": "af0ac70eac7cda64d8e9906c60c9f18ea87fb827",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Hardens p38. The p38 geometry probe was cross-fitted on validation folds, so it could adapt to the evaluation distribution while the model could not -- the one advantage it had. This refits the SAME 19 geometry features on the TRAIN split (datasets_vg150_clean/train.jsonl), standardised by train statistics only, and applies it to validation. Now the probe and the model are trained on the same data and evaluated on the same data, and no validation statistic touches the fit.",
+      "exit_code": 1,
+      "runtime_seconds": 266.36,
+      "started_at_utc": "2026-09-01T16:19:19.807582+00:00",
+      "files": [
+        {
+          "path": "runs/p39_FAILED_unboundlocal/STOPPED.md",
+          "size_bytes": 148,
+          "sha256": "0d324f327af14499908f56bbb21671694629e2ff6b3be7fd530c45bccb2e2249",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_FAILED_unboundlocal/command.txt",
+          "size_bytes": 279,
+          "sha256": "7f7b5a79e45f625516214998d3f93b5aa7bf296f85b1ac01dd56b488f1734821",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_FAILED_unboundlocal/provenance.json",
+          "size_bytes": 3120,
+          "sha256": "ce0e4b808d80eff3d1df65fb55ff97c583165c53b643e5c95547d7e7a3e34520",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_FAILED_unboundlocal/result.json",
+          "size_bytes": 609,
+          "sha256": "bbdd00043fe1b259596cc13a237c9bae4b50e5be73e69bf18998c134a73d1fb4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_FAILED_unboundlocal/stderr.log",
+          "size_bytes": 372,
+          "sha256": "431fd2049b3d920d0a9463ee6839a9bdc81730679e344a788d6bdc9db7ed2ab9",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_FAILED_unboundlocal/stdout.log",
+          "size_bytes": 651,
+          "sha256": "739f16215bf09eab00583d3f454f547886a70ab5beb08862aa365a2762e2f3fe",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 5179,
+      "status": "FAILED"
+    },
+    {
+      "name": "p39_wprd_geometry_trainfit",
+      "path": "runs/p39_wprd_geometry_trainfit",
+      "command": ".venv/bin/python3 tools/wprd_geometry_control.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p39_wprd_geometry_trainfit/geom.json --cap 64 --boot 200 --epochs 200 --train-jsonl datasets_vg150_clean/train.jsonl",
+      "commit": "af0ac70eac7cda64d8e9906c60c9f18ea87fb827",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Hardens p38. The p38 geometry probe was cross-fitted on validation folds, so it could adapt to the evaluation distribution while the model could not. This refits the SAME 19 geometry features on the TRAIN split, standardised by train statistics only, and applies it to validation -- probe and model now see the same training data and the same evaluation data, and no validation statistic touches the fit. Attempt 1 crashed on an UnboundLocalError; see runs/p39_FAILED_unboundlocal.",
+      "exit_code": 0,
+      "runtime_seconds": 314.185,
+      "started_at_utc": "2026-09-01T16:24:25.317955+00:00",
+      "files": [
+        {
+          "path": "runs/p39_wprd_geometry_trainfit/command.txt",
+          "size_bytes": 279,
+          "sha256": "7f7b5a79e45f625516214998d3f93b5aa7bf296f85b1ac01dd56b488f1734821",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_wprd_geometry_trainfit/geom.json",
+          "size_bytes": 2544,
+          "sha256": "54a551ba583f606dcb5d72959bc081b64250edc8910fe84072a79e9a6ced8843",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_wprd_geometry_trainfit/provenance.json",
+          "size_bytes": 3124,
+          "sha256": "b5ae086a784f6e35836a014b696753a524c5043e2ebdb7718b2ad0e89b816795",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_wprd_geometry_trainfit/result.json",
+          "size_bytes": 610,
+          "sha256": "c41b6d3356fab9352df78c3c03a0d0c9d2bff54b9d9fe4cd0ed1a0f692e7c6d8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_wprd_geometry_trainfit/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p39_wprd_geometry_trainfit/stdout.log",
+          "size_bytes": 2138,
+          "sha256": "62407b8731cd605faae265c527effe7fbfd0c287ed5d945d2dc439f6921765aa",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8695,
+      "status": "OK"
     },
     {
       "name": "p3_build_train_prior",
@@ -2093,6 +2557,180 @@
         }
       ],
       "total_bytes": 8252,
+      "status": "OK"
+    },
+    {
+      "name": "p40_FAILED_attrerror",
+      "path": "runs/p40_FAILED_attrerror",
+      "command": ".venv/bin/python3 tools/wprd_geometry_stratified.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p40_geometry_stratified/strat.json --cap 64 --epochs 200",
+      "commit": "e6f533dea89b4f0dcf5c8e47f49fc53b2d6f085f",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Where does box geometry beat the trained model? Per predicate bucket and per predicate pair, on identical cells, with the train-fitted geometry probe from p39. A successor needs to know where the loss is and whether any region exists in which the trained model beats rectangles.",
+      "exit_code": 1,
+      "runtime_seconds": 200.498,
+      "started_at_utc": "2026-09-01T16:42:59.918510+00:00",
+      "files": [
+        {
+          "path": "runs/p40_FAILED_attrerror/STOPPED.md",
+          "size_bytes": 109,
+          "sha256": "286dd1ef354769f9917a5a0292fc71395ebfc5bb30beac50e1a6ec2e36745448",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_FAILED_attrerror/command.txt",
+          "size_bytes": 269,
+          "sha256": "ccc1d728d27e8e9ba1718a2b986913a8548e1b0c8b6c8585a5236fd3b432fbbf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_FAILED_attrerror/provenance.json",
+          "size_bytes": 2901,
+          "sha256": "9997292e02523e71d2bb8d585f5a4b23f18e831ff65d6d92d5463e0fd709be60",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_FAILED_attrerror/result.json",
+          "size_bytes": 583,
+          "sha256": "72be2848ca874d9535dc8bdcb0f46f5fecfe1a863b25efc1fc9f9c07d6e43138",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_FAILED_attrerror/stderr.log",
+          "size_bytes": 408,
+          "sha256": "7f3ee9c069118df77f6b210cfa863912b2e745760ca46e4da6eba96e0c7da248",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_FAILED_attrerror/stdout.log",
+          "size_bytes": 452,
+          "sha256": "f1d85053032c5d82a91fa59076a8e58107085762e41caba2022c715bd88ad9cd",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 4722,
+      "status": "FAILED"
+    },
+    {
+      "name": "p40_geometry_stratified",
+      "path": "runs/p40_geometry_stratified",
+      "command": ".venv/bin/python3 tools/wprd_geometry_stratified.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p40_geometry_stratified/strat.json --cap 64 --epochs 200",
+      "commit": "e6f533dea89b4f0dcf5c8e47f49fc53b2d6f085f",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Where does box geometry beat the trained model? Per predicate bucket and per predicate pair, on identical cells, with the train-fitted geometry probe from p39. Attempt 1 crashed on a module attribute; see runs/p40_FAILED_attrerror.",
+      "exit_code": 0,
+      "runtime_seconds": 199.575,
+      "started_at_utc": "2026-09-01T16:46:59.998535+00:00",
+      "files": [
+        {
+          "path": "runs/p40_geometry_stratified/command.txt",
+          "size_bytes": 269,
+          "sha256": "ccc1d728d27e8e9ba1718a2b986913a8548e1b0c8b6c8585a5236fd3b432fbbf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_geometry_stratified/provenance.json",
+          "size_bytes": 2854,
+          "sha256": "0b67a5298bf40e602973ad777b4d1370460fb92eda107b741fd2ed4666d0b0f9",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_geometry_stratified/result.json",
+          "size_bytes": 583,
+          "sha256": "649f655cacb41b7d093185c43435144012b5274acf1036d3d924f65f57bdbc17",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_geometry_stratified/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_geometry_stratified/stdout.log",
+          "size_bytes": 2638,
+          "sha256": "a105bc1524dd0ba33033d77040d0fc68e8b17fab705332faaa2d4b26494ecb28",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p40_geometry_stratified/strat.json",
+          "size_bytes": 11562,
+          "sha256": "7a0f6af7400331015707110a3fe42faa6f413b557fc69259080d2ec7d1308c7a",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 17906,
+      "status": "OK"
+    },
+    {
+      "name": "p41_geometry_sgg",
+      "path": "runs/p41_geometry_sgg",
+      "command": ".venv/bin/python3 tools/geometry_sgg_baseline.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p41_geometry_sgg/base.json --taus 0.0,0.05,0.1,0.2 --weights 0.0,0.25,0.5,0.75,1.0,1.5,2.0,3.0",
+      "commit": "69810e320e0fa2798f20a71eea6ad7eb422a3a01",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Capstone: drops the project's own WPRD metric and uses the FIELD'S metric. Swaps the checkpoint's model term for a train-fitted linear probe on 19 box-geometry features, normalised exactly as the evaluator normalises its heads, inside the exact composition score = 3.75*(prior - tau*logP) + term. Reports prior_only, prior+MODEL, prior+GEOMETRY, prior+MODEL+GEOMETRY, plus a nested arm where the mixing weight is chosen inside training folds only.",
+      "exit_code": 0,
+      "runtime_seconds": 205.482,
+      "started_at_utc": "2026-09-01T17:01:49.976553+00:00",
+      "files": [
+        {
+          "path": "runs/p41_geometry_sgg/base.json",
+          "size_bytes": 17281,
+          "sha256": "301f878c1d9355ddfe7ef70a1213df3d592161da1a656b134306cc4b04ac6c56",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p41_geometry_sgg/command.txt",
+          "size_bytes": 304,
+          "sha256": "e86ee964fea1fab96484d7be00c60c6a65bec9f39837fb28f2e58fccbd55d0f4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p41_geometry_sgg/provenance.json",
+          "size_bytes": 3117,
+          "sha256": "975314cbb1af6e978bed4b2fe9bd2f7844616422641033cd5a491758aa387585",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p41_geometry_sgg/result.json",
+          "size_bytes": 611,
+          "sha256": "f85653674ec964d9c340208e4ec870c31ecb74c9f38d398b1cfe8a51b169f63d",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p41_geometry_sgg/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p41_geometry_sgg/stdout.log",
+          "size_bytes": 6730,
+          "sha256": "7847e739dc9703a781e65e84bfde243ff0aad0a29cc251a9693b2de399a198b9",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 28043,
       "status": "OK"
     },
     {
