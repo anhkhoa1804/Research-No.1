@@ -1652,6 +1652,22 @@ def _finalize_predicate_diag(diag: Dict[str, Any], topk: int) -> Dict[str, Any]:
     }
 
 
+def cap_batches(limit: Any, cap: int) -> int:
+    """Tighten a batch cap while respecting the "non-positive = NO LIMIT" sentinel.
+
+    `min(cap, limit)` is wrong under that sentinel and silently inverts: with
+    limit=0 meaning "the whole split", min(25, 0) is 0, which
+    _batch_limit_reached reads as NO LIMIT -- so a diagnostic meant to see 25
+    batches sees the entire split instead. On the full 10,401-image validation
+    split that turns a short sweep into a second full pass, silently, showing up
+    only as the run taking hours longer than budgeted.
+
+    Returns the cap when `limit` is unlimited, else the tighter of the two.
+    """
+    limit = int(limit)
+    return int(cap) if limit <= 0 else min(int(cap), limit)
+
+
 def _batch_limit_reached(bi: int, max_batches: Any) -> bool:
     """True once batch index `bi` has passed the cap. Non-positive cap = NO LIMIT.
 

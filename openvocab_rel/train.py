@@ -1179,6 +1179,7 @@ def _run_research_evals(
     device: torch.device,
 ) -> None:
     from .evals import (
+        cap_batches,
         eval_latency_throughput,
         eval_prune_tradeoff,
         eval_query_grounding_vs_k,
@@ -1196,7 +1197,7 @@ def _run_research_evals(
             cfg, model, clip_model, processor, val_loader, device, ks=ks, max_batches=int(cfg.eval_prune_batches)
         )
     metrics_dump["val_grounding_vs_k"] = eval_query_grounding_vs_k(
-        cfg, model, clip_model, processor, val_loader, device, ks=ks, max_batches=min(25, int(cfg.eval_batches))
+        cfg, model, clip_model, processor, val_loader, device, ks=ks, max_batches=cap_batches(cfg.eval_batches, 25)
     )
 def _print_epoch_summary(metrics_dump: Dict[str, Any]) -> None:
     sgg = metrics_dump.get("val_sgg", {}) if isinstance(metrics_dump.get("val_sgg", {}), dict) else {}
