@@ -109,3 +109,55 @@ fitting procedure rather than from any feature, and no arm may be reported.
 Budget: CPU only, under 30 minutes total. If the linear arms are all EXHAUSTED
 and `full - prior_only <= 0.25`, STOP. Do not fit the MLP, do not touch the GPU,
 and move to branch B.
+
+---
+
+# Addendum — the pair-matched null (pre-registered 2026-09-01, before the run)
+
+## Why the original null is not sufficient
+
+`shuffled_model` permutes the model term across all rows. That destroys pair
+identity and image content *together*, so it cannot separate the two live
+explanations of the measured `full − prior_only` = +0.68…+0.79 R points:
+
+- **E1** the model is reading something in the image;
+- **E2** the model term is a differently parameterised (subject, object) prior.
+
+E2 is not a strawman. The prior is conditioned on exactly that pair, and a model
+trained on the same distribution can re-express it. Under E2 the "complementary
+information" is real in the sense that it improves the score, and worthless in
+the sense that it is not visual.
+
+## The control
+
+`pair_matched_null` permutes the model term **only among GT rows sharing the same
+(subject, object) category**. Pair identity is preserved exactly; the image is
+destroyed. Feature columns are identical to `full`, so the arms cannot differ in
+capacity — pinned by `test_both_nulls_share_the_full_arms_feature_columns`.
+
+## Known conservatism, stated before the result
+
+MEASURED: 17,172 distinct (subject, object) pairs over 38,053 GT rows, so only
+**54.5%** of rows sit in a non-singleton group. The remaining 45.5% are
+unpermutable and keep their real model term. The null therefore retains part of
+the real signal and is **biased towards the real arm**.
+
+Consequence for reading it, committed here so it cannot be chosen afterwards:
+
+- `full` clearly above `pair_matched_null` → **evidence for E1**, and the true
+  effect is *larger* than the measured gap because the null is conservative.
+- `full ≈ pair_matched_null` → **AMBIGUOUS, not evidence for E2.** With 45.5% of
+  rows unperturbed this outcome is expected under either explanation, and the
+  correct response is a stronger control (a coarser grouping, or restricting the
+  comparison to permutable rows), not a conclusion.
+
+## Criterion
+
+Out-of-fold, nested beta selection, tau=0, k=5, subject to R@50 ≥ 66.5:
+
+- **E1 SUPPORTED**: `full − pair_matched_null` > +0.5 R points and `full` clears
+  the floor where the null does not.
+- **AMBIGUOUS**: gap in [0, +0.5]. Report as ambiguous; do not report E2.
+- **E2 SUPPORTED**: `pair_matched_null` ≥ `full`, i.e. destroying the image costs
+  nothing. This would substantially weaken the session's headline and will be
+  reported as prominently as E1.
