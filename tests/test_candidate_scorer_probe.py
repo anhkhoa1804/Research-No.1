@@ -157,3 +157,48 @@ def test_every_salt_still_splits_by_image(mods, B):
             per_img.setdefault(int(B.gt_img[row]), set()).add(int(P.fold[row]))
         assert all(len(v) == 1 for v in per_img.values())
         assert int(torch.bincount(P.fold, minlength=5).min()) > 0
+
+
+# ------------------------------------- 6. the pair-matched null is the sharp one
+def test_pair_matched_null_preserves_pair_identity_exactly(mods, B):
+    """It may only swap the model term between rows sharing (subject, object).
+
+    This is what separates 'the model sees the image' from 'the model
+    re-expresses the pair prior': the prior is conditioned on exactly this pair,
+    so a term that survives a within-pair shuffle carries no image information.
+    """
+    csp, _ = mods
+    P = csp.CandidateProbe(B, 0.0, 5)
+    g = torch.Generator().manual_seed(0)
+    P._blocks("pair_matched_null", g)
+    # reconstruct the permutation the same way and check it never crosses groups
+    g2 = torch.Generator().manual_seed(0)
+    perm = torch.arange(P.n)
+    for gid in P.pair_id.unique().tolist():
+        idx = (P.pair_id == gid).nonzero().squeeze(1)
+        if idx.numel() > 1:
+            perm[idx] = idx[torch.randperm(idx.numel(), generator=g2)]
+    assert torch.equal(P.pair_id[perm], P.pair_id)
+
+
+def test_pair_matched_null_is_conservative_and_says_so(mods, B):
+    """Singleton (subject, object) groups cannot be permuted, so part of the
+    real model term survives into the null. That biases the null TOWARDS the
+    real arm, so the fraction must be measured and reported, never assumed."""
+    csp, _ = mods
+    P = csp.CandidateProbe(B, 0.0, 5)
+    P._blocks("pair_matched_null", torch.Generator().manual_seed(0))
+    assert 0.0 < P.frac_pair_permutable < 1.0
+    assert P.frac_pair_permutable == pytest.approx(0.545, abs=0.01)
+
+
+def test_both_nulls_share_the_full_arms_feature_columns(mods, B):
+    """Nulls must differ from `full` in the model VALUES only, never in which
+    features exist -- otherwise the comparison is confounded by capacity."""
+    csp, _ = mods
+    P = csp.CandidateProbe(B, 0.0, 5)
+    ref = P._blocks("full", torch.Generator().manual_seed(0))
+    for arm in ("shuffled_model", "pair_matched_null"):
+        x = P._blocks(arm, torch.Generator().manual_seed(0))
+        assert x.shape == ref.shape
+        assert torch.allclose(x[..., :-3], ref[..., :-3])

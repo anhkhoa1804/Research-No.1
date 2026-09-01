@@ -58,7 +58,7 @@ CALIBRATION_EPS = 0.25      # "full adds nothing beyond a decision rule" thresho
 NULL_MARGIN_PTS = 1.0
 N_FOLDS = 5
 SEED = 0
-ARMS = ["prior_only", "model_only", "full", "shuffled_model"]
+ARMS = ["prior_only", "model_only", "full", "shuffled_model", "pair_matched_null"]
 
 
 def _log(m: str = "") -> None:
@@ -106,6 +106,20 @@ class CandidateProbe:
         eq = (self.cand == self.gt_col.unsqueeze(1))
         self.gt_pos = torch.where(self.gt_in, eq.float().argmax(-1), torch.full((self.n,), -1)).long()
 
+        # row-level (subject, object) category identity, for the pair-matched
+        # null. The prior is CONDITIONED on this pair, so a model term that only
+        # re-expresses it is not visual information -- it is a differently
+        # parameterised prior. Nothing else in this file distinguishes the two.
+        d = B.meta
+        sl, ol = [], []
+        for i in range(B.n_images):
+            sl.extend(d["subj_label"][i])
+            ol.extend(d["obj_label"][i])
+        pair_key = [f"{a}|{b}" for a, b in zip(sl, ol)]
+        uniq = {kk: j for j, kk in enumerate(sorted(set(pair_key)))}
+        self.pair_id_allrows = torch.tensor([uniq[x] for x in pair_key], dtype=torch.long)
+        self.pair_id = self.pair_id_allrows[B.gt_row]
+
         self.fold = torch.tensor([fold_of_image(B.meta["image_id"][int(i)],
                                                 N_FOLDS, fold_salt)
                                   for i in B.gt_img], dtype=torch.long)
@@ -118,7 +132,22 @@ class CandidateProbe:
         pr_c = self.pr[ar, self.cand]                                  # (n,k)
         md_c = self.md[ar, self.cand]
 
-        if arm == "shuffled_model":
+        if arm == "pair_matched_null":
+            # Permute the model term only AMONG rows sharing the same
+            # (subject, object) category. Pair identity -- everything the prior
+            # conditions on -- is preserved exactly; the image content is
+            # destroyed. If `full` still beats this, the gain is specific to the
+            # image and not a re-expression of the pair prior. Rows in singleton
+            # groups are unpermutable and keep their own term, which makes this
+            # null CONSERVATIVE (biased towards the real arm), so it is reported.
+            perm = torch.arange(n)
+            for gid in self.pair_id.unique().tolist():
+                idx = (self.pair_id == gid).nonzero().squeeze(1)
+                if idx.numel() > 1:
+                    perm[idx] = idx[torch.randperm(idx.numel(), generator=gen)]
+            self.frac_pair_permutable = float((perm != torch.arange(n)).float().mean())
+            md_c = self.md[perm.unsqueeze(1).expand(n, k), self.cand]
+        elif arm == "shuffled_model":
             # Permute the MODEL term across rows, preserving each row's internal
             # candidate structure. Destroys the row<->model correspondence while
             # keeping the marginal distribution of the feature identical.
@@ -142,7 +171,9 @@ class CandidateProbe:
         # ability to gate on that explicitly rather than hoping it infers it.
         model_blk = [md_c.unsqueeze(-1), md_rel.unsqueeze(-1),
                      (md_rel * row_margin.squeeze(-1)).unsqueeze(-1)]
-        if arm == "prior_only":
+        if arm in ("shuffled_model", "pair_matched_null"):
+            blk = prior_blk + model_blk
+        elif arm == "prior_only":
             blk = prior_blk
         elif arm == "model_only":
             blk = model_blk + [rank1h]      # rank is structural, not prior info
