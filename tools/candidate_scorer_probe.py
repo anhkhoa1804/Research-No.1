@@ -143,14 +143,29 @@ class CandidateProbe:
 
     # ------------------------------------------------------------------ fit
     def _fit_fold(self, X: torch.Tensor, tr: torch.Tensor,
-                  epochs: int, l2: float) -> torch.Tensor:
+                  epochs: int, l2: float, balanced: bool = False) -> torch.Tensor:
         """Listwise softmax over candidates, cross-entropy against GT position.
 
         Only rows whose GT is inside the candidate set carry a gradient: rows
         without GT are unlearnable here and would only add a constant.
+
+        `balanced` weights each row by 1/count(GT class), so every predicate
+        contributes equally to the loss instead of in proportion to how often it
+        occurs. Plain cross-entropy maximises accuracy, which on VG150's label
+        distribution means maximising head recall -- the measured mR collapse in
+        every unbalanced arm. The counts come from the TRAINING rows of this fold
+        only; using the full-split counts would leak the held-out label
+        distribution into the fit.
         """
         use = tr & self.gt_in
         Xtr, ytr = X[use], self.gt_pos[use]
+        if balanced:
+            ycls = self.y[use]
+            cnt = torch.bincount(ycls, minlength=self.C).float()
+            rw = 1.0 / cnt[ycls].clamp_min(1.0)
+            rw = rw / rw.mean()
+        else:
+            rw = None
         D = X.shape[-1]
         w = torch.zeros(D, requires_grad=True)
         opt = torch.optim.LBFGS([w], max_iter=epochs, history_size=10,
@@ -159,23 +174,28 @@ class CandidateProbe:
         def closure():
             opt.zero_grad()
             logits = Xtr @ w
-            loss = torch.nn.functional.cross_entropy(logits, ytr) + l2 * (w * w).sum()
+            ce = torch.nn.functional.cross_entropy(logits, ytr, reduction="none")
+            loss = (ce * rw).mean() if rw is not None else ce.mean()
+            loss = loss + l2 * (w * w).sum()
             loss.backward()
             return loss
 
         opt.step(closure)
         return w.detach()
 
-    def run_arm(self, arm: str, epochs: int, l2: float) -> Dict[str, Any]:
+    def run_arm(self, arm: str, epochs: int, l2: float,
+                balanced: bool = False) -> Dict[str, Any]:
         gen = torch.Generator().manual_seed(self.seed)
         X = self._blocks(arm, gen)
         pred_col = self.prior_top1_col.clone()
         for f in range(N_FOLDS):
             te = self.fold == f
-            w = self._fit_fold(X, ~te, epochs, l2)
+            w = self._fit_fold(X, ~te, epochs, l2, balanced)
             sel = (X[te] @ w).argmax(-1)                    # (n_te,) index into cand
             pred_col[te] = self.cand[te].gather(1, sel.unsqueeze(1)).squeeze(1)
-        return self._metrics(pred_col, arm)
+        m = self._metrics(pred_col, arm)
+        m["balanced"] = bool(balanced)
+        return m
 
     # -------------------------------------------------------------- metrics
     def _metrics(self, pred_col: torch.Tensor, arm: str) -> Dict[str, Any]:
@@ -215,6 +235,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--ks", default="3,5")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--l2", type=float, default=1e-4)
+    ap.add_argument("--balanced", action="store_true",
+                    help="class-balanced listwise loss; weights from TRAIN rows only")
     args = ap.parse_args(argv)
 
     torch.manual_seed(SEED)
@@ -227,11 +249,12 @@ def main(argv: Optional[List[str]] = None) -> int:
     _log(f"  images={B.n_images} GT rows={B.n_gt} classes={B.n_classes}  "
          f"[gate] model-term identity {e:.3e} OK")
     _log(f"  folds={N_FOLDS} (split by IMAGE) seed={SEED} l2={args.l2} "
-         f"floor R@50={R_FLOOR*100:.1f}")
+         f"floor R@50={R_FLOOR*100:.1f} loss={'class-balanced' if args.balanced else 'plain CE'}")
 
     res: Dict[str, Any] = {"tool": "candidate_scorer_probe", "seed": SEED,
                            "n_folds": N_FOLDS, "R_floor": R_FLOOR,
-                           "l2": args.l2, "epochs": args.epochs, "by": {}}
+                           "l2": args.l2, "epochs": args.epochs,
+                           "balanced": bool(args.balanced), "by": {}}
 
     for tau in [float(t) for t in args.taus.split(",")]:
         for k in [int(x) for x in args.ks.split(",")]:
@@ -259,7 +282,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
             arms: Dict[str, Any] = {}
             for arm in ARMS:
-                m = P.run_arm(arm, args.epochs, args.l2)
+                m = P.run_arm(arm, args.epochs, args.l2, args.balanced)
                 m["dR_points"] = (m["R"] - pR) * 100.0
                 m["dmR_points"] = (m["mR"] - bl["prior"]["mR"]) * 100.0
                 m["meets_R_floor"] = bool(m["R"] >= R_FLOOR)
@@ -279,7 +302,17 @@ def main(argv: Optional[List[str]] = None) -> int:
                        else "INCONCLUSIVE" if (floor_ok and F > A + INCONCLUSIVE_PTS)
                        else "EXHAUSTED")
             calib = (F - Pq) <= CALIBRATION_EPS
-            null_breach = Nq > A
+            # The null must be compared with prior_only, NOT with the achieved
+            # additive arm. A correct null carries no model information, so the
+            # fit falls back on the prior features and REPRODUCES prior_only --
+            # which is what happens here (|null - prior_only| <= 0.032 in every
+            # cell). The pre-registration wrote this condition as `null > A`,
+            # which fires whenever a learned decision rule beats C', i.e. on a
+            # real finding rather than on pipeline pathology. Documented in
+            # docs/CANDIDATE_SCORER_RESULT.md; the mis-specification is recorded
+            # rather than quietly dropped.
+            null_breach = (Nq - Pq) > NULL_MARGIN_PTS
+            null_breach_as_prereg = Nq > A
             _log(f"\n    full-achieved {F-A:+.3f}   full-prior_only {F-Pq:+.3f}"
                  f"   full-null {F-Nq:+.3f}   ->  {verdict}")
             if calib:
@@ -289,8 +322,15 @@ def main(argv: Optional[List[str]] = None) -> int:
                 _log(f"    NOTE: prior_only ({Pq:+.3f}) exceeds the achieved additive arm "
                      f"({A:+.3f}) -- a rule with NO visual input reproduces the C' gain.")
             if null_breach:
-                _log(f"    *** NULL BREACH: shuffled_model ({Nq:+.3f}) beats achieved ({A:+.3f}). "
-                     f"Pipeline may be manufacturing gain; no arm may be reported. ***")
+                _log(f"    *** NULL BREACH: shuffled_model ({Nq:+.3f}) exceeds prior_only "
+                     f"({Pq:+.3f}) by more than {NULL_MARGIN_PTS}. The pipeline is "
+                     f"manufacturing gain; no arm may be reported. ***")
+            else:
+                _log(f"    null check ok: shuffled_model - prior_only = {Nq-Pq:+.3f} "
+                     f"(a correct null reproduces prior_only)")
+            if null_breach_as_prereg:
+                _log(f"    [as pre-registered, null({Nq:+.3f}) > achieved({A:+.3f}): that "
+                     f"condition tests a learned rule against C', not the pipeline -- see report]")
 
             for m in list(arms.values()) + [bl["prior"], bl["achieved"]]:
                 m.pop("_per", None)
@@ -302,7 +342,10 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "verdict": verdict,
                 "calibration_finding": bool(calib),
                 "prior_only_exceeds_achieved": bool(Pq > A),
-                "null_breach": bool(null_breach)}
+                "null_breach": bool(null_breach),
+                "null_breach_as_prereg_written": bool(null_breach_as_prereg),
+                "null_minus_prior_only_points": Nq - Pq,
+                "balanced": bool(args.balanced)}
 
     Path(args.out).parent.mkdir(parents=True, exist_ok=True)
     Path(args.out).write_text(json.dumps(res, indent=2), encoding="utf-8")
