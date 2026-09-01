@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 69,
-  "total_bytes": 957177439,
+  "n_runs": 77,
+  "total_bytes": 957251580,
   "runs": [
     {
       "name": "p10_model_recalibration",
@@ -2731,6 +2731,470 @@
         }
       ],
       "total_bytes": 28043,
+      "status": "OK"
+    },
+    {
+      "name": "p42_within_group_decomp",
+      "path": "runs/p42_within_group_decomp",
+      "command": ".venv/bin/python3 tools/within_group_decomposition.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p42_within_group_decomp/decomp.json --cap 64 --boot 200",
+      "commit": "6184fdc2f25dd89589ff1960010a61e5eb8f439e",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Separates the four quantities p32's interpretation requires. (1) WPRD is invariant to anything constant within a group, so the 82.6% between-group share of the model term contributes EXACTLY ZERO to it -- WPRD and R@50 read different halves. Gated by recomputing WPRD on the group-centred term and requiring bit-equality. (2) Splits the within-group component into a box-geometry-predictable part and a residual, cross-fitted out-of-fold on the project's own folds, and measures WPRD of each. Tests directly whether the checkpoint's within-pair discrimination is layout or something else. CPU only; p36 owns the GPU.",
+      "exit_code": 0,
+      "runtime_seconds": 100.87,
+      "started_at_utc": "2026-09-01T17:31:37.570580+00:00",
+      "files": [
+        {
+          "path": "runs/p42_within_group_decomp/command.txt",
+          "size_bytes": 223,
+          "sha256": "8868050f3b687a1b743fda72c591ffb0df921e5457558287c8dcbd95e904a8d9",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p42_within_group_decomp/decomp.json",
+          "size_bytes": 1605,
+          "sha256": "06d1e516de49a093b38c879ed85891cb8fc6f31c767ab87a714bc83c9c4fbdc4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p42_within_group_decomp/provenance.json",
+          "size_bytes": 3281,
+          "sha256": "ab4a25ade3e0314366244db25d4e7ca8918aad4398a939ca85095566cf48dbbf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p42_within_group_decomp/result.json",
+          "size_bytes": 522,
+          "sha256": "aeb4cbf1be73db84d803cad32a458e169f3425828e3fb5850d74dd58ea36daea",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p42_within_group_decomp/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p42_within_group_decomp/stdout.log",
+          "size_bytes": 2395,
+          "sha256": "fe7a4a62d067aafc2f3276cc8db4f631e65185c1ca740a627ed18621a04793f6",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8026,
+      "status": "OK"
+    },
+    {
+      "name": "p43_prior_adversarial",
+      "path": "runs/p43_prior_adversarial",
+      "command": ".venv/bin/python3 tools/prior_adversarial.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p43_prior_adversarial/adv.json --taus 0.0,0.05,0.1 --weights 0.25,0.5,1.0",
+      "commit": "eff0d5316418e7abd549f4ac490c8ea1aad9fd39",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "C7 of the benchmark prototype. On rows where following P(p|s,o) is WRONG (prior argmax != GT; the prior is train-derived so this population is defined without touching validation labels), does the model fix them, and at what cost on the rows the prior already had right? Reports benefit and cost together.",
+      "exit_code": 0,
+      "runtime_seconds": 175.687,
+      "started_at_utc": "2026-09-01T17:39:19.568804+00:00",
+      "files": [
+        {
+          "path": "runs/p43_prior_adversarial/adv.json",
+          "size_bytes": 6381,
+          "sha256": "99efec43caadcb3a506db6a7e77b60251fce8e2e7139dd61ebab3474bb4bc515",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p43_prior_adversarial/command.txt",
+          "size_bytes": 279,
+          "sha256": "c83617a30491b286d52e50dcfdb721f96c5dc4383b346545ceb72b98fd78e51e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p43_prior_adversarial/provenance.json",
+          "size_bytes": 2945,
+          "sha256": "8214e72f0ef6c39ae9ce1030551c3a6dc9b0f4976c9a1c1c8587bb8cbf115a57",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p43_prior_adversarial/result.json",
+          "size_bytes": 591,
+          "sha256": "d5b5093df22976d6890e6f4f55356a37249d264d4c42b2d4fcf8f20185aedce7",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p43_prior_adversarial/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p43_prior_adversarial/stdout.log",
+          "size_bytes": 4142,
+          "sha256": "eec1da064b7aa882e4bae8efe0be412d2e0c60fc291f0e206ac60361a88259c0",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 14338,
+      "status": "OK"
+    },
+    {
+      "name": "p44_prior_absorption",
+      "path": "runs/p44_prior_absorption",
+      "command": ".venv/bin/python3 tools/prior_absorption.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p44_prior_absorption/absorb.json --tau 0.0",
+      "commit": "64626d1a9a6787464d7f3706834e88ebf2f95233",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Tests the single principle that would explain the whole cycle: PRIOR ABSORPTION -- the visual pathway is optimised to predict P(p|s,o) rather than to deviate from it, because deviation is penalised on average even though it is exactly what the 33.4% prior-adversarial rows require. Sharp falsifiable prediction: the model's OUTPUT should be MORE determined by (s,o) than the GROUND TRUTH is. Measured by within-group label entropy and by best pair-constant predictor accuracy, on decidable rows.",
+      "exit_code": 0,
+      "runtime_seconds": 171.093,
+      "started_at_utc": "2026-09-01T17:44:30.509720+00:00",
+      "files": [
+        {
+          "path": "runs/p44_prior_absorption/absorb.json",
+          "size_bytes": 1858,
+          "sha256": "39be9106305b1b45f10bb0b46ab9edd5848ed367f3911a240c232d29e2c66e7b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p44_prior_absorption/command.txt",
+          "size_bytes": 247,
+          "sha256": "d6452e32a2187932547b4a3df91127f046ea3211d9898cfb2b1bfe1ff12384bb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p44_prior_absorption/provenance.json",
+          "size_bytes": 3157,
+          "sha256": "889525e1c172d55766e691975e82815a3b7c3fa6c99b95895079751dd0e4214d",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p44_prior_absorption/result.json",
+          "size_bytes": 544,
+          "sha256": "670ec6a09e658780f190747b624d96f0d6eb1b3e25111a80c9465cd934a10323",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p44_prior_absorption/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p44_prior_absorption/stdout.log",
+          "size_bytes": 1916,
+          "sha256": "23f3b32a9203fbb58520804f932da6ba6ea2926d9d94a980232c307c410b109c",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7722,
+      "status": "OK"
+    },
+    {
+      "name": "p45_within_pair_composition",
+      "path": "runs/p45_within_pair_composition",
+      "command": ".venv/bin/python3 tools/within_pair_composition.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p45_within_pair_composition/comp.json --tau 0.0 --lambdas 1.0,1.5,2.0,3.0,5.0,8.0,12.0",
+      "commit": "d6494a1460da597f77ad76f896196a95f181eb06",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Pre-registered in docs/WITHIN_PAIR_COMPOSITION_PREREGISTRATION.md (commit d6494a1) before this tool was written. Tests p44's PRIOR OVERWRITE prediction: amplifying only the within-group component of the model term at decision time should recover a disproportionate share of prior-adversarial rows, with no retraining. Transductive headroom diagnostic; both nulls carried.",
+      "exit_code": 0,
+      "runtime_seconds": 149.61,
+      "started_at_utc": "2026-09-01T17:50:28.786715+00:00",
+      "files": [
+        {
+          "path": "runs/p45_within_pair_composition/command.txt",
+          "size_bytes": 298,
+          "sha256": "ff4b985b8fb2c8ee049265b1f7fd9e5bede6099ace78bcced6bb7b2910e0b19f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p45_within_pair_composition/comp.json",
+          "size_bytes": 6168,
+          "sha256": "9034c20b617cd4338b3bf79c265101e850e334bc66b518f86d0ccafb2c3fb458",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p45_within_pair_composition/provenance.json",
+          "size_bytes": 3032,
+          "sha256": "a91d2be187cee8397a4a2aa23f0c8b5c5465ed0c9d3bc377c5ff0974d97592c7",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p45_within_pair_composition/result.json",
+          "size_bytes": 615,
+          "sha256": "a3c37786aabade438ea6844d4ab73bc56d8442254d3df107b8cb9d7a8a5daa11",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p45_within_pair_composition/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p45_within_pair_composition/stdout.log",
+          "size_bytes": 3943,
+          "sha256": "dfcfb860b873e8d49d9ed8dee6adf7c8d571f5c92834b39bee8bf340efcb615a",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 14056,
+      "status": "OK"
+    },
+    {
+      "name": "p46_geometry_ceiling",
+      "path": "runs/p46_geometry_ceiling",
+      "command": ".venv/bin/python3 tools/wprd_geometry_ceiling.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p46_geometry_ceiling/ceiling.json --hidden 256 --epochs 30",
+      "commit": "e16308eb36db79363fc4552c8064579666e334f7",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Calibration the diagnosis was missing: is WPRD 0.5542 low, or near what VG150 permits? Within a group the subject label, object label and prior are all CONSTANT, so only pixels and boxes vary. The box channel's ceiling is therefore measurable on CPU with no model. Compares a train-fitted MLP against the train-fitted linear probe and both heads, with a shuffled-label MLP control. CPU only; p36 owns the GPU.",
+      "exit_code": 0,
+      "runtime_seconds": 363.048,
+      "started_at_utc": "2026-09-01T18:00:53.264849+00:00",
+      "files": [
+        {
+          "path": "runs/p46_geometry_ceiling/ceiling.json",
+          "size_bytes": 1642,
+          "sha256": "2a64d949e7e91da6e1deeb29b6452674be6bd7c3b77f61a1a45fb9d632f1b6cf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p46_geometry_ceiling/command.txt",
+          "size_bytes": 268,
+          "sha256": "5410d5c2ad758f313c0fd9eb52e8332da4d448b6b0456563f7dfeafee5ce5ec9",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p46_geometry_ceiling/provenance.json",
+          "size_bytes": 3071,
+          "sha256": "d42b61c3efac3348cf8cd208f740c60ec979b5921332300f35d0f1244ea9e8d3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p46_geometry_ceiling/result.json",
+          "size_bytes": 579,
+          "sha256": "82e00199f9dc6055be7162fd9af4d10df7ee29e1a00befea0259132afd9d4d12",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p46_geometry_ceiling/stderr.log",
+          "size_bytes": 340,
+          "sha256": "2f8ee4133cabdfb29661b93f03497691d74fef7993f65390c60d087230cc2cb0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p46_geometry_ceiling/stdout.log",
+          "size_bytes": 1879,
+          "sha256": "f17e1dda7393959d2fa02a0e32cb04252e9740106db8ee65d9ee3b71ccaa629e",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7779,
+      "status": "OK"
+    },
+    {
+      "name": "p47_evaluation_table",
+      "path": "runs/p47_evaluation_table",
+      "command": ".venv/bin/python3 tools/sgg_evaluation_table.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p47_evaluation_table/table.json --tau 0.0",
+      "commit": "4952acf321ed48a560e9e413fae94bd5a08941c6",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "The Paper-1 table. Emits R@50/mR@50/Pareto (which conflate pair prior, calibration, candidate selection and relational discrimination) beside WPRD (which isolates the last) and WPRD by predicate bucket, for every arm on identical cells. Model-agnostic: --extra name=path.pt accepts any per-pair predicate logits in the cache's row order and vocabulary, so a cross-model study is not blocked on any one codebase.",
+      "exit_code": 0,
+      "runtime_seconds": 188.3,
+      "started_at_utc": "2026-09-01T18:08:33.364739+00:00",
+      "files": [
+        {
+          "path": "runs/p47_evaluation_table/command.txt",
+          "size_bytes": 250,
+          "sha256": "03fbf4a1a9854f13354043a046c3a3ed0622f2704bb11478bdef4a8d3194618b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p47_evaluation_table/provenance.json",
+          "size_bytes": 3072,
+          "sha256": "8c89d603774a8a890bb73c6c515481dd2d9ba875f9a2ec3b0ec89539043bdac3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p47_evaluation_table/result.json",
+          "size_bytes": 545,
+          "sha256": "bb9091d840e0d269aea3de86c986a0bca64ed2fedc0d29f74485d1abd52cf405",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p47_evaluation_table/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p47_evaluation_table/stdout.log",
+          "size_bytes": 1808,
+          "sha256": "30cf32d34aee30062f629c15794cfee2441154bb4ab89e5ebbf5b2125f9b39c7",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p47_evaluation_table/table.json",
+          "size_bytes": 2439,
+          "sha256": "6fa349f3e182cb9be02ad14c1f8121ad974b83874a7cb9f69f37c82dc885cf56",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8114,
+      "status": "OK"
+    },
+    {
+      "name": "p48_objective_ablation",
+      "path": "runs/p48_objective_ablation",
+      "command": ".venv/bin/python3 tools/objective_ablation.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p48_objective_ablation/obj.json --hidden 256 --epochs 30",
+      "commit": "1c96295e15fde4919c97690517e9659317d200e7",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "H2 test that does not need rel_feat. Holds features (19 box-geometry numbers), capacity (2-layer 256 MLP), data (train split) and evaluation (WPRD on the same val cells) FIXED, and varies only the loss: plain cross-entropy vs a within-group contrastive surrogate for WPRD itself. The prior cancels in the contrastive double difference, so the objective cannot be satisfied by learning P(p|s,o). Criterion pre-registered inline: SUPPORTED >= +0.02, WEAK >= +0.005. The identical comparison transfers to rel_feat when p36 lands.",
+      "exit_code": 0,
+      "runtime_seconds": 415.667,
+      "started_at_utc": "2026-09-01T18:15:55.629747+00:00",
+      "files": [
+        {
+          "path": "runs/p48_objective_ablation/command.txt",
+          "size_bytes": 263,
+          "sha256": "e3bb2fed0a2471bbf49affc6d6ac39b60e3f9956e2a4196ba814af894fc18034",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p48_objective_ablation/obj.json",
+          "size_bytes": 719,
+          "sha256": "a5e37d3e5dd719d9418497f4e5f5dd57e333c321c94064514e233d9092f6c81d",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p48_objective_ablation/provenance.json",
+          "size_bytes": 3199,
+          "sha256": "4cd767ceea1d24de57df3d1895be99c179b589ce545e0b92a4ba141682f676cb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p48_objective_ablation/result.json",
+          "size_bytes": 576,
+          "sha256": "31096be911c3b1e37f30fb91f7aa61c7158a4a5a75956858200189b11d9c4caf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p48_objective_ablation/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p48_objective_ablation/stdout.log",
+          "size_bytes": 1480,
+          "sha256": "d6f305395914545008f9befe0d04262d9d32b53ceb060c3622408fd1e82b7e39",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6237,
+      "status": "OK"
+    },
+    {
+      "name": "p49_metric_grounding",
+      "path": "runs/p49_metric_grounding",
+      "command": ".venv/bin/python3 tools/metric_grounding_correlation.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p49_metric_grounding/corr.json --tau 0.0",
+      "commit": "0fc2c3ba68843b9b40fb0a75fa0ef7a8f39955a6",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Addresses the n=4 weakness in p47. Widens the family to twelve scoring functions, all composed and evaluated identically, and computes Spearman rank correlation between each composed metric and WPRD with a permutation p-value. These are NOT published SGG models -- that study remains the gate on any general claim -- but this can establish whether the inversion is systematic across a diverse family or an accident of which four arms were in the table.",
+      "exit_code": 0,
+      "runtime_seconds": 311.411,
+      "started_at_utc": "2026-09-01T18:27:17.019564+00:00",
+      "files": [
+        {
+          "path": "runs/p49_metric_grounding/command.txt",
+          "size_bytes": 257,
+          "sha256": "4785c1bb6427f4e1e7810313dff6b013e26bc9aa82fcf8d819f74063a76001de",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p49_metric_grounding/corr.json",
+          "size_bytes": 2455,
+          "sha256": "74894d1d1fe06928ae27b00eee3da67d1d75eccd0c6cddf6d7d688e4307bb7ba",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p49_metric_grounding/provenance.json",
+          "size_bytes": 3112,
+          "sha256": "c160287050d6e67e812790d80f0492b6b04d605814d01c153779c4109ac48c48",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p49_metric_grounding/result.json",
+          "size_bytes": 554,
+          "sha256": "ccc7719e745786ab823ff53fd8ba86bf1157c06affc668dd72fed182353dc783",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p49_metric_grounding/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p49_metric_grounding/stdout.log",
+          "size_bytes": 1491,
+          "sha256": "ea05de7844200867d02ab24f08449783934da24f435892293847ab5fb0637915",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7869,
       "status": "OK"
     },
     {
