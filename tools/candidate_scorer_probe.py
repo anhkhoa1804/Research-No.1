@@ -143,26 +143,29 @@ class CandidateProbe:
 
     # ------------------------------------------------------------------ fit
     def _fit_fold(self, X: torch.Tensor, tr: torch.Tensor,
-                  epochs: int, l2: float, balanced: bool = False) -> torch.Tensor:
+                  epochs: int, l2: float, beta: float = 0.0) -> torch.Tensor:
         """Listwise softmax over candidates, cross-entropy against GT position.
 
         Only rows whose GT is inside the candidate set carry a gradient: rows
         without GT are unlearnable here and would only add a constant.
 
-        `balanced` weights each row by 1/count(GT class), so every predicate
-        contributes equally to the loss instead of in proportion to how often it
-        occurs. Plain cross-entropy maximises accuracy, which on VG150's label
-        distribution means maximising head recall -- the measured mR collapse in
-        every unbalanced arm. The counts come from the TRAINING rows of this fold
-        only; using the full-split counts would leak the held-out label
-        distribution into the fit.
+        `beta` weights each row by count(GT class)^-beta. beta=0 is plain
+        cross-entropy, which maximises accuracy and therefore -- on VG150's label
+        distribution -- maximises HEAD recall; beta=1 is fully class-balanced,
+        which maximises mR. Sweeping beta traces the scorer's own R/mR frontier,
+        which is the only fair thing to compare against the prior-only tau
+        frontier: both are one-parameter families trading the same two axes.
+
+        The counts come from the TRAINING rows of this fold only. Using
+        full-split counts would leak the held-out label distribution into the
+        fit, which at beta=1 is most of the signal.
         """
         use = tr & self.gt_in
         Xtr, ytr = X[use], self.gt_pos[use]
-        if balanced:
+        if beta > 0.0:
             ycls = self.y[use]
             cnt = torch.bincount(ycls, minlength=self.C).float()
-            rw = 1.0 / cnt[ycls].clamp_min(1.0)
+            rw = cnt[ycls].clamp_min(1.0) ** (-beta)
             rw = rw / rw.mean()
         else:
             rw = None
@@ -184,17 +187,17 @@ class CandidateProbe:
         return w.detach()
 
     def run_arm(self, arm: str, epochs: int, l2: float,
-                balanced: bool = False) -> Dict[str, Any]:
+                beta: float = 0.0) -> Dict[str, Any]:
         gen = torch.Generator().manual_seed(self.seed)
         X = self._blocks(arm, gen)
         pred_col = self.prior_top1_col.clone()
         for f in range(N_FOLDS):
             te = self.fold == f
-            w = self._fit_fold(X, ~te, epochs, l2, balanced)
+            w = self._fit_fold(X, ~te, epochs, l2, beta)
             sel = (X[te] @ w).argmax(-1)                    # (n_te,) index into cand
             pred_col[te] = self.cand[te].gather(1, sel.unsqueeze(1)).squeeze(1)
         m = self._metrics(pred_col, arm)
-        m["balanced"] = bool(balanced)
+        m["beta"] = float(beta)
         return m
 
     # -------------------------------------------------------------- metrics
@@ -224,6 +227,46 @@ class CandidateProbe:
                 "candidate_coverage": float(self.gt_in.float().mean())}
 
 
+def frontier(B: Mech, tau: float, k: int, betas: List[float],
+             epochs: int, l2: float) -> Dict[str, Any]:
+    """Trace the learned scorer's R/mR frontier and compare it with tau's.
+
+    THE question this project has not yet asked in a falsifiable form: the tau
+    frontier is a one-parameter family trading R@50 for mR@50 with NO visual
+    input. If the learned scorer's own one-parameter family (beta) merely lands
+    ON that frontier, everything measured so far is calibration. If it lies
+    ABOVE it, the model buys something calibration cannot.
+
+    `pareto_gap` is cprime_analysis's, so the frontier and the gap are the same
+    ones every other C' table uses.
+    """
+    CPAm = sys.modules["cprime_analysis"]
+    curve = [{"R": (m := B.metrics(B.score(t, ALPHA_HIST, None)))["R"], "mR": m["mR"]}
+             for t in CPAm.TAUS]
+    P = CandidateProbe(B, tau, k)
+    bl = P.baselines()
+    rows = []
+    for arm in ("prior_only", "full", "shuffled_model"):
+        for beta in betas:
+            m = P.run_arm(arm, epochs, l2, beta)
+            m["dR_points"] = (m["R"] - bl["prior"]["R"]) * 100.0
+            m["dmR_points"] = (m["mR"] - bl["prior"]["mR"]) * 100.0
+            # pareto_gap ALREADY returns mR points, not a fraction. Scaling it
+            # by 100 again reported the achieved arm at +86.079 instead of its
+            # true +0.861 -- and +0.861 is exactly its dmR, which is the
+            # tau=0 lower-bound branch of the frontier, i.e. the cross-check
+            # that caught it.
+            m["pareto_dmR_points"] = CPAm.pareto_gap(curve, m["R"], m["mR"])
+            m["meets_R_floor"] = bool(m["R"] >= R_FLOOR)
+            m.pop("_per", None)
+            rows.append(m)
+    ach = bl["achieved"]
+    return {"tau": tau, "k": k, "betas": betas,
+            "tau_frontier": [{"tau": t, **c} for t, c in zip(CPAm.TAUS, curve)],
+            "achieved_pareto_dmR_points": CPAm.pareto_gap(curve, ach["R"], ach["mR"]),
+            "rows": rows, "baselines": bl}
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -235,6 +278,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--ks", default="3,5")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--l2", type=float, default=1e-4)
+    ap.add_argument("--frontier", action="store_true",
+                    help="sweep beta and compare the learned R/mR frontier with tau's")
+    ap.add_argument("--betas", default="0.0,0.1,0.2,0.3,0.5,0.75,1.0")
     ap.add_argument("--balanced", action="store_true",
                     help="class-balanced listwise loss; weights from TRAIN rows only")
     args = ap.parse_args(argv)
@@ -250,6 +296,36 @@ def main(argv: Optional[List[str]] = None) -> int:
          f"[gate] model-term identity {e:.3e} OK")
     _log(f"  folds={N_FOLDS} (split by IMAGE) seed={SEED} l2={args.l2} "
          f"floor R@50={R_FLOOR*100:.1f} loss={'class-balanced' if args.balanced else 'plain CE'}")
+
+    if args.frontier:
+        betas = [float(b) for b in args.betas.split(",")]
+        out: Dict[str, Any] = {"tool": "candidate_scorer_probe_frontier",
+                               "seed": SEED, "n_folds": N_FOLDS,
+                               "R_floor": R_FLOOR, "betas": betas, "by": {}}
+        for tau in [float(t) for t in args.taus.split(",")]:
+            for k in [int(x) for x in args.ks.split(",")]:
+                fr = frontier(B, tau, k, betas, args.epochs, args.l2)
+                bl = fr["baselines"]
+                _log(f"\n{'-'*104}\n  FRONTIER  tau={tau} k={k}   prior R@50 "
+                     f"{bl['prior']['R']*100:.3f} mR {bl['prior']['mR']*100:.3f}   |  achieved "
+                     f"R@50 {bl['achieved']['R']*100:.3f} mR {bl['achieved']['mR']*100:.3f}"
+                     f"  paretoGap {fr['achieved_pareto_dmR_points']:+.3f}\n{'-'*104}")
+                _log(f"  {'arm':>12} {'beta':>6} {'R@50':>8} {'mR@50':>8} {'dR':>8} {'dmR':>8}"
+                     f" {'paretoGap':>10} {'floor':>6} {'head':>7} {'body':>7} {'tail':>7}")
+                for r in fr["rows"]:
+                    pg = r["pareto_dmR_points"]
+                    _log(f"  {r['arm']:>12} {r['beta']:>6.2f} {r['R']*100:>8.3f} {r['mR']*100:>8.3f}"
+                         f" {r['dR_points']:>+8.3f} {r['dmR_points']:>+8.3f}"
+                         f" {('n/a' if pg is None else f'{pg:+.3f}'):>10}"
+                         f" {'ok' if r['meets_R_floor'] else 'FAIL':>6}"
+                         f" {r['head_mR']*100:>7.2f} {r['body_mR']*100:>7.2f} {r['tail_mR']*100:>7.2f}")
+                fr["baselines"]["prior"].pop("_per", None)
+                fr["baselines"]["achieved"].pop("_per", None)
+                out["by"][f"tau{tau}_k{k}"] = fr
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(json.dumps(out, indent=2), encoding="utf-8")
+        _log(f"\n[written] {args.out}")
+        return 0
 
     res: Dict[str, Any] = {"tool": "candidate_scorer_probe", "seed": SEED,
                            "n_folds": N_FOLDS, "R_floor": R_FLOOR,
@@ -282,7 +358,7 @@ def main(argv: Optional[List[str]] = None) -> int:
 
             arms: Dict[str, Any] = {}
             for arm in ARMS:
-                m = P.run_arm(arm, args.epochs, args.l2, args.balanced)
+                m = P.run_arm(arm, args.epochs, args.l2, 1.0 if args.balanced else 0.0)
                 m["dR_points"] = (m["R"] - pR) * 100.0
                 m["dmR_points"] = (m["mR"] - bl["prior"]["mR"]) * 100.0
                 m["meets_R_floor"] = bool(m["R"] >= R_FLOOR)
