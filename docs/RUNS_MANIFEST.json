@@ -1,0 +1,2949 @@
+{
+  "tool": "build_runs_manifest",
+  "why": "runs/ is gitignored; this ties every reported number to an artifact",
+  "n_runs": 49,
+  "total_bytes": 809567318,
+  "runs": [
+    {
+      "name": "p10_model_recalibration",
+      "path": "runs/p10_model_recalibration",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 250 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path datasets_vg150_clean/frequency_prior_train.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --eval_sgg_dump_pair_logits_path runs/p10_model_recalibration/pair_logits.pt --run_name p10_model_recalibration --out_dir runs/p10_model_recalibration --save_metrics_json runs/p10_model_recalibration/metrics.jsonl",
+      "commit": "7cee9b0b52cf744efae2d9f40443c1960a7f1580",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Experiment C' GPU pass (docs/MODEL_RECALIBRATION_C_PREREGISTRATION.md, registered at 2813a0c). THE ONLY GPU PASS. Historical checkpoint and historical protocol flags, but the LEAK-FREE train-derived prior so both C' arms share one prior file; the model term is independent of that choice (pred_log_prior comes from train.jsonl, not freq_bias). Dumps pair_logit_dump_v2 (both ensemble branches + RAW GT + raw prior rows) so the whole tau/alpha/Pareto/rescue/strata/null family is CPU work afterwards. Same 3000 validation images as runs/p5_model_vs_leakfree_prior (250 batches at bs=12, measured 3582s there).",
+      "exit_code": 0,
+      "runtime_seconds": 3673.659,
+      "started_at_utc": "2026-08-31T20:20:27.151796+00:00",
+      "files": [
+        {
+          "path": "runs/p10_model_recalibration/cache_schema.md",
+          "size_bytes": 6200,
+          "sha256": "4737ced72fbd69b200fe2ab07222d944cfa5269c5bbe9a5a21516880aff6940a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/cache_validation.json",
+          "size_bytes": 2523,
+          "sha256": "ca4ef06b776986f68df8e609cb100b8107f9964af043efee951637f762cc1ba7",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/command.txt",
+          "size_bytes": 1081,
+          "sha256": "038986b078d33ca41b92318af2c2559db5c173680e242b06b882825cd55e63b3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/epoch_metrics/epoch_000.json",
+          "size_bytes": 87801,
+          "sha256": "c3bc8e9aaf0c6708a470cd3fd3f0d1a93042486d220c2d91cfb64ca30f52c988",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/latest_metrics.json",
+          "size_bytes": 87801,
+          "sha256": "c3bc8e9aaf0c6708a470cd3fd3f0d1a93042486d220c2d91cfb64ca30f52c988",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/metrics.jsonl",
+          "size_bytes": 63594,
+          "sha256": "77bb7b490c3bc254742194f0f5608ad64ca1a47ce8e5735932ffeb7348930902",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/pair_logits.pt",
+          "size_bytes": 42199423,
+          "sha256": "9f8d79319233c0f9dcc0d392975edbe07f38d326b7f73961d6734dbd3690f4d4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/provenance.json",
+          "size_bytes": 3231,
+          "sha256": "936dbac78ec48ae0bed64961d2067865855cbf6ba6d77a8a080c56d193ba7295",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/result.json",
+          "size_bytes": 1788,
+          "sha256": "9872be1dbef5b9ab66c553af9a0d9a64dd1c951ccbfd9b945511fc8c026fd661",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p10_model_recalibration/stdout.log",
+          "size_bytes": 4994,
+          "sha256": "e26958b9c84bef32f75f268087ef5a195bc6691f5fd13d52a1e91ad7796dc878",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 42459022,
+      "status": "OK"
+    },
+    {
+      "name": "p11_cprime_analysis",
+      "path": "runs/p11_cprime_analysis",
+      "command": ".venv/bin/python3 tools/cprime_analysis.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p11_cprime_analysis/cprime.json --schemes raw50,eval48 --null_seeds 5",
+      "commit": "14fd392081db0aa733501828ce59938e90b712bc",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Experiment C' CPU analysis, final. Adds ARM E (the ensemble_alpha counterfactual with BOTH branches normalised as evals.py does), criterion 3 (per-predicate decomposition) and criterion 5 (image-level 50/50 held-out selection). Includes the p7 independent-tool reproduction gate.",
+      "exit_code": 0,
+      "runtime_seconds": 80.48,
+      "started_at_utc": "2026-08-31T22:06:28.007788+00:00",
+      "files": [
+        {
+          "path": "runs/p11_cprime_analysis/command.txt",
+          "size_bytes": 231,
+          "sha256": "b73316fdb7196436beec34166e3e457eb43886793911f5eba9f1773b458067a8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p11_cprime_analysis/cprime.json",
+          "size_bytes": 115646,
+          "sha256": "a6946267aaa9933275c1f907002bc51c718c7dbf7251fa9d5bf824ff2f4015eb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p11_cprime_analysis/provenance.json",
+          "size_bytes": 2983,
+          "sha256": "7c0f981d7827ec935ceda09f00afbba52cf7c96b4599df8afa5e534dcf979a58",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p11_cprime_analysis/result.json",
+          "size_bytes": 525,
+          "sha256": "ecdc59cd9f863cb65988b6024d5c455f5c31bf9cf2358f408f83d98f957426a0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p11_cprime_analysis/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p11_cprime_analysis/stdout.log",
+          "size_bytes": 16878,
+          "sha256": "c4159e32d2ce0537de04eaefb1ad33e199e11719cf5e71827246292488076534",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 136263,
+      "status": "OK"
+    },
+    {
+      "name": "p12_cprime_mechanism",
+      "path": "runs/p12_cprime_mechanism",
+      "command": ".venv/bin/python3 tools/cprime_mechanism.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p12_cprime_mechanism/mechanism.json --null_seeds 5 --n_boot 2000",
+      "commit": "fec179014cb6d1b1d53fb0f97da58f6155b0a863",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "C' follow-up: mechanism of the model's contribution + bootstrap stability. CPU only, cache read-only.",
+      "exit_code": 0,
+      "runtime_seconds": 23.323,
+      "started_at_utc": "2026-09-01T06:52:25.732118+00:00",
+      "files": [
+        {
+          "path": "runs/p12_cprime_mechanism/command.txt",
+          "size_bytes": 227,
+          "sha256": "398d0365a8b401737f54f6cd0a9c1a711c00394ead27574943dc1f485abb0df0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p12_cprime_mechanism/mechanism.json",
+          "size_bytes": 116368,
+          "sha256": "ac22d07cedd698b067dd6ccca44211fdec99d76a7f51dceb1b1a8e8b965d8358",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p12_cprime_mechanism/provenance.json",
+          "size_bytes": 2722,
+          "sha256": "d1d75c365e413fabb5cc368b3f35ccc119df58759b9618f4ce845640eb679617",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p12_cprime_mechanism/result.json",
+          "size_bytes": 523,
+          "sha256": "08ce700491ce7327a8cd708759b15acb8986fe65ca921541d76e74c00d823eb2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p12_cprime_mechanism/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p12_cprime_mechanism/stdout.log",
+          "size_bytes": 2546,
+          "sha256": "e285af00a2dea79f6b017d1d3ca3e4b2b11e7b9728ab18163238f62117be7a5e",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 122386,
+      "status": "OK"
+    },
+    {
+      "name": "p13_oracle_ceiling",
+      "path": "runs/p13_oracle_ceiling",
+      "command": ".venv/bin/python3 tools/cprime_oracle_ceiling.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p13_oracle_ceiling/oracle.json --taus 0.0,0.05,0.1",
+      "commit": "ed6113b399137e92eb015907bf7628eea576b9e4",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Oracle ceiling of the tie-breaker channel. CPU only, reads runs/p10_model_recalibration/pair_logits.pt read-only. Criteria pre-registered in the tool at the previous commit. NO GPU.",
+      "exit_code": 0,
+      "runtime_seconds": 12.433,
+      "started_at_utc": "2026-09-01T07:15:38.338082+00:00",
+      "files": [
+        {
+          "path": "runs/p13_oracle_ceiling/command.txt",
+          "size_bytes": 218,
+          "sha256": "034c7a9328394e18bc9c67fa3a126db3d760a2019d4fd1ae2a444163e2a10cd6",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p13_oracle_ceiling/oracle.json",
+          "size_bytes": 38082,
+          "sha256": "b97f8df38076d615be2b6889fcd43e54daad9a1b185131af03197c1ed855d33b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p13_oracle_ceiling/provenance.json",
+          "size_bytes": 2800,
+          "sha256": "b710f0b9b921aeb18cb44e849655cb964f2c2a4d0a420d5a81856b5b8194ceda",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p13_oracle_ceiling/result.json",
+          "size_bytes": 498,
+          "sha256": "ea526fd622d84492abc987a41f5ba2efecdab0315864ad01695e172d2a5c9f78",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p13_oracle_ceiling/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p13_oracle_ceiling/stdout.log",
+          "size_bytes": 8306,
+          "sha256": "360a3fcfe5140eb197dc53c325fd11a18c4083bebe30b55c9359fe6d5320a65b",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 49904,
+      "status": "OK"
+    },
+    {
+      "name": "p14_oracle_ceiling_fixed",
+      "path": "runs/p14_oracle_ceiling_fixed",
+      "command": ".venv/bin/python3 tools/cprime_oracle_ceiling.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p14_oracle_ceiling_fixed/oracle.json --taus 0.0,0.05,0.1",
+      "commit": "7d4a658370481dd6384e952c0cb76a14a79fe405",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Oracle ceiling RE-RUN at the argmax tie-break fix (7d4a658). Supersedes p13, which ran at ed6113b where every baseline/gap used topk tie-order. CPU only, cache read-only.",
+      "exit_code": 0,
+      "runtime_seconds": 12.421,
+      "started_at_utc": "2026-09-01T07:23:21.230122+00:00",
+      "files": [
+        {
+          "path": "runs/p14_oracle_ceiling_fixed/command.txt",
+          "size_bytes": 224,
+          "sha256": "67906a3ac8a5cac53cde1e665f251dd2c54a2e08efda595890e27fe55b7bc883",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p14_oracle_ceiling_fixed/oracle.json",
+          "size_bytes": 37978,
+          "sha256": "ef813d2549e52179492c9ea60daf0704b2b469fd8b1e72090be4174a1f112465",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p14_oracle_ceiling_fixed/provenance.json",
+          "size_bytes": 2785,
+          "sha256": "e9eb3310730a57c05ee3f8ca8d1e359f8138cb4fb82637021b7fc9caa561f83e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p14_oracle_ceiling_fixed/result.json",
+          "size_bytes": 510,
+          "sha256": "fc2bca2e309141608caafede1aff885abbebc3b8ed0ed77c6201bebddc79cd98",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p14_oracle_ceiling_fixed/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p14_oracle_ceiling_fixed/stdout.log",
+          "size_bytes": 8312,
+          "sha256": "77b026f6059dada4c00bab465b7cff414262e4c3e1e6a1b3b2148521462d422e",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 49809,
+      "status": "OK"
+    },
+    {
+      "name": "p15_oracle_ceiling_instrumented",
+      "path": "runs/p15_oracle_ceiling_instrumented",
+      "command": ".venv/bin/python3 tools/cprime_oracle_ceiling.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p15_oracle_ceiling_instrumented/oracle.json --taus 0.0,0.05",
+      "commit": "7d4a658370481dd6384e952c0cb76a14a79fe405",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Oracle ceiling with the instrumentation the protocol requires (head/body/tail, candidate coverage, per-predicate contribution) and a CORRECTED gate: the R floor now also binds on model_rerank, the only realizable arm. Pre-registered constants and the PREREG verdict column are unchanged.",
+      "exit_code": 0,
+      "runtime_seconds": 12.366,
+      "started_at_utc": "2026-09-01T07:25:34.193774+00:00",
+      "files": [
+        {
+          "path": "runs/p15_oracle_ceiling_instrumented/command.txt",
+          "size_bytes": 227,
+          "sha256": "c65d570cecf03f9a37772d43d534c675b93ae57236d87c4339c474599661370b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p15_oracle_ceiling_instrumented/oracle.json",
+          "size_bytes": 66968,
+          "sha256": "fa7e76aac16a2f29f5d2e03afc3ac356a1c30985c70b1f1787c570a884f8f2da",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p15_oracle_ceiling_instrumented/provenance.json",
+          "size_bytes": 2949,
+          "sha256": "5c0e8bcb1809090a62d2252231c2854942d9c5a97ed328366adda869ca940159",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p15_oracle_ceiling_instrumented/result.json",
+          "size_bytes": 520,
+          "sha256": "6a9276bf49ed555108dfb2b769e9713af96c17629209e27979a789dbc3a7b065",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p15_oracle_ceiling_instrumented/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p15_oracle_ceiling_instrumented/stdout.log",
+          "size_bytes": 6356,
+          "sha256": "d2bb77ccd0c7d8b84dddb3469487ed9cd060313ca11c4f4e683896ed0eab6ca8",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 77020,
+      "status": "OK"
+    },
+    {
+      "name": "p17_oracle_ceiling_canonical",
+      "path": "runs/p17_oracle_ceiling_canonical",
+      "command": ".venv/bin/python3 tools/cprime_oracle_ceiling.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p17_oracle_ceiling_canonical/oracle.json --taus 0.0,0.05",
+      "commit": "889483e42c4be22a313789527da9c5a7d9331c75",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Oracle ceiling at the canonical (tie-free) candidate ordering. Supersedes p14/p15. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 12.882,
+      "started_at_utc": "2026-09-01T07:33:22.891736+00:00",
+      "files": [
+        {
+          "path": "runs/p17_oracle_ceiling_canonical/command.txt",
+          "size_bytes": 224,
+          "sha256": "a07e9cd3f76def6490d6302edcace0e6f43f6a9cfd06d1d08372ab6c19e26889",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p17_oracle_ceiling_canonical/oracle.json",
+          "size_bytes": 66986,
+          "sha256": "f21c4592010954b6749887f354e888d118636a6417f6a63d3a26b528bd8c36a0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p17_oracle_ceiling_canonical/provenance.json",
+          "size_bytes": 2715,
+          "sha256": "1d47b7221ac79a95efcf27fcbe63d0d0b509130b876021d54d26f73f96906dee",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p17_oracle_ceiling_canonical/result.json",
+          "size_bytes": 514,
+          "sha256": "d15bb500b5a04119ceee086afe85b8b20bc765320910cfe85dfff38c6e448cbe",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p17_oracle_ceiling_canonical/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p17_oracle_ceiling_canonical/stdout.log",
+          "size_bytes": 6353,
+          "sha256": "6f30cdfdb6fabc61657ee62c051614d2d0a7f2a83e1f2dd1cfb7941085fed8f9",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 76792,
+      "status": "OK"
+    },
+    {
+      "name": "p18_candidate_scorer",
+      "path": "runs/p18_candidate_scorer",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p18_candidate_scorer/probe.json --taus 0.0,0.05 --ks 3,5 --epochs 200",
+      "commit": "889483e42c4be22a313789527da9c5a7d9331c75",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Pre-registered learned candidate-restricted scorer (docs/CANDIDATE_SCORER_PREREGISTRATION.md). 4 arms x 2 taus x 2 k, 5-fold cross-fit by image, out-of-fold. CPU only. This is the gate on GPU spend.",
+      "exit_code": 0,
+      "runtime_seconds": 58.994,
+      "started_at_utc": "2026-09-01T07:33:46.586348+00:00",
+      "files": [
+        {
+          "path": "runs/p18_candidate_scorer/command.txt",
+          "size_bytes": 238,
+          "sha256": "f37076a2c40c81b49311d8a17468c39d72d789fce8f782ebcce999234f21b622",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p18_candidate_scorer/probe.json",
+          "size_bytes": 12254,
+          "sha256": "b3b853c7a413f315334abd2326fafb699268718b3e6aee84a2f47026c63facde",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p18_candidate_scorer/provenance.json",
+          "size_bytes": 2821,
+          "sha256": "e98693cfa33f4ee40e44956dee002ea849cb1c4d9162d07c08d593741f85925e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p18_candidate_scorer/result.json",
+          "size_bytes": 548,
+          "sha256": "a846ffe2ef5c35a17e258de58b85e5bb74f8b6db47c8fd7368681e8b0a3cbe29",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p18_candidate_scorer/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p18_candidate_scorer/stdout.log",
+          "size_bytes": 5023,
+          "sha256": "c2847c21458bb4f4a54b7073e80e42bb6da7b084b3c41c13d8db07968b2e0c6e",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 20884,
+      "status": "OK"
+    },
+    {
+      "name": "p19_candidate_scorer_balanced",
+      "path": "runs/p19_candidate_scorer_balanced",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p19_candidate_scorer_balanced/probe.json --taus 0.0,0.05 --ks 3,5 --epochs 200 --balanced",
+      "commit": "793a04429e0fddff08d2a767f5a00c504659d184",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Same probe, class-balanced listwise loss (weights from train folds only). Decides whether the mR collapse in p18 is the loss or the features.",
+      "exit_code": 0,
+      "runtime_seconds": 56.666,
+      "started_at_utc": "2026-09-01T07:36:33.445290+00:00",
+      "files": [
+        {
+          "path": "runs/p19_candidate_scorer_balanced/command.txt",
+          "size_bytes": 258,
+          "sha256": "af60758b33a0e23aee9f39302269245bcf2fc5e9bc59a79d55d21d6bbb2adc20",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p19_candidate_scorer_balanced/probe.json",
+          "size_bytes": 13215,
+          "sha256": "e2be16771e6b7a2ec5181deb10d2c2761bef13a7a7bf6764e24b85a535ac1c1a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p19_candidate_scorer_balanced/provenance.json",
+          "size_bytes": 2750,
+          "sha256": "9d644f3cd0c048859f5c3e9e0d42cf0b735318d6a1f2a7a62519d4c643466c94",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p19_candidate_scorer_balanced/result.json",
+          "size_bytes": 584,
+          "sha256": "f57fe36fb784f82e883ef85491f194c3085daf5d6c83fefc9e10ba90bd897c9b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p19_candidate_scorer_balanced/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p19_candidate_scorer_balanced/stdout.log",
+          "size_bytes": 5174,
+          "sha256": "d3e8ede65d28051ce14ec3f83869aa617ee05c27397fbce3476810c32d828f79",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 21981,
+      "status": "OK"
+    },
+    {
+      "name": "p20_scorer_pareto_frontier",
+      "path": "runs/p20_scorer_pareto_frontier",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p20_scorer_pareto_frontier/frontier.json --frontier --taus 0.0 --ks 5 --epochs 200",
+      "commit": "793a04429e0fddff08d2a767f5a00c504659d184",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Beta-swept R/mR frontier of the learned candidate scorer vs the prior-only tau frontier. The falsifiable form of 'is any of this more than calibration'. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 74.664,
+      "started_at_utc": "2026-09-01T07:38:55.629807+00:00",
+      "files": [
+        {
+          "path": "runs/p20_scorer_pareto_frontier/command.txt",
+          "size_bytes": 251,
+          "sha256": "82b4fb61d317fb486cd95d8bf0974e13a9b0a3063e52b8c8bf42cfe2d5009da3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p20_scorer_pareto_frontier/frontier.json",
+          "size_bytes": 9564,
+          "sha256": "9b41e22935375589ae4b6533ce4698f699ca2c121f7fbcd6c834d0f12296c901",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p20_scorer_pareto_frontier/provenance.json",
+          "size_bytes": 2819,
+          "sha256": "f9c727eac19b83941b9f68f9b966add785578d136f910e1ad7fde25f97d04b9f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p20_scorer_pareto_frontier/result.json",
+          "size_bytes": 574,
+          "sha256": "85dad04b1a73b47faab91ce9910aa501863fe9e7171a51cc4dab0771bcab8576",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p20_scorer_pareto_frontier/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p20_scorer_pareto_frontier/stdout.log",
+          "size_bytes": 2314,
+          "sha256": "dcb3fcdc3811711fcc712f2d3f06d75675f61f78082eb2aa6fc8db0b2044c1c5",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 15522,
+      "status": "OK"
+    },
+    {
+      "name": "p21_scorer_pareto_frontier",
+      "path": "runs/p21_scorer_pareto_frontier",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p21_scorer_pareto_frontier/frontier.json --frontier --taus 0.0 --ks 5 --betas 0.0,0.05,0.1,0.15,0.2,0.25,0.3 --epochs 200",
+      "commit": "ad71273b391cf06fffd8f7b9772a1be38d78665d",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Beta-swept learned frontier vs tau frontier, corrected pareto scaling, with the shuffled null at every beta. Supersedes p20. CPU only. EXPLORATORY: no operating point is pre-registered here.",
+      "exit_code": 0,
+      "runtime_seconds": 110.389,
+      "started_at_utc": "2026-09-01T07:41:09.948209+00:00",
+      "files": [
+        {
+          "path": "runs/p21_scorer_pareto_frontier/command.txt",
+          "size_bytes": 290,
+          "sha256": "bedf9da7f2a9051cd62c27835719ed2074979729358c4f429c65dda8a9420c20",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p21_scorer_pareto_frontier/frontier.json",
+          "size_bytes": 13295,
+          "sha256": "eaab27324e7beb885da0aa45b0982561253c99c33458a0a4552787a1e7f9dadb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p21_scorer_pareto_frontier/provenance.json",
+          "size_bytes": 2818,
+          "sha256": "09dcfd736f7b3ef45d0f273b111289048c3b95638ed821015b7d8af2dd35e0b5",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p21_scorer_pareto_frontier/result.json",
+          "size_bytes": 628,
+          "sha256": "8cd76007e1cf0f09aec996b636388ec1c22feb02a86d938614693e8207f9e9a3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p21_scorer_pareto_frontier/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p21_scorer_pareto_frontier/stdout.log",
+          "size_bytes": 3027,
+          "sha256": "94d41466d1db9a08dcc6a7cab0478f99cfee29f5dd15733f236fe56ab04224f1",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 20058,
+      "status": "OK"
+    },
+    {
+      "name": "p22_scorer_nested",
+      "path": "runs/p22_scorer_nested",
+      "command": ".venv/bin/python3 tools/candidate_scorer_probe.py --dump runs/p10_model_recalibration/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p22_scorer_nested/nested.json --nested --taus 0.0 --ks 5 --betas 0.0,0.05,0.1,0.15,0.2,0.25,0.3 --epochs 200",
+      "commit": "4332175f361eb6ea57cdf38b1fcd1542644c2ad2",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Nested beta selection (inner folds only). The honest, operating-point-free estimate on the C' cache. CPU only. Gate on the full-validation GPU pass.",
+      "exit_code": 0,
+      "runtime_seconds": 100.889,
+      "started_at_utc": "2026-09-01T07:44:29.618888+00:00",
+      "files": [
+        {
+          "path": "runs/p22_scorer_nested/command.txt",
+          "size_bytes": 277,
+          "sha256": "e0f63704d96cec5b879d316dd5cad6e864ebebd4289de79f51d93abea7f587ac",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p22_scorer_nested/nested.json",
+          "size_bytes": 3167,
+          "sha256": "77ef6ac1804a8e2e4c710add1f6037816582b2c4e4be1fe7dbc249e9459ff4ee",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p22_scorer_nested/provenance.json",
+          "size_bytes": 2769,
+          "sha256": "54ab91632209f95f25541b2a81be5d84ceeb806a06fc38be49595e84d635e68c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p22_scorer_nested/result.json",
+          "size_bytes": 606,
+          "sha256": "7d87d9c8d7d676e3a07f65d1d679d8081108a6158309761f981d447b9a18c215",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p22_scorer_nested/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p22_scorer_nested/stdout.log",
+          "size_bytes": 1403,
+          "sha256": "83779e34e02a7d0c968c7c9c84d251b0494b395af723447f09204a1bab788efc",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8222,
+      "status": "OK"
+    },
+    {
+      "name": "p23_throughput_pilot_w7",
+      "path": "runs/p23_throughput_pilot_w7",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 7 --clip_input_res 336 --eval_batches 20 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path datasets_vg150_clean/frequency_prior_train.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --run_name p23_throughput_pilot_w7 --out_dir runs/p23_throughput_pilot_w7 --save_metrics_json runs/p23_throughput_pilot_w7/metrics.jsonl",
+      "commit": "467bc715885e149c3622832c88a5f70591b57bb7",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Throughput pilot: same as p10 but num_workers 7 (was 4). 20 batches = 240 images, directly comparable to p3c_pilot20's 327s. Decides the worker count for the 3.5h full-val pass.",
+      "exit_code": 0,
+      "runtime_seconds": 346.235,
+      "started_at_utc": "2026-09-01T07:47:57.902601+00:00",
+      "files": [
+        {
+          "path": "runs/p23_throughput_pilot_w7/command.txt",
+          "size_bytes": 1003,
+          "sha256": "422189a52e0fb801f505fcac803ce0e8be6901b7efa6ff77aa49ff82f39e0cdb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p23_throughput_pilot_w7/epoch_metrics/epoch_000.json",
+          "size_bytes": 79223,
+          "sha256": "948755e6edae8168e759faeb8c1a27b498ad86817390f833f5a8971dd3217abe",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p23_throughput_pilot_w7/latest_metrics.json",
+          "size_bytes": 79223,
+          "sha256": "948755e6edae8168e759faeb8c1a27b498ad86817390f833f5a8971dd3217abe",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p23_throughput_pilot_w7/metrics.jsonl",
+          "size_bytes": 56856,
+          "sha256": "42d8db71271d69e3799dc26e946f13fc74609bba3e2873ce29f5a251c02c05ec",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p23_throughput_pilot_w7/provenance.json",
+          "size_bytes": 2788,
+          "sha256": "12f50e0cff2584e6fa4b9d2e973d92cea095a56dd53d6d25821a19ef1a1c66cc",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p23_throughput_pilot_w7/result.json",
+          "size_bytes": 1695,
+          "sha256": "c75f5913d10cb822be08f5876b7781d162a8a8281381ab8c41969a02bf1feb69",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p23_throughput_pilot_w7/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p23_throughput_pilot_w7/stdout.log",
+          "size_bytes": 4893,
+          "sha256": "d5322a0cf2a9b00a2bbb4eb84558b3e5e0f7557d2361a6b2cf62cb5e104a9afe",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 226267,
+      "status": "OK"
+    },
+    {
+      "name": "p24_full_val_cache",
+      "path": "runs/p24_full_val_cache",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 0 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path datasets_vg150_clean/frequency_prior_train.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --eval_sgg_dump_pair_logits_path runs/p24_full_val_cache/pair_logits.pt --run_name p24_full_val_cache --out_dir runs/p24_full_val_cache --save_metrics_json runs/p24_full_val_cache/metrics.jsonl",
+      "commit": "9ab094d00bc3d46487f62ea44c5e307e6900b9b0",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "FULL VALIDATION cache extension. Pre-registered in docs/FULL_VALIDATION_PREREGISTRATION.md. Identical to p10 except --eval_batches 0 (whole 10401-image split) and output paths. Frozen forward pass, no training.",
+      "files": [
+        {
+          "path": "runs/p24_full_val_cache/command.txt",
+          "size_bytes": 1059,
+          "sha256": "3fd900bf90d99a2d84cf06999b59b8a0290403a6a0a7252f3f8fa0b49a9c2e0c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p24_full_val_cache/provenance.json",
+          "size_bytes": 2831,
+          "sha256": "5f10c379f790c64ac6f69d97af2fa6e6623358de56b13c2acfde2734ee48c08b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p24_full_val_cache/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p24_full_val_cache/stdout.log",
+          "size_bytes": 4402,
+          "sha256": "8fb80cf321b40c7cb8bf303c77b576080e1752e72e09b66eb553be54ae2244dc",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8878,
+      "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p3_build_train_prior",
+      "path": "runs/p3_build_train_prior",
+      "command": ".venv/bin/python3 tools/build_vg150_frequency_prior.py --train_jsonl datasets_vg150_clean/train.jsonl --out_path datasets_vg150_clean/frequency_prior_train.json --predicate_vocab datasets_vg150_clean/vocabulary/predicates.json",
+      "commit": "ad558101874c053e837569c6e56850634d4c3933",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Build train-split-derived frequency prior (train.jsonl only, no val/test leakage)",
+      "exit_code": 0,
+      "runtime_seconds": 30.416,
+      "started_at_utc": "2026-08-30T16:35:02.691386+00:00",
+      "files": [
+        {
+          "path": "runs/p3_build_train_prior/command.txt",
+          "size_bytes": 227,
+          "sha256": "5b4ffca2c2d752c4fd66d7a25c2d7ef03d14dd0e7f5c7f5f302c0b4eb381bc54",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3_build_train_prior/provenance.json",
+          "size_bytes": 2567,
+          "sha256": "d96661d2bf1c6c49a655d3265b39bd350a06af9595f504acfdf416092130f1af",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3_build_train_prior/result.json",
+          "size_bytes": 495,
+          "sha256": "a9656b603fd3cd654280b21fd4402a3f7198783d5665b72d5fe9ec008316175c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3_build_train_prior/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3_build_train_prior/stdout.log",
+          "size_bytes": 138,
+          "sha256": "03e0c66ec92d28c4db89c10f7480acf436504787a3de4cafab9392cc1f99523a",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 3427,
+      "status": "OK"
+    },
+    {
+      "name": "p3a_prior_train_derived_val",
+      "path": "runs/p3a_prior_train_derived_val",
+      "command": ".venv/bin/python3 tools/frequency_prior_baseline.py --prior datasets_vg150_clean/frequency_prior_train.json --split datasets_vg150_clean/validation.jsonl --ceiling --out runs/p3a_prior_train_derived_val/metrics.json",
+      "commit": "a816eda329021aac6500648e5ff2f3a540f55d55",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Baseline A: train-derived pair-conditioned prior alone, PredCls GT-pairs, validation split",
+      "exit_code": 0,
+      "runtime_seconds": 11.308,
+      "started_at_utc": "2026-08-30T16:35:52.336917+00:00",
+      "files": [
+        {
+          "path": "runs/p3a_prior_train_derived_val/command.txt",
+          "size_bytes": 216,
+          "sha256": "f6b02ffb52d195dad17067f5fc6aea7a0f33eabf47369910586366d67dc61c20",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3a_prior_train_derived_val/metrics.json",
+          "size_bytes": 1616,
+          "sha256": "1ea1732b8f831e79f2e0baf6c4882c231b1406a137888aaed70da99e58a6cf03",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3a_prior_train_derived_val/provenance.json",
+          "size_bytes": 2698,
+          "sha256": "7f222945b14a39a3b0b2e1b39fc5a8b607afdf5eea8dfa339e953ae2c75a5ca9",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3a_prior_train_derived_val/result.json",
+          "size_bytes": 498,
+          "sha256": "0ca12c5523b3755cdb51a0fb27fb25b6ec05bd7f7274671f85a3f467ae10aa18",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3a_prior_train_derived_val/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3a_prior_train_derived_val/stdout.log",
+          "size_bytes": 1529,
+          "sha256": "84b57a8b308818cceb949e42edf34aa16c389665cb9722201b70dffb256b3c15",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6557,
+      "status": "OK"
+    },
+    {
+      "name": "p3b_prior_historical_val",
+      "path": "runs/p3b_prior_historical_val",
+      "command": ".venv/bin/python3 tools/frequency_prior_baseline.py --prior checkpoints/demo_best/frequency_prior.json --split datasets_vg150_clean/validation.jsonl --ceiling --out runs/p3b_prior_historical_val/metrics.json",
+      "commit": "a816eda329021aac6500648e5ff2f3a540f55d55",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Baseline B: historical frequency_prior.json (different, smaller corpus) alone, PredCls GT-pairs, validation",
+      "exit_code": 0,
+      "runtime_seconds": 6.464,
+      "started_at_utc": "2026-08-30T16:36:14.401775+00:00",
+      "files": [
+        {
+          "path": "runs/p3b_prior_historical_val/command.txt",
+          "size_bytes": 208,
+          "sha256": "9809b32b89fb086e055397a9f5206ca7ae0508c457550cc4a61da9525686d5e0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3b_prior_historical_val/metrics.json",
+          "size_bytes": 1613,
+          "sha256": "f3a2e2ecf01834af3d74f2e9c313241af59b0a12b18f0a4502d3fb67521e91b2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3b_prior_historical_val/provenance.json",
+          "size_bytes": 2715,
+          "sha256": "48fc0707afa1d9126e5d925ea543032c7b3443ddde2507404b8aa39eb6444dc8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3b_prior_historical_val/result.json",
+          "size_bytes": 486,
+          "sha256": "01b6d2344562780fe7c5737b49715e02d67d4a2874eaf88a6b9dc497248af318",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3b_prior_historical_val/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3b_prior_historical_val/stdout.log",
+          "size_bytes": 1520,
+          "sha256": "90366410f0e5852157127cecaa6aeb806cf2219170fdd9f7b422952e8b8f3e94",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6542,
+      "status": "OK"
+    },
+    {
+      "name": "p3c_control_historical_240",
+      "path": "runs/p3c_control_historical_240",
+      "command": ".venv/bin/python3 tools/frequency_prior_baseline.py --prior checkpoints/demo_best/frequency_prior.json --split datasets_vg150_clean/validation.jsonl --limit 240 --out runs/p3c_control_historical_240/metrics.json",
+      "commit": "c83f3c74240177d99cb4f8e3068be200475a6ab4",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Like-for-like prior-only control on the SAME first 240 validation images as p3c_pilot20 (val loader is shuffle=False)",
+      "exit_code": 0,
+      "runtime_seconds": 2.309,
+      "started_at_utc": "2026-08-30T16:56:41.772265+00:00",
+      "files": [
+        {
+          "path": "runs/p3c_control_historical_240/command.txt",
+          "size_bytes": 212,
+          "sha256": "a274cdb0bb4c7fa1e04ed577a828d16b09b7f9231ddd9f1d8b1415f51d79f143",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_historical_240/metrics.json",
+          "size_bytes": 1539,
+          "sha256": "90e8f4b24626f743f7db6e4ab62dcb6c7cc332ba56ab16cbe92aa315d2d96511",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_historical_240/provenance.json",
+          "size_bytes": 2733,
+          "sha256": "9a8e82e76e4d2cec32112b4933cb46ba3f11f6b582d0fdbda018cd5a23737cd2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_historical_240/result.json",
+          "size_bytes": 499,
+          "sha256": "f0262ed0892093032c1a8caf0235868ea37faeb66e03507ed63f9b65c6731310",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_historical_240/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_historical_240/stdout.log",
+          "size_bytes": 1465,
+          "sha256": "da9eb491a4b11f52144c6bd8952dce99ca2274b6c38ac472a94270610b2411d6",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6448,
+      "status": "OK"
+    },
+    {
+      "name": "p3c_control_train_derived_240",
+      "path": "runs/p3c_control_train_derived_240",
+      "command": ".venv/bin/python3 tools/frequency_prior_baseline.py --prior datasets_vg150_clean/frequency_prior_train.json --split datasets_vg150_clean/validation.jsonl --limit 240 --out runs/p3c_control_train_derived_240/metrics.json",
+      "commit": "c83f3c74240177d99cb4f8e3068be200475a6ab4",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Like-for-like prior-only control on the SAME first 240 validation images as p3c_pilot20 (val loader is shuffle=False)",
+      "exit_code": 0,
+      "runtime_seconds": 7.291,
+      "started_at_utc": "2026-08-30T16:56:31.293423+00:00",
+      "files": [
+        {
+          "path": "runs/p3c_control_train_derived_240/command.txt",
+          "size_bytes": 220,
+          "sha256": "beca334eea569585f4dd5f6872edeabf32e6b9255bebc56052f91010e83d1855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_train_derived_240/metrics.json",
+          "size_bytes": 1532,
+          "sha256": "6dc2b542e151faf95ee921973dd413707bd3c613097fa21b17b65401fe3bc1c9",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_train_derived_240/provenance.json",
+          "size_bytes": 2733,
+          "sha256": "a3867054c95b73b9a1b7c6fd11c078501683e35061b04e2ffc3f336e189d8358",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_train_derived_240/result.json",
+          "size_bytes": 510,
+          "sha256": "d68b80b8316a2a6e5eda1a2d19c4c06a9024ceecd4940ce8275dfa70029bd071",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_train_derived_240/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_control_train_derived_240/stdout.log",
+          "size_bytes": 1474,
+          "sha256": "84c76d8a87b596a45fd7089510863ebcdeb193df26dcbf6ec8d8b192f28b5f32",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6469,
+      "status": "OK"
+    },
+    {
+      "name": "p3c_dryrun_capture",
+      "path": "runs/p3c_dryrun_capture",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 2 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path checkpoints/demo_best/frequency_prior.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --run_name p3c_dryrun_capture --out_dir runs/p3c_dryrun_capture --save_metrics_json runs/p3c_dryrun_capture/metrics.jsonl",
+      "files": [
+        {
+          "path": "runs/p3c_dryrun_capture/command.txt",
+          "size_bytes": 982,
+          "sha256": "3f2ea60778588e5dd7586e67a2a7b4ba0beb1b01491b82abff847e4723b84e29",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_dryrun_capture/environment.txt",
+          "size_bytes": 228,
+          "sha256": "485f22f7c96560148ad1f155857b9f3d197b7d758ed1e103d8cf92a996081ee0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_dryrun_capture/git_commit.txt",
+          "size_bytes": 41,
+          "sha256": "0903c0467893e2c6174a1fa9485f78b7ceb787341a59800ada4623ee3f6a70c4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_dryrun_capture/git_status.txt",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 1251,
+      "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p3c_historical_canary",
+      "path": "runs/p3c_historical_canary",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 2 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path checkpoints/demo_best/frequency_prior.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --run_name p3c_historical_canary --out_dir runs/p3c_historical_canary --save_metrics_json runs/p3c_historical_canary/metrics.jsonl",
+      "commit": "a816eda329021aac6500648e5ff2f3a540f55d55",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Phase 3C canary (2 batches): historical checkpoint, text path alpha=0.0 + historical freq prior alpha=3.75. Preflight red ONLY for the proven LF/CRLF line-ending difference (see preflight_report.txt); dataset content verified identical, and line endings cannot affect JSON parsing.",
+      "exit_code": 0,
+      "runtime_seconds": 86.068,
+      "started_at_utc": "2026-08-30T16:37:37.358256+00:00",
+      "files": [
+        {
+          "path": "runs/p3c_historical_canary/canary_verdict.txt",
+          "size_bytes": 1760,
+          "sha256": "c8db6e1833a079b593f2cede47f2d22fe05ff01e2b9e50e2049469eb9ec1319e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/command.txt",
+          "size_bytes": 991,
+          "sha256": "8b99ba3f813a167fa0196cc91015486959bfc35368ceb6935139689209502569",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/epoch_metrics/epoch_000.json",
+          "size_bytes": 55690,
+          "sha256": "89cef0b914116b70bde308def1d6284ac5cc903cb43688ac49c3b27262fa8e13",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/latest_metrics.json",
+          "size_bytes": 55690,
+          "sha256": "89cef0b914116b70bde308def1d6284ac5cc903cb43688ac49c3b27262fa8e13",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/metrics.jsonl",
+          "size_bytes": 40973,
+          "sha256": "b0cc16e74967834fca13cebebf939ad9d927b23b61391fab75418273a6970f3a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/preflight_manifest.yaml",
+          "size_bytes": 5326,
+          "sha256": "5254927db5d3d0bcb9ab64aabe27c7ff88fcc9c061376209c83e222318c52811",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/preflight_report.txt",
+          "size_bytes": 5706,
+          "sha256": "e7f3ab68d53220cb5f9c554ea8e31fe89279d520047983571e1b970cb74f3df7",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/provenance.json",
+          "size_bytes": 2889,
+          "sha256": "75e69b1947b507632d6d67d04742523f67d438d46e60d5a537b61736d8daf453",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/result.json",
+          "size_bytes": 1680,
+          "sha256": "4040fcb3fd91f0a69cd4ea53738e7b3e9559c051e56f5d568c7ae4e34f7a2edd",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_canary/stdout.log",
+          "size_bytes": 4893,
+          "sha256": "86e89d477ee9d06332db2d028490fc03a4207bda64edd9bf06a75c0903167266",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 176184,
+      "status": "OK"
+    },
+    {
+      "name": "p3c_historical_full_val",
+      "path": "runs/p3c_historical_full_val",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 9999 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path checkpoints/demo_best/frequency_prior.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --run_name p3c_historical_full_val --out_dir runs/p3c_historical_full_val --save_metrics_json runs/p3c_historical_full_val/metrics.jsonl",
+      "commit": "c83f3c74240177d99cb4f8e3068be200475a6ab4",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "PHASE 3C FULL (relaunch): --eval_batches 9999 (867 batches needed). The first attempt used --eval_batches 0, which evals.py treats as ZERO batches, not 'whole split' as scripts/eval/eval_historical_checkpoint.sh claims; that run is preserved at runs/p3c_historical_full_val_ZEROBUG as evidence.",
+      "files": [
+        {
+          "path": "runs/p3c_historical_full_val/STOPPED.md",
+          "size_bytes": 1152,
+          "sha256": "ace9ca3362eae7895fd97cd410e70528135a5b1682ffb0e8ec0d2058c47ba8ed",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val/command.txt",
+          "size_bytes": 1000,
+          "sha256": "b6576662e07ac877343b53863e96c7c4c5a4595623747435d7c8aa9b54b4e224",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val/provenance.json",
+          "size_bytes": 2952,
+          "sha256": "2f1a4ee271f022b4392dd38ce9e93c813c0472a0affae97da5ee021a68ebfce2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val/stdout.log",
+          "size_bytes": 4402,
+          "sha256": "8fb80cf321b40c7cb8bf303c77b576080e1752e72e09b66eb553be54ae2244dc",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 10092,
+      "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p3c_historical_full_val_ZEROBUG",
+      "path": "runs/p3c_historical_full_val_ZEROBUG",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 0 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path checkpoints/demo_best/frequency_prior.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --run_name p3c_historical_full_val --out_dir runs/p3c_historical_full_val --save_metrics_json runs/p3c_historical_full_val/metrics.jsonl",
+      "commit": "c83f3c74240177d99cb4f8e3068be200475a6ab4",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "PHASE 3C FULL: historical checkpoint, text path alpha=0.0 + historical freq prior alpha=3.75, ENTIRE validation split (10,401 images). Canary PASSED (protocol verified). Tests whether the model's mR@50 gain over the train-derived prior (+3.82 at n=240) holds at full scale, which the re-scope recommendation disputes.",
+      "exit_code": 0,
+      "runtime_seconds": 41.615,
+      "started_at_utc": "2026-08-30T16:57:14.437506+00:00",
+      "files": [
+        {
+          "path": "runs/p3c_historical_full_val_ZEROBUG/command.txt",
+          "size_bytes": 997,
+          "sha256": "2c7b6c14a47874c0fbc9240ce9aed8ca67ca1a736f25b7676a973739f3cd6b9b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val_ZEROBUG/epoch_metrics/epoch_000.json",
+          "size_bytes": 28175,
+          "sha256": "cbb6c9b9dea2e31f93e123b954d3d38e540c762071bc6c13a2ae32eeff51f5cc",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val_ZEROBUG/latest_metrics.json",
+          "size_bytes": 28175,
+          "sha256": "cbb6c9b9dea2e31f93e123b954d3d38e540c762071bc6c13a2ae32eeff51f5cc",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val_ZEROBUG/metrics.jsonl",
+          "size_bytes": 23682,
+          "sha256": "10a09fc1a315502870ecc3062ad06e0893f7b205023d1b4bce60eda66b57f448",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val_ZEROBUG/provenance.json",
+          "size_bytes": 2933,
+          "sha256": "88c0b271b6cef85a9ce506ff42f5b54f55482063163f7b65204fef37cfc691c8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val_ZEROBUG/result.json",
+          "size_bytes": 1688,
+          "sha256": "d49a64026d6004588b81759498af95318038cd8c9970b0de5b2c9eacf17cdba1",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val_ZEROBUG/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_historical_full_val_ZEROBUG/stdout.log",
+          "size_bytes": 4821,
+          "sha256": "272c9fa4acd14284974b54f1c19b26b7e793f7c107f96a60c5d8616de8d78077",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 91057,
+      "status": "OK"
+    },
+    {
+      "name": "p3c_pilot20",
+      "path": "runs/p3c_pilot20",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 20 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path checkpoints/demo_best/frequency_prior.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --run_name p3c_pilot20 --out_dir runs/p3c_pilot20 --save_metrics_json runs/p3c_pilot20/metrics.jsonl",
+      "commit": "c83f3c74240177d99cb4f8e3068be200475a6ab4",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Throughput pilot: 20 batches (240 images) to measure per-batch eval rate before committing to the full split",
+      "exit_code": 0,
+      "runtime_seconds": 327.408,
+      "started_at_utc": "2026-08-30T16:43:17.162692+00:00",
+      "files": [
+        {
+          "path": "runs/p3c_pilot20/command.txt",
+          "size_bytes": 962,
+          "sha256": "7a691913d5e808f1f4d8dfb8c21f0a8feb16b55b05ecf8199760a7c43f53a41b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot20/epoch_metrics/epoch_000.json",
+          "size_bytes": 78883,
+          "sha256": "82bacd50ce2825688f29d484334bd159579d1612a89c1d69ca5dc4e54efd6560",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot20/latest_metrics.json",
+          "size_bytes": 78883,
+          "sha256": "82bacd50ce2825688f29d484334bd159579d1612a89c1d69ca5dc4e54efd6560",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot20/metrics.jsonl",
+          "size_bytes": 56536,
+          "sha256": "db31e235e2078deae304bf3d95214c1448da168fdfecac4cc04aa0539d30c03e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot20/provenance.json",
+          "size_bytes": 2724,
+          "sha256": "cfbabf17176b490df5987fd222ebc1039aa944e65fef3cc190e964c96ee2a5d3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot20/result.json",
+          "size_bytes": 1642,
+          "sha256": "6d50867fa293090119dbc34722d35bceb22036384844e20fb0bbd4dffc85de3a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot20/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot20/stdout.log",
+          "size_bytes": 4893,
+          "sha256": "c71d0fe06b47400411f6dc9dfd41c234e7c2ef540aa1f0e9383f4e879a74190e",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 225109,
+      "status": "OK"
+    },
+    {
+      "name": "p3c_pilot_bs48",
+      "path": "runs/p3c_pilot_bs48",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 48 --num_workers 8 --clip_input_res 336 --eval_batches 5 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path checkpoints/demo_best/frequency_prior.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --run_name p3c_pilot_bs48 --out_dir runs/p3c_pilot_bs48 --save_metrics_json runs/p3c_pilot_bs48/metrics.jsonl",
+      "commit": "c83f3c74240177d99cb4f8e3068be200475a6ab4",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Throughput control: identical 240-image subset at batch_size=48 vs the bs=12 pilot. Metrics must match exactly; batch size must be scientifically inert at eval.",
+      "exit_code": 0,
+      "runtime_seconds": 348.416,
+      "started_at_utc": "2026-08-30T16:49:11.310444+00:00",
+      "files": [
+        {
+          "path": "runs/p3c_pilot_bs48/command.txt",
+          "size_bytes": 970,
+          "sha256": "5d105eb5b639e6287ade93efdc731604b63f3f6594984cbb8d87859a9345c3bb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot_bs48/epoch_metrics/epoch_000.json",
+          "size_bytes": 78901,
+          "sha256": "8a2968aca3a92927908fde852cd6e83000219e4efd764860cb5bf09974ace7cb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot_bs48/latest_metrics.json",
+          "size_bytes": 78901,
+          "sha256": "8a2968aca3a92927908fde852cd6e83000219e4efd764860cb5bf09974ace7cb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot_bs48/metrics.jsonl",
+          "size_bytes": 56554,
+          "sha256": "02fd345a9d2163867342dce8a4285171a96fc3efdf3cc68c726204353042b807",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot_bs48/provenance.json",
+          "size_bytes": 2776,
+          "sha256": "2bcb5e305e74922e1b802061d65412b3bf24b90cbf10c17590618731a4edb649",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot_bs48/result.json",
+          "size_bytes": 1653,
+          "sha256": "4505646d0b84315489247c765dc3861a65a0e20f3300081d7173869f9dba1e05",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot_bs48/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3c_pilot_bs48/stdout.log",
+          "size_bytes": 4893,
+          "sha256": "d48a454f18b06a34b51bf01578021f9435dbf4cdde1e86debc040b2b4f119bce",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 225234,
+      "status": "OK"
+    },
+    {
+      "name": "p3e_headroom_train_derived",
+      "path": "runs/p3e_headroom_train_derived",
+      "command": ".venv/bin/python3 tools/headroom_analysis.py --prior datasets_vg150_clean/frequency_prior_train.json --split datasets_vg150_clean/validation.jsonl --out runs/p3e_headroom_train_derived/headroom.json",
+      "commit": "a816eda329021aac6500648e5ff2f3a540f55d55",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Phase 3E: headroom / oracle analysis over the train-derived prior, validation split",
+      "exit_code": 0,
+      "runtime_seconds": 13.896,
+      "started_at_utc": "2026-08-30T16:37:43.491997+00:00",
+      "files": [
+        {
+          "path": "runs/p3e_headroom_train_derived/command.txt",
+          "size_bytes": 199,
+          "sha256": "3a0330ccbb7144becda88ac3bdfc824fec57c58919d307291c6ce049f1e760a8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3e_headroom_train_derived/headroom.json",
+          "size_bytes": 2517,
+          "sha256": "f81df9aa4447cdce5e15e2396795e73c55b3d12b1f3f980d25a9cb8fccb94143",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3e_headroom_train_derived/provenance.json",
+          "size_bytes": 2691,
+          "sha256": "e70e5e898c0d0cf1356a5699b42953fb7c2ecf5ccd424c453fa8006ce99ef163",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3e_headroom_train_derived/result.json",
+          "size_bytes": 473,
+          "sha256": "64aca7949152e135a8df4d3e15c2f88cb9a7daa308c8c9707a15ba639fd0bd3e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3e_headroom_train_derived/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p3e_headroom_train_derived/stdout.log",
+          "size_bytes": 2372,
+          "sha256": "21ab4032beaafdf94dd35f9a9460039b42578dfd40fa7b3cc7d484586b698619",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8252,
+      "status": "OK"
+    },
+    {
+      "name": "p4_bench_clip_l14_336",
+      "path": "runs/p4_bench_clip_l14_336",
+      "command": ".venv/bin/python3 tools/benchmark_clip_encoder.py --clip_name openai/clip-vit-large-patch14-336 --device cuda --batches 16,32,48,64 --n_crops 256 --out runs/p4_bench_clip_l14_336/benchmark.json",
+      "commit": "9602339516c513cc0138aa6bb040fced392d0f0e",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Measured ViT-L/14-336 throughput + VRAM at batch 16/32/48/64 on the L4, real crops, fp16 autocast, inference_mode. Chooses batch size from data for the appearance probe.",
+      "exit_code": 0,
+      "runtime_seconds": 30.383,
+      "started_at_utc": "2026-08-30T17:35:52.788715+00:00",
+      "files": [
+        {
+          "path": "runs/p4_bench_clip_l14_336/benchmark.json",
+          "size_bytes": 1263,
+          "sha256": "787a0913c849f141a3d69f1939d4584f22b6cd02b57dbfc1ef7739861f78da9a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_bench_clip_l14_336/command.txt",
+          "size_bytes": 194,
+          "sha256": "19aa7c2f1f485c31fc7f9af41837d80451ff954368a99406af104ae17f45487b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_bench_clip_l14_336/provenance.json",
+          "size_bytes": 2829,
+          "sha256": "08adab829ddee0ed59433bca6a3cfae98bb7d411a229e2e78b7635759ecf93a4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_bench_clip_l14_336/result.json",
+          "size_bytes": 491,
+          "sha256": "51842b1d3395ad0bac0ed17628e5234a0f9fc8709ba0b95a6ce71a340c28e7c3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_bench_clip_l14_336/stderr.log",
+          "size_bytes": 286,
+          "sha256": "7b719111ef657fff57e945774facccc9533b5b75e084bf203ce55457a4f5407a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_bench_clip_l14_336/stdout.log",
+          "size_bytes": 555,
+          "sha256": "4a8e1cc58a86c0a337a03ff34483b6e1fbaeecc8b39ba4aeac940fb8bdb28aa1",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 5618,
+      "status": "OK"
+    },
+    {
+      "name": "p4_decision_rule_sweep",
+      "path": "runs/p4_decision_rule_sweep",
+      "command": ".venv/bin/python3 tools/decision_rule_probe.py --prior datasets_vg150_clean/frequency_prior_train.json --split datasets_vg150_clean/validation.jsonl --out runs/p4_decision_rule_sweep/decision_rule.json",
+      "commit": "91b24c79497129194e2d2c2adec3e834848c76f3",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Pre-registered decision-rule test (docs/DECISION_RULE_HYPOTHESIS.md). tau=0 verified numerically identical to frequency_prior_baseline (test_decision_rule_probe.py).",
+      "exit_code": 0,
+      "runtime_seconds": 33.247,
+      "started_at_utc": "2026-08-30T17:18:38.119050+00:00",
+      "files": [
+        {
+          "path": "runs/p4_decision_rule_sweep/command.txt",
+          "size_bytes": 202,
+          "sha256": "1ab45591164abe74f1aad295565c05d0b8f33f5ee7b4a437e2f8b68c578046a1",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_decision_rule_sweep/decision_rule.json",
+          "size_bytes": 6601,
+          "sha256": "5a663c6158a8c221cb6314fd7c07b9a1f71952c59824a7f9fb9646136f1578e1",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_decision_rule_sweep/provenance.json",
+          "size_bytes": 2938,
+          "sha256": "03447b43350fe86c7afbe45a48e90cba4f40e66921d5b0d870c53157485fead8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_decision_rule_sweep/result.json",
+          "size_bytes": 472,
+          "sha256": "33ab1046dbd965daca90c60fe637639defff50bb7caf415f736a593de2c686d0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_decision_rule_sweep/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_decision_rule_sweep/stdout.log",
+          "size_bytes": 1613,
+          "sha256": "f573d3426eb2cff43d1551793cb22743a8776924b07ba2c245d4cdf441eeec9c",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 11826,
+      "status": "OK"
+    },
+    {
+      "name": "p4_predicate_discriminability",
+      "path": "runs/p4_predicate_discriminability",
+      "command": ".venv/bin/python3 tools/predicate_discriminability.py --train datasets_vg150_clean/train.jsonl --val datasets_vg150_clean/validation.jsonl --vocab datasets_vg150_clean/vocabulary/predicates.json --out runs/p4_predicate_discriminability/discriminability.json",
+      "commit": "91b24c79497129194e2d2c2adec3e834848c76f3",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Phase 4 Q4/Q5: re-measure whether geometry separates confusable predicate pairs in BALANCED BINARY form, contradicting the flat-softmax 0.0% result",
+      "exit_code": 0,
+      "runtime_seconds": 36.335,
+      "started_at_utc": "2026-08-30T17:12:16.871708+00:00",
+      "files": [
+        {
+          "path": "runs/p4_predicate_discriminability/command.txt",
+          "size_bytes": 258,
+          "sha256": "57bfeed93589e988efe9969959c59b3397e7715f1dbc0e98ee7f715f3652aaec",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_predicate_discriminability/discriminability.json",
+          "size_bytes": 12407,
+          "sha256": "8de55135c50996e544adc1e2840a0582bc6352bb6df6ec082618b10515b815bd",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_predicate_discriminability/provenance.json",
+          "size_bytes": 2783,
+          "sha256": "c4c4581883933938b9f4ca3a53e8fe2482e9a3fe8d05fc59c71ed60bea59d9e6",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_predicate_discriminability/result.json",
+          "size_bytes": 549,
+          "sha256": "12e5f22316d74be6eb67c26eeffd0cd067d0f6d5f4264b1d4e14a63dddf16f6f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_predicate_discriminability/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p4_predicate_discriminability/stdout.log",
+          "size_bytes": 3982,
+          "sha256": "45343e9f160f1352b05b7537b95733269ea422f2a410a3e54ac5d7632e91b296",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 19979,
+      "status": "OK"
+    },
+    {
+      "name": "p5_arm2_trainprior_3000",
+      "path": "runs/p5_arm2_trainprior_3000",
+      "command": ".venv/bin/python3 tools/frequency_prior_baseline.py --prior datasets_vg150_clean/frequency_prior_train.json --split datasets_vg150_clean/validation.jsonl --limit 3000 --out runs/p5_arm2_trainprior_3000/metrics.json",
+      "commit": "40971757a489f281e325b1ff459852f45a6edab6",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "ARM 2: leak-free train-derived prior alone (tau=0), identical first 3000 validation images",
+      "exit_code": 0,
+      "runtime_seconds": 8.414,
+      "started_at_utc": "2026-08-30T17:39:39.847948+00:00",
+      "files": [
+        {
+          "path": "runs/p5_arm2_trainprior_3000/command.txt",
+          "size_bytes": 215,
+          "sha256": "c2ea4bbfc9f49a0483467dd108a9cefaa22e5c0a241bf05c328d0b4a31b99354",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2_trainprior_3000/metrics.json",
+          "size_bytes": 1557,
+          "sha256": "d7c35065652d1b37c9576e1f91b403bf813f61733761622ff26df3de277297e0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2_trainprior_3000/provenance.json",
+          "size_bytes": 2688,
+          "sha256": "86e6f99a2504795911a518cde9578fae800e779189237ae0883412b511705715",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2_trainprior_3000/result.json",
+          "size_bytes": 499,
+          "sha256": "9250916112f914b87855a9e64cefe4636905d96dac37986bdf4ae37f7b89291f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2_trainprior_3000/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2_trainprior_3000/stdout.log",
+          "size_bytes": 1470,
+          "sha256": "3b170556be553184ea440b6f3a55cb11b9bd06acb4956e7c65b228acffa33546",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6429,
+      "status": "OK"
+    },
+    {
+      "name": "p5_arm2b_histprior_3000",
+      "path": "runs/p5_arm2b_histprior_3000",
+      "command": ".venv/bin/python3 tools/frequency_prior_baseline.py --prior checkpoints/demo_best/frequency_prior.json --split datasets_vg150_clean/validation.jsonl --limit 3000 --out runs/p5_arm2b_histprior_3000/metrics.json",
+      "commit": "40971757a489f281e325b1ff459852f45a6edab6",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "ARM 2b: historical prior alone, identical first 3000 validation images",
+      "exit_code": 0,
+      "runtime_seconds": 3.484,
+      "started_at_utc": "2026-08-30T17:40:04.299950+00:00",
+      "files": [
+        {
+          "path": "runs/p5_arm2b_histprior_3000/command.txt",
+          "size_bytes": 210,
+          "sha256": "715c259690878a416ed9f11aa6a4216eabdcc7923ad20fa02b1bbfa1ba6b43de",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2b_histprior_3000/metrics.json",
+          "size_bytes": 1557,
+          "sha256": "3b3e157b1823d415f3590b6ed0a2e42667354771d07dea333a8ed26fa2fabf0c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2b_histprior_3000/provenance.json",
+          "size_bytes": 2668,
+          "sha256": "97b2dad3edb1e041ff83a7ae861fd1f33eaa3be185a0081473a475a953003545",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2b_histprior_3000/result.json",
+          "size_bytes": 494,
+          "sha256": "ebeb8c8244599c384bd965051b32e5b03da2615ff0754e6fd2bb3f269237c2e9",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2b_histprior_3000/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm2b_histprior_3000/stdout.log",
+          "size_bytes": 1464,
+          "sha256": "4c5b2e698fd55cd4974c62f5266a669b766ab4ea85e5879339c0df2cbae6c009",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6393,
+      "status": "OK"
+    },
+    {
+      "name": "p5_arm3_trainprior_tau01_3000",
+      "path": "runs/p5_arm3_trainprior_tau01_3000",
+      "command": ".venv/bin/python3 tools/decision_rule_probe.py --prior datasets_vg150_clean/frequency_prior_train.json --split datasets_vg150_clean/validation.jsonl --limit 3000 --taus 0.0,0.1 --out runs/p5_arm3_trainprior_tau01_3000/metrics.json",
+      "commit": "40971757a489f281e325b1ff459852f45a6edab6",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "ARM 3: no-vision recalibration control, tau=0.1, identical first 3000 validation images",
+      "exit_code": 0,
+      "runtime_seconds": 9.898,
+      "started_at_utc": "2026-08-30T17:39:51.305890+00:00",
+      "files": [
+        {
+          "path": "runs/p5_arm3_trainprior_tau01_3000/command.txt",
+          "size_bytes": 231,
+          "sha256": "9fbfe78e77298b88382c73b4ea40215c5597b438aa7d8976867109bc97c6a20a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm3_trainprior_tau01_3000/metrics.json",
+          "size_bytes": 2409,
+          "sha256": "62df694d8bdfe9fc263bf28cd9a433fee5cff10650a56c6bfaea5c0dc4c9f55f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm3_trainprior_tau01_3000/provenance.json",
+          "size_bytes": 2685,
+          "sha256": "00ac09cde6681eb1a78914cf0378d1f85283c630247293d9482ac72480e64524",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm3_trainprior_tau01_3000/result.json",
+          "size_bytes": 535,
+          "sha256": "4e91709cb1f8b87e96302c11f7dca6af55d92e0befc78a9db0cb36e78cf7e263",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm3_trainprior_tau01_3000/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_arm3_trainprior_tau01_3000/stdout.log",
+          "size_bytes": 1133,
+          "sha256": "e35d662160b1d379d6cb30e90a016f479bdff891eb423e97cbe363bc9e282815",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6993,
+      "status": "OK"
+    },
+    {
+      "name": "p5_model_vs_leakfree_prior",
+      "path": "runs/p5_model_vs_leakfree_prior",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 250 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path checkpoints/demo_best/frequency_prior.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --run_name p5_model_vs_leakfree_prior --out_dir runs/p5_model_vs_leakfree_prior --save_metrics_json runs/p5_model_vs_leakfree_prior/metrics.jsonl",
+      "commit": "40971757a489f281e325b1ff459852f45a6edab6",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "ARM 1 of docs/MODEL_VS_LEAKFREE_PRIOR_PREREGISTRATION.md: historical checkpoint under the EXACT historical protocol (historical prior, unmodified), first 3000 validation images (250 batches at bs=12). Compared against the leak-free train-derived prior on the identical images (CPU arms). N chosen from measured predicate coverage; bs=12 chosen from measured throughput (bs=48 is bit-identical but slower).",
+      "exit_code": 0,
+      "runtime_seconds": 3582.178,
+      "started_at_utc": "2026-08-30T17:39:06.168565+00:00",
+      "files": [
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/canary_verdict.txt",
+          "size_bytes": 1896,
+          "sha256": "93a7dae6872829f6c13585e38252a6f5cc8a15673c5d460fe3c1b09b5b09d292",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/command.txt",
+          "size_bytes": 1008,
+          "sha256": "c10d11ca9d722668f2e08728ffc7321a1a49dcf7c424fb9177199cb55a02af31",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/encoder_benchmark.json",
+          "size_bytes": 1263,
+          "sha256": "787a0913c849f141a3d69f1939d4584f22b6cd02b57dbfc1ef7739861f78da9a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/epoch_metrics/epoch_000.json",
+          "size_bytes": 87507,
+          "sha256": "fc27f6d0ec72b5e7b27ae65283d8355de4cd35273d1a9000f30ff881bb7afa86",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/latest_metrics.json",
+          "size_bytes": 87507,
+          "sha256": "fc27f6d0ec72b5e7b27ae65283d8355de4cd35273d1a9000f30ff881bb7afa86",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/metrics.jsonl",
+          "size_bytes": 63320,
+          "sha256": "8e177498965071703a0dc4c6fff2f255a34c96e8be8837eb298e96a5ca66938f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/preflight_manifest.yaml",
+          "size_bytes": 5355,
+          "sha256": "5d3896ee8ebad9cf47592dc10a4138ce239b83da9517a414a88b93d74988ccc1",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/preflight_report.txt",
+          "size_bytes": 5701,
+          "sha256": "8775e287cfa88add9678a51cee45838b25f4a66d2da526e966fe2b10f0c5456a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/provenance.json",
+          "size_bytes": 3003,
+          "sha256": "07486cd8b95a1e3fb6ced8a911a08c142933d9d03e65d0e4c36ff71130873911",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/result.json",
+          "size_bytes": 1704,
+          "sha256": "153365b3cb917abfd457077bfc6957c73f93d38a8b637e1c5895b233483ea11c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/runner.log",
+          "size_bytes": 1147,
+          "sha256": "e762f03480a00e2523c23012e9a75fd60652c300b3f4c0345554e8696140bf16",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p5_model_vs_leakfree_prior/stdout.log",
+          "size_bytes": 4893,
+          "sha256": "2727b1d72e5d55196d80315110a9f24c910e61fb9963ff0f3be2afc9855bc10b",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 264890,
+      "status": "OK"
+    },
+    {
+      "name": "p6_alias_control_3000",
+      "path": "runs/p6_alias_control_3000",
+      "command": "nice -n 19 .venv/bin/python3 tools/prior_baseline_alias_control.py --limit 3000 --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p6_alias_control_3000/alias_control.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "CPU-only like-for-like control: does evals.py's near->next to / wears->wearing alias merge make the A' model-vs-prior comparison unequal? Same prior, same 3000 images, both schemes. No GPU.",
+      "exit_code": 0,
+      "runtime_seconds": 17.026,
+      "started_at_utc": "2026-08-31T12:52:33.170686+00:00",
+      "files": [
+        {
+          "path": "runs/p6_alias_control_3000/alias_control.json",
+          "size_bytes": 14765,
+          "sha256": "f4d4fb5419b05704d50affae47ea3a29971544c61f93c33f7b469aef7c74879c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_alias_control_3000/command.txt",
+          "size_bytes": 188,
+          "sha256": "c657889c4a054ddd19040ea51a1a494b7f0ca4242b090cd7dd8c3da4008c0f71",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_alias_control_3000/provenance.json",
+          "size_bytes": 2967,
+          "sha256": "15541198a49e89af741ac8bf93bd55794eba311ab63810b4478adc86b8196ec1",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_alias_control_3000/result.json",
+          "size_bytes": 478,
+          "sha256": "b18cbaf35e566ebc97c3f02cb4b1b1f9cb8c409de2b60cb1139c3f02a266ca33",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_alias_control_3000/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_alias_control_3000/stdout.log",
+          "size_bytes": 948,
+          "sha256": "3146baa075c1a1765d0ea3af30a9b8ba75ba033d69c8a16e0bd7a5f4b637f523",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 19346,
+      "status": "OK"
+    },
+    {
+      "name": "p6_appearance_probe_l14_336",
+      "path": "runs/p6_appearance_probe_l14_336",
+      "command": ".venv/bin/python3 tools/appearance_probe.py --extract --score --clip_name openai/clip-vit-large-patch14-336 --device cuda --encode_batch 16 --n_train 1200 --n_val 1200 --cache runs/p6_appearance_probe_l14_336/clip_l14_336_cache.pt --out runs/p6_appearance_probe_l14_336/appearance_probe_l14.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Pre-registered replication of the appearance probe at ViT-L/14-336 on the L4 (docs/APPEARANCE_PROBE_L14_PREREGISTRATION.md, registered at e7bfcfb, probe code unchanged since 91b24c7). fp16 autocast, encode_batch=16 from the measured benchmark in runs/p4_bench_clip_l14_336/benchmark.json. Sampling/PCA/lambda-grid/thresholds unchanged from the B/32 run.",
+      "exit_code": 0,
+      "runtime_seconds": 1235.403,
+      "started_at_utc": "2026-08-31T11:39:07.046113+00:00",
+      "files": [
+        {
+          "path": "runs/p6_appearance_probe_l14_336/appearance_probe_l14.json",
+          "size_bytes": 3911,
+          "sha256": "34eb7eba591dbff3d4d405e12bfd2e975d6ebc6549d5298d37ad2883bed7d172",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336/clip_l14_336_cache.pt",
+          "size_bytes": 376412965,
+          "sha256": null,
+          "note": "large: size+mtime identity",
+          "mtime": 1788177568.8490305
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336/command.txt",
+          "size_bytes": 296,
+          "sha256": "3c2bfaec39c3021ede6a9deb9809ef0557c7ce47336394b1f6c3702d0759b409",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336/provenance.json",
+          "size_bytes": 2980,
+          "sha256": "e86afdf4dc41d5343428a04273fbe049c3ea283e012719b60aed529e196f021b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336/result.json",
+          "size_bytes": 643,
+          "sha256": "b69292736da78ef2377cc00c592d930329fd40dcf185ad6888e0725c223f7563",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336/stderr.log",
+          "size_bytes": 1642,
+          "sha256": "f3abcd43d8575c1dfba87a666be6d3b6b5d1fe9ac05806678d662e33afa63756",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336/stdout.log",
+          "size_bytes": 5851,
+          "sha256": "2d5e23db0a860f4f9684ebd2c3f5788ce95644d493f2bb608e26bf68807ddb17",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 376428288,
+      "status": "OK"
+    },
+    {
+      "name": "p6_appearance_probe_l14_336_decidable",
+      "path": "runs/p6_appearance_probe_l14_336_decidable",
+      "command": ".venv/bin/python3 tools/appearance_probe_decidable.py --score --cache runs/p6_appearance_probe_l14_336/clip_l14_336_cache.pt --out runs/p6_appearance_probe_l14_336_decidable/appearance_probe_l14_decidable.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "SECONDARY DIAGNOSTIC (pre-registration section 5): captured_decidable on the SAME cache as p6_appearance_probe_l14_336. Report-only variant of the probe; must reproduce every primary field bit-for-bit. Cannot change the verdict.",
+      "exit_code": 0,
+      "runtime_seconds": 16.536,
+      "started_at_utc": "2026-08-31T12:00:05.790586+00:00",
+      "files": [
+        {
+          "path": "runs/p6_appearance_probe_l14_336_decidable/appearance_probe_l14_decidable.json",
+          "size_bytes": 4726,
+          "sha256": "dd1c5448aba95e6e959c41fcf79c9bf049953f9f24309cba106bee974d7b454b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_decidable/command.txt",
+          "size_bytes": 210,
+          "sha256": "540eb04c8dbc57316c374f85ee06cb709d472be70ac2d41aaaecdffb97b7e5de",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_decidable/provenance.json",
+          "size_bytes": 2908,
+          "sha256": "5405cb4f7e56b4e1b6bf55ce8b5bab3e084b27cb9f0828c28e3c6c80b456f2cf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_decidable/result.json",
+          "size_bytes": 488,
+          "sha256": "5429026a0433c2ecc20beb568bcdb9e60a2f1c79caac4a56839690428c5137bc",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_decidable/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_decidable/stdout.log",
+          "size_bytes": 4089,
+          "sha256": "2f70df2890aa66a2b3f5047f682931a07b0e266e013f6a216348dbb31adb43fa",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 12421,
+      "status": "OK"
+    },
+    {
+      "name": "p6_appearance_probe_l14_336_fp32",
+      "path": "runs/p6_appearance_probe_l14_336_fp32",
+      "command": ".venv/bin/python3 tools/appearance_probe.py --extract --score --clip_name openai/clip-vit-large-patch14-336 --device cuda --encode_batch 32 --no_amp --n_train 1200 --n_val 1200 --cache runs/p6_appearance_probe_l14_336_fp32/clip_l14_336_fp32_cache.pt --out runs/p6_appearance_probe_l14_336_fp32/appearance_probe_l14_fp32.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Pre-registered ARM 6: fp32 control at ViT-L/14-336, identical sampling/PCA/lambda-grid to p6_appearance_probe_l14_336, to confirm fp16 autocast was numerically inert. encode_batch=32 from the measured fp32 benchmark in runs/p6_bench_clip_l14_336_fp32/. Full curve rather than best-lambda-only.",
+      "exit_code": 0,
+      "runtime_seconds": 4021.351,
+      "started_at_utc": "2026-08-31T12:03:18.558240+00:00",
+      "files": [
+        {
+          "path": "runs/p6_appearance_probe_l14_336_fp32/appearance_probe_l14_fp32.json",
+          "size_bytes": 3882,
+          "sha256": "337c9487c86e2cd775482a0f747a0641d2216068a69b718f7b636b474c0323cc",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_fp32/clip_l14_336_fp32_cache.pt",
+          "size_bytes": 376413139,
+          "sha256": null,
+          "note": "large: size+mtime identity",
+          "mtime": 1788181805.849841
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_fp32/command.txt",
+          "size_bytes": 325,
+          "sha256": "128a308af8c2bf840ddfd024862a2081b348f7cfa320d2ee6ae53decd7674839",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_fp32/provenance.json",
+          "size_bytes": 2973,
+          "sha256": "a91d485ef1b740513b4218331915f6c196d6c181188f87f450829270bc7a22aa",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_fp32/result.json",
+          "size_bytes": 684,
+          "sha256": "a272fbdd66f8c6e71471818515da83f3df4ac36038af431989687d46afcb8305",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_fp32/stderr.log",
+          "size_bytes": 1642,
+          "sha256": "c3ce8ea4fd2069ec1c937a5f47914a83b465f55d85b3d7e743df5954fd729de2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_336_fp32/stdout.log",
+          "size_bytes": 5884,
+          "sha256": "6c3ca2c5a9c121f825dad67dbc3c49b63f157c894cb5e66f510d572845632c0c",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 376428529,
+      "status": "OK"
+    },
+    {
+      "name": "p6_appearance_probe_l14_pilot",
+      "path": "runs/p6_appearance_probe_l14_pilot",
+      "command": ".venv/bin/python3 tools/appearance_probe.py --extract --score --clip_name openai/clip-vit-large-patch14-336 --device cuda --encode_batch 16 --n_train 40 --n_val 40 --cache runs/p6_appearance_probe_l14_pilot/pilot_cache.pt --out runs/p6_appearance_probe_l14_pilot/pilot_result.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Smoke pilot: 40+40 images at ViT-L/14-336 fp16 batch16 on the L4, to validate the extract+score path end-to-end before the full preregistered run. NOT a result.",
+      "exit_code": 0,
+      "runtime_seconds": 62.631,
+      "started_at_utc": "2026-08-31T11:37:27.799068+00:00",
+      "files": [
+        {
+          "path": "runs/p6_appearance_probe_l14_pilot/command.txt",
+          "size_bytes": 281,
+          "sha256": "f4bb546d23175e1412eb87726f878171ae8d73e040c9d1638ef3cb60578bd6b5",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_pilot/pilot_cache.pt",
+          "size_bytes": 12028747,
+          "sha256": "d5fa318df2fafe35cef6568e4e5dac014e7c4e668dd102f9963cb56bdce2ed51",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_pilot/pilot_result.json",
+          "size_bytes": 3153,
+          "sha256": "a00038877911e47dfe70982e1e58650bc58378d44016e16bfb13a7f36b8859f7",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_pilot/provenance.json",
+          "size_bytes": 2787,
+          "sha256": "a21944fbb794a0a9a5a358c78c2f1c225233dc2963bee002e21fdb7153cb5ca9",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_pilot/result.json",
+          "size_bytes": 628,
+          "sha256": "069f144a123e6090a4e4c5cd5b3dfda229296b45ac15e9a6034fe908f879998c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_pilot/stderr.log",
+          "size_bytes": 286,
+          "sha256": "268dd415cad27778cc4d043e24fb68d05858f4da4bcfab7e4198f1fd34b2a679",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_appearance_probe_l14_pilot/stdout.log",
+          "size_bytes": 4127,
+          "sha256": "742f6219f2cd25cbd5134f35babf3ae082b1704fea3e9118c51d4b9e3499a660",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 12040009,
+      "status": "OK"
+    },
+    {
+      "name": "p6_bench_clip_l14_336_fp32",
+      "path": "runs/p6_bench_clip_l14_336_fp32",
+      "command": ".venv/bin/python3 tools/benchmark_clip_encoder.py --clip_name openai/clip-vit-large-patch14-336 --device cuda --batches 16,32 --n_crops 256 --no_amp --out runs/p6_bench_clip_l14_336_fp32/benchmark_fp32.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "fp32 throughput/VRAM at ViT-L/14-336 on the L4, to size the pre-registered fp32 control arm (arm 6) before launching it.",
+      "exit_code": 0,
+      "runtime_seconds": 42.544,
+      "started_at_utc": "2026-08-31T12:00:38.220864+00:00",
+      "files": [
+        {
+          "path": "runs/p6_bench_clip_l14_336_fp32/benchmark_fp32.json",
+          "size_bytes": 750,
+          "sha256": "3b287b494f62e56535745917d93bb631d9fa4cc4b096542be6dc2c001e67023b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_bench_clip_l14_336_fp32/command.txt",
+          "size_bytes": 207,
+          "sha256": "108762f2a368f48ead3f3b019858d00e3b043c0fcbe166f21fdf516a88556021",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_bench_clip_l14_336_fp32/provenance.json",
+          "size_bytes": 2800,
+          "sha256": "c68f4f664af790bbfefb2ac3cdaa3a14929f6ff79f4e70f89c5faab3a916e83c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_bench_clip_l14_336_fp32/result.json",
+          "size_bytes": 516,
+          "sha256": "2b5a00aff1e642a131ed91fa3f04c3cd79e017eca06574849d349fe85b8535d1",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_bench_clip_l14_336_fp32/stderr.log",
+          "size_bytes": 286,
+          "sha256": "52fe6fe39cdf582aea8135539f75b7679daa338143e7d8c2e4b7971ef8a90474",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_bench_clip_l14_336_fp32/stdout.log",
+          "size_bytes": 444,
+          "sha256": "24f7693abd2b30e9826babe0272f5fe47cf7a7a36239037e9d97a9e85316a83d",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 5003,
+      "status": "OK"
+    },
+    {
+      "name": "p6_prior_dominance_margin",
+      "path": "runs/p6_prior_dominance_margin",
+      "command": "nice -n 19 .venv/bin/python3 tools/prior_dominance_margin.py --limit 3000 --prior datasets_vg150_clean/frequency_prior_train.json --out runs/p6_prior_dominance_margin/prior_margin.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "CPU-only: how large a visual swing (in the evaluator's own z-score units) would be needed to change / correct the prior's argmax at freq_bias_alpha=3.75. Distinguishes 'no visual signal' from 'composition cannot express it'. No GPU.",
+      "exit_code": 0,
+      "runtime_seconds": 7.776,
+      "started_at_utc": "2026-08-31T12:54:54.354541+00:00",
+      "files": [
+        {
+          "path": "runs/p6_prior_dominance_margin/command.txt",
+          "size_bytes": 185,
+          "sha256": "b95cd165818e11ca635d901f0e2f97354c841ffa0c095f8ba8049ba0554c6d13",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_prior_dominance_margin/prior_margin.json",
+          "size_bytes": 1142,
+          "sha256": "ba523f7d8b592c12620e3743ea962797037b0f72688bc5714c402795963f7743",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_prior_dominance_margin/provenance.json",
+          "size_bytes": 3054,
+          "sha256": "f9ea5f1a5d7e8725d86593cdd1a116215dca95bb3abaaa898203dcf58016338e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_prior_dominance_margin/result.json",
+          "size_bytes": 478,
+          "sha256": "6d15d60cc68a171710f63167deabdf02d1fd3f7530ef47c20c9feb9559cf7bcb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_prior_dominance_margin/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p6_prior_dominance_margin/stdout.log",
+          "size_bytes": 1139,
+          "sha256": "c15dce29963039042b47b08e43f5a9185a39f3fdbc95efe82f485e18e01c4f8d",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 5998,
+      "status": "OK"
+    },
+    {
+      "name": "p7_prior_temperature_forensics",
+      "path": "runs/p7_prior_temperature_forensics",
+      "command": "nice -n 19 .venv/bin/python3 tools/prior_temperature_forensics.py --limit 3000 --taus 0.0,0.1,0.2 --out runs/p7_prior_temperature_forensics/forensics.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Phase 3/4 forensics: decompose the tau=0.1 gain into top-K inertness, flip accounting, class-size leverage and entropy. Reproduces decision_rule_probe as a validation gate. CPU only, no GPU.",
+      "exit_code": 0,
+      "runtime_seconds": 15.517,
+      "started_at_utc": "2026-08-31T13:23:50.053152+00:00",
+      "files": [
+        {
+          "path": "runs/p7_prior_temperature_forensics/command.txt",
+          "size_bytes": 155,
+          "sha256": "d1963e08a36366076dc9da5d5a3eb14dd075a1e1a1d4f60e7c8ca88929437ed4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_forensics/forensics.json",
+          "size_bytes": 47307,
+          "sha256": "c4efde0a50c65de05928c2f6856e07f0bc86bfd4ef9542724a5e0c5973790c17",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_forensics/provenance.json",
+          "size_bytes": 3097,
+          "sha256": "428014c9d485106eefd1c635e8da79bfd7706962dfdc1022a77bc90288800f98",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_forensics/result.json",
+          "size_bytes": 454,
+          "sha256": "3121aacb2fb85ef37b16aca609d158e265aa0243b56ca962f5fb30c2b7e4b30f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_forensics/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_forensics/stdout.log",
+          "size_bytes": 11228,
+          "sha256": "9018c2a6b0062f892c2736e517bc7a0d22e0d4973b556fbf7bb7f9f7733357ef",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 62241,
+      "status": "OK"
+    },
+    {
+      "name": "p7_prior_temperature_sweep",
+      "path": "runs/p7_prior_temperature_sweep",
+      "command": "nice -n 19 .venv/bin/python3 tools/decision_rule_probe.py --prior datasets_vg150_clean/frequency_prior_train.json --split datasets_vg150_clean/validation.jsonl --limit 3000 --taus 0.0,0.05,0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.75,1.0 --out runs/p7_prior_temperature_sweep/decision_rule_sweep.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Phase 2 forensics: tau sweep on the SAME 3000-image subset as A'. Uses tools/decision_rule_probe.py UNMODIFIED. Pre-registered grid (0,0.1,0.25,0.5,0.75,1.0) extended with 0.05/0.15/0.2/0.3/0.4 for forensic resolution only; the headline tau stays 0.1 and no threshold is changed. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 20.538,
+      "started_at_utc": "2026-08-31T13:21:51.501475+00:00",
+      "files": [
+        {
+          "path": "runs/p7_prior_temperature_sweep/command.txt",
+          "size_bytes": 291,
+          "sha256": "014e02fcf0209510e30a193e5e07d126553fdd3fbca80a3e3411e5a0e98ba255",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_sweep/decision_rule_sweep.json",
+          "size_bytes": 11713,
+          "sha256": "a1abbfbdf37251f6c89b233c4bbacfb507781d15fdf0b62e077448f21c3aa1ca",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_sweep/provenance.json",
+          "size_bytes": 3147,
+          "sha256": "7ad686bdd84c9a94009f6b1f057ec5e9a0481f42c0ea5449e1acb89b92aae7e4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_sweep/result.json",
+          "size_bytes": 614,
+          "sha256": "7a84915db0e1b1a54aed4ddacdcf615e5d16e5d3df61d449938cbf005d3fcf8f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_sweep/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_prior_temperature_sweep/stdout.log",
+          "size_bytes": 2222,
+          "sha256": "039d74da3cb04131cd9b9db2b4c9a107ab9adbf8a1bf213bcb9951558b434178",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 17987,
+      "status": "OK"
+    },
+    {
+      "name": "p7_tau_curve_eval_scheme",
+      "path": "runs/p7_tau_curve_eval_scheme",
+      "command": "nice -n 19 .venv/bin/python3 tools/prior_baseline_alias_control.py --limit 3000 --prior datasets_vg150_clean/frequency_prior_train.json --taus 0.0,0.05,0.1,0.15,0.2,0.3 --out runs/p7_tau_curve_eval_scheme/tau_curve.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Phase 6: tau trade-off curve under BOTH mR schemes (raw 50-class and evals.py's 48-class alias merge), so the model arm (66.90/21.16, 48-class) can be placed on the zero-parameter curve.",
+      "exit_code": 0,
+      "runtime_seconds": 27.001,
+      "started_at_utc": "2026-08-31T13:28:57.167215+00:00",
+      "files": [
+        {
+          "path": "runs/p7_tau_curve_eval_scheme/command.txt",
+          "size_bytes": 220,
+          "sha256": "da49fe1ab65bd278faf0b0b30ba4782f6f8019411d541eb1d89e8601024c385b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_curve_eval_scheme/provenance.json",
+          "size_bytes": 3142,
+          "sha256": "209b7b2f4c11f8dea4780b2a5fe8c8e0d4326158c77fbe98fa95d58f383944cf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_curve_eval_scheme/result.json",
+          "size_bytes": 527,
+          "sha256": "b9375cb78f3c80127cc37433e75f0e3bb9095878c7cf9bbe61da8768712fbe90",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_curve_eval_scheme/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_curve_eval_scheme/stdout.log",
+          "size_bytes": 1283,
+          "sha256": "31037019b76eaf421d42aec0d72ad7fda21c7ddc80d280b6560d421e7c8055f2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_curve_eval_scheme/tau_curve.json",
+          "size_bytes": 43500,
+          "sha256": "989144800fb659dfe8c906df672b34e5da28103269d772ba5ee865961038b74c",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 48672,
+      "status": "OK"
+    },
+    {
+      "name": "p7_tau_global_control",
+      "path": "runs/p7_tau_global_control",
+      "command": "nice -n 19 .venv/bin/python3 tools/decision_rule_probe.py --prior datasets_vg150_clean/frequency_prior_train.json --split datasets_vg150_clean/validation.jsonl --limit 3000 --mode global --taus 0.0,0.1,0.5,1.0 --out runs/p7_tau_global_control/metrics.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Control: tau WITHOUT pair-conditioning (mode=global). If tau alone were just 'favour rare classes', this arm would also gain. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 11.709,
+      "started_at_utc": "2026-08-31T13:27:11.724624+00:00",
+      "files": [
+        {
+          "path": "runs/p7_tau_global_control/command.txt",
+          "size_bytes": 256,
+          "sha256": "7f556cd1994e79ec535fca562dd992498fc69b155bd8ba138654d3f770ac1559",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_global_control/metrics.json",
+          "size_bytes": 2979,
+          "sha256": "63cedb7cec8a26a2704325199e08c835830805fc92e3a03e8e02a649c1e9b380",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_global_control/provenance.json",
+          "size_bytes": 3091,
+          "sha256": "8fb3592451e00d696549c0253e6ad5da2e662c2679c90d3988dc7331ded9d0c0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_global_control/result.json",
+          "size_bytes": 588,
+          "sha256": "f789e902c75ab4caf02acaef1cfae079609ddc3122894679be4cc01c55aa1b12",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_global_control/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_global_control/stdout.log",
+          "size_bytes": 1306,
+          "sha256": "c2366ff2f6699d0a41beada8d1cd1df320ddb45401935616c43d3f541f860d0f",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8220,
+      "status": "OK"
+    },
+    {
+      "name": "p7_tau_vs_oracle_headroom",
+      "path": "runs/p7_tau_vs_oracle_headroom",
+      "command": "nice -n 19 .venv/bin/python3 tools/prior_temperature_vs_oracle.py --limit 3000 --taus 0.0,0.05,0.1,0.2,0.5 --out runs/p7_tau_vs_oracle_headroom/tau_vs_oracle.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Phase 5: compute tau's captured headroom in the appearance probe's OWN pre-registered units (oracle@5 denominator), on the A' 3000-image subset. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 9.187,
+      "started_at_utc": "2026-08-31T13:25:48.602102+00:00",
+      "files": [
+        {
+          "path": "runs/p7_tau_vs_oracle_headroom/command.txt",
+          "size_bytes": 163,
+          "sha256": "7f63f0268fbc9e362cedfa2870344d2870eebdb38ea8e699eb3b9ad95e64b1f4",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_vs_oracle_headroom/provenance.json",
+          "size_bytes": 3110,
+          "sha256": "a6ec98fb133bc5cf97e58eb05a8475bca5e647444e0a45c55283e0de79f1b7ea",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_vs_oracle_headroom/result.json",
+          "size_bytes": 456,
+          "sha256": "0dc41c82ae38d605d9d624611acf9870472d9f08070ad7ad0732264d105079ee",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_vs_oracle_headroom/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_vs_oracle_headroom/stdout.log",
+          "size_bytes": 3069,
+          "sha256": "96cc04329c706f86d7169da472afb38b469843f32b109c87029d26f465f26a6b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p7_tau_vs_oracle_headroom/tau_vs_oracle.json",
+          "size_bytes": 12976,
+          "sha256": "db35b6d93ed9ad0159604c751809af7e0fe29ca44e3fe607ef9b179e677a6cfc",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 19774,
+      "status": "OK"
+    },
+    {
+      "name": "p8_tau_path_bug",
+      "path": "runs/p8_tau_path_bug",
+      "command": "nice -n 19 .venv/bin/python3 tools/prove_tau_path_inert.py --out runs/p8_tau_path_bug/proof.json",
+      "commit": "a46fbada796ab066b5533eb736cf74ca5f5f10d8",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Phase 1 of C': prove --eval_logit_adj_tau is inert under the historical protocol (ensemble_alpha=0.0). CPU, no checkpoint, exercises the real evals.py function.",
+      "exit_code": 0,
+      "runtime_seconds": 4.957,
+      "started_at_utc": "2026-08-31T13:40:19.136339+00:00",
+      "files": [
+        {
+          "path": "runs/p8_tau_path_bug/command.txt",
+          "size_bytes": 97,
+          "sha256": "3dbd1977149e7260c3cbde700104a111c06d2de21da4663e3ccb992bf741715d",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p8_tau_path_bug/proof.json",
+          "size_bytes": 1921,
+          "sha256": "3080b60f638ebfe25609240282b81740da86974d7213217e05ec3b9fdc7f628f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p8_tau_path_bug/provenance.json",
+          "size_bytes": 3206,
+          "sha256": "a046a10d873a6caa80f6ed558cba6574afb98e2a555c00ea66551dc0d79eac0b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p8_tau_path_bug/result.json",
+          "size_bytes": 352,
+          "sha256": "15738dfadb3c39110b96c0fe9fce61ae4f26780fd050449caf01b937d0d97cf2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p8_tau_path_bug/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p8_tau_path_bug/stdout.log",
+          "size_bytes": 2530,
+          "sha256": "e6905c50b5a6be8cebf69325ed18b19cbf8ad9695fe52a64d73a31c8bd43ea8a",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8106,
+      "status": "OK"
+    },
+    {
+      "name": "p9_appearance_tau_interaction",
+      "path": "runs/p9_appearance_tau_interaction",
+      "command": ".venv/bin/python3 tools/appearance_tau_interaction.py --cache runs/p6_appearance_probe_l14_336_fp32/clip_l14_336_fp32_cache.pt --taus 0.0,0.05,0.1,0.15,0.2,0.3,0.5 --lambdas 0.1,0.25,0.5,1.0,2.0 --pca_dims 48,128,256 --null_seeds 5 --out runs/p9_appearance_tau_interaction/interaction.json",
+      "commit": "aaa24e9c1a5869ab0eca3b7e17d21f9534888a69",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Experiment D (docs/APPEARANCE_TAU_INTERACTION_PREREGISTRATION.md). CPU-only, reuses experiment B's fp32 cache; no GPU, no re-encoding. Sweeps (tau, lambda, PCA_DIM) and applies the registered Pareto + 2SD-over-shuffled-null criterion. tools/appearance_probe.py is UNMODIFIED; B stands as recorded.",
+      "exit_code": 0,
+      "runtime_seconds": 764.158,
+      "started_at_utc": "2026-08-31T19:39:22.296235+00:00",
+      "files": [
+        {
+          "path": "runs/p9_appearance_tau_interaction/command.txt",
+          "size_bytes": 290,
+          "sha256": "956e71d77a982853239cffb545fc552f91f81e3f2a56ed637d139e1828b58e5b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_appearance_tau_interaction/interaction.json",
+          "size_bytes": 54035,
+          "sha256": "36df9fecba9eaca2afbaf3fdf710bf511c26b4500412a006a460ac7d8d557052",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_appearance_tau_interaction/provenance.json",
+          "size_bytes": 2920,
+          "sha256": "2c2d4b67a9217efc06cb514b662037e88a5e1d4fb8454aa06f01e88ec91b6574",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_appearance_tau_interaction/result.json",
+          "size_bytes": 610,
+          "sha256": "1b684b162be24deb1997bac725904f3c35255e889897eca267335c37d05f0787",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_appearance_tau_interaction/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_appearance_tau_interaction/stdout.log",
+          "size_bytes": 10968,
+          "sha256": "c4313786196234173eb7eeed295339f0afd72fd6a487aae138b01736e7e96069",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 68823,
+      "status": "OK"
+    },
+    {
+      "name": "p9_probe_tiebreak_forensics",
+      "path": "runs/p9_probe_tiebreak_forensics",
+      "command": ".venv/bin/python3 tools/probe_tiebreak_forensics.py --cache runs/p6_appearance_probe_l14_336_fp32/clip_l14_336_fp32_cache.pt --probe_result runs/p6_appearance_probe_l14_336_fp32/appearance_probe_l14_fp32.json --out runs/p9_probe_tiebreak_forensics/tiebreak.json",
+      "commit": "aaa24e9c1a5869ab0eca3b7e17d21f9534888a69",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Experiment D0 (docs/APPEARANCE_TAU_INTERACTION_PREREGISTRATION.md section 7). Read-only: measures the argmax-vs-topk tie-breaking mismatch between the probe's reported P0 and its scored arms, and restates B's additive sweep against the like-for-like baseline. B's result JSON is preserved verbatim.",
+      "exit_code": 0,
+      "runtime_seconds": 2.316,
+      "started_at_utc": "2026-08-31T19:38:54.239257+00:00",
+      "files": [
+        {
+          "path": "runs/p9_probe_tiebreak_forensics/command.txt",
+          "size_bytes": 262,
+          "sha256": "5927ac0df792a087eefbb782a0e8838a4d1c545655e3e3df16a4b7f38d662bc0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_probe_tiebreak_forensics/provenance.json",
+          "size_bytes": 2921,
+          "sha256": "7f7a76fee67f945557179368ee661f822beef32883f840705070512a6beefcbf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_probe_tiebreak_forensics/result.json",
+          "size_bytes": 536,
+          "sha256": "823be3d073f5a793d1a572059123c3b904af9381aa3739833ae47de9abfcb4a2",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_probe_tiebreak_forensics/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_probe_tiebreak_forensics/stdout.log",
+          "size_bytes": 1239,
+          "sha256": "4baa661033a749a1d8abb1e6b88ac933235840ca828c342aa7660678789264f0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p9_probe_tiebreak_forensics/tiebreak.json",
+          "size_bytes": 3111,
+          "sha256": "9bf41bf62d32e702ff6135ca73d4a78fd6cf4b1c5fc1941c159aa2e53680dc38",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8069,
+      "status": "OK"
+    },
+    {
+      "name": "provenance",
+      "path": "runs/provenance",
+      "command": null,
+      "files": [
+        {
+          "path": "runs/provenance/machine_provenance_v1.yaml",
+          "size_bytes": 4074,
+          "sha256": "56e898cb770384b8038f8eddcdda789bc8aa43eb30132a00f1b78cdcf58cae91",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 4074,
+      "status": "NO_RESULT_JSON"
+    }
+  ]
+}
