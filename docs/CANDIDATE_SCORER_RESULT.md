@@ -108,19 +108,53 @@ the fit or the choice.
 
 `full − prior_only`: ΔR +1.022. `full − null`: ΔR +1.177.
 
-**MEASURED.** The interpretation is the point:
+> **⚠ This table is ONE fold partition.** `runs/p25` resamples it and the
+> absolute gap does not survive at this magnitude. Read §5b, not this table.
 
-- **The two arms with no model information land on the tau frontier** (+0.059,
-  +0.224). They reach their mR by *spending R*, which is precisely what tau
-  does. This is what "everything is calibration" looks like, and it is now
-  measured rather than suspected.
-- **The model-bearing arm is the only one that clears the R@50 floor**, and it
-  is 2.7 to 2.8 Pareto points off the frontier that the other two lie on.
-- Its Pareto gap is **+2.894 against the additive arm's +0.861** — 3.4×.
+## 5b. Resampled over 5 independent fold partitions (`runs/p25`) — authoritative
 
-`full` has *lower* mR than `prior_only` and a *better* Pareto gap. That is not a
-contradiction: the gap measures mR at matched R, and `prior_only` bought its mR
-with recall it could not afford.
+Same nested procedure, five deterministic re-partitions of the images
+(`fold_of_image` salts 0–4). This is the number of record; §5 is salt 0 alone.
+
+| salt | full R@50 | full mR@50 | full Pareto | floor | prior_only Pareto | null Pareto |
+|---|---|---|---|---|---|---|
+| 0 | 66.657 | 24.182 | +1.879 | ok | −0.026 | +0.037 |
+| 1 | 66.857 | 23.777 | +1.802 | ok | −0.814 | −0.608 |
+| 2 | 66.809 | 24.917 | +2.941 | ok | −1.419 | −1.361 |
+| 3 | 66.216 | 25.921 | +0.244 | **FAIL** | −1.831 | −1.833 |
+| 4 | 66.741 | 24.803 | +2.690 | ok | −1.937 | −1.922 |
+| **mean ± sd** | **66.656 ± 0.257** | | **+1.911 ± 1.056** | **4/5** | **−1.205 ± 0.793** | **−1.137 ± 0.838** |
+
+**Two findings of opposite sign, and both are the result.**
+
+**WEAKENED — the absolute magnitude.** The +2.894 reported in §5 was a
+favourable draw. The resampled mean is **+1.911 ± 1.056**, ranging +0.244 to
++2.941, and on salt 3 the arm **fails the R@50 floor** (66.216). It holds the
+floor on **4 of 5** partitions, so it is not yet a reliably usable operating
+point. Any future quotation of "+2.894" is a single-partition number and must
+be labelled as one.
+
+**STRENGTHENED — the separation from the nulls.** Per-partition
+`full − prior_only` = [+1.904, +2.615, +4.360, +2.075, +4.627], minimum
+**+1.904**; `full − shuffled_model` minimum **+1.842**. Every partition, without
+exception, separates the model-bearing arm from both nulls by more than 1.8
+Pareto points. The separation is far more stable than the absolute level,
+which is expected: the absolute gap also carries the noise of where nested
+selection lands, while the difference cancels it.
+
+**CORRECTION to §5's wording.** On salt 0 the calibration-only arms sat
+essentially *on* the tau frontier (+0.059, +0.224). Across five partitions they
+sit **slightly below it** (mean −1.205 and −1.137) and clear the R@50 floor on
+**0 of 5**. So the correct statement is stronger than the one made from salt 0:
+a learned per-class decision rule with no visual input does not merely fail to
+*beat* tau — on average it does not *match* it. Tuning tau is better than
+learning a calibration.
+
+**What to carry forward.** The defensible quantity is the **separation**
+(≥ +1.84 Pareto points over both nulls on every partition), not the absolute
+gap. `full` has *lower* mR than `prior_only` and a *better* Pareto gap; that is
+not a contradiction, because the gap measures mR at matched R and `prior_only`
+bought its mR with recall it could not afford.
 
 ## 6. What this does and does not establish
 
@@ -130,9 +164,10 @@ candidate-restricted, class-reweighted decision rule converts roughly three
 times as much of it into Pareto movement, at the same R@50 floor.
 
 **NOT established:** that this survives the full validation split; that it
-survives on the test split; that it survives across seeds; that the magnitude is
-stable. N here is 38,053 rows over 3,000 images, and the frontier is estimated,
-not analytic.
+survives on the test split. **And the magnitude is now measured NOT to be
+stable** (§5b): it ranges +0.244 to +2.941 across fold partitions and the arm
+fails the R@50 floor on one of five. N here is 38,053 rows over 3,000 images,
+and the frontier is estimated, not analytic.
 
 **Explicitly not claimed:** that global ranking improved. It did not — see
 `docs/ORACLE_CEILING_RESULT.md` §2 and the mechanism report. Nothing here

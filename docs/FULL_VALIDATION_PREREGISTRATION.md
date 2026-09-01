@@ -87,3 +87,51 @@ throughput implies more than 5 h, the run is killed and the screening result
 stands as exploratory rather than being confirmed on a partial cache.
 
 A partial cache will NOT be silently analysed as though it were the full split.
+
+---
+
+# Addendum — the screening magnitude changed AFTER this was registered
+
+Added 2026-09-01, while `runs/p24` was already executing. **No threshold above is
+altered.** This records a fact that materially affects how the criterion should
+be read, and hiding it would be worse than the awkwardness of recording it.
+
+## What changed
+
+The screening table at the top of this file is `runs/p22`: one partition of the
+images into 5 folds. `runs/p25` repeats the identical nested procedure over 5
+independent deterministic re-partitions:
+
+| quantity | as registered (`p22`, salt 0) | resampled (`p25`, 5 partitions) |
+|---|---|---|
+| `full` Pareto gap | +2.894 | **+1.911 ± 1.056** (range +0.244…+2.941) |
+| `full` clears R@50 floor | yes | **4 of 5 partitions** |
+| `prior_only` Pareto gap | +0.059 | **−1.205 ± 0.793**, floor 0/5 |
+| `shuffled_model` Pareto gap | +0.224 | **−1.137 ± 0.838**, floor 0/5 |
+| `full − prior_only` | +2.835 | **min +1.904** across partitions |
+| `full − shuffled_model` | +2.670 | **min +1.842** across partitions |
+
+**+2.894 was a favourable draw.**
+
+## Consequence for reading the criterion
+
+The criterion has two halves and they are now known to be of very different
+robustness:
+
+- The **absolute** half — `gap > +1.5` — was calibrated against a
+  single-partition +2.894. Against the resampled mean of +1.911 ± 1.056 that
+  threshold sits well inside one standard deviation, so **CONFIRMED vs WEAKENED
+  is close to a coin flip on screening evidence alone**. It is left in place
+  because it was registered, but it should not be read as a strong test.
+- The **separation** half — `full` exceeds both `prior_only` and
+  `shuffled_model` by > +1.0 — is the robust one: the minimum observed
+  separation across all five partitions is +1.842, comfortably clear of the
+  threshold on every partition.
+
+So if `runs/p24` returns WEAKENED on the absolute half while the separation half
+holds, that is the outcome the resampled screening already predicts, and it
+should be reported as *the magnitude was never as large as the first draw
+suggested*, not as *the effect disappeared*.
+
+If the separation half fails on the full split, that is a genuine refutation and
+is reported as such.

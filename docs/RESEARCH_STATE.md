@@ -39,10 +39,13 @@ tie-breaker on an argmax the prior has almost already decided.
    region.** ΔR *falls* from +0.673 to +0.205 across tau ∈ [0, 0.1]; it grows
    only at tau ≥ 0.2 where the prior has already lost 4.8–55.0 R points.
    (`runs/p17`)
-5. **Calibration-only decision rules cannot leave the tau frontier.** With beta
-   chosen out-of-fold, a learned per-class rule with no visual input lands at a
-   Pareto gap of +0.059, and its shuffled null at +0.224 — i.e. *on* the
-   frontier. (`runs/p22`)
+5. **A learned calibration does not even match tau.** With beta chosen
+   out-of-fold and resampled over 5 fold partitions, a learned per-class rule
+   with no visual input averages a Pareto gap of **−1.205** and its shuffled
+   null **−1.137** — *below* the tau frontier — and neither clears the R@50
+   floor on any partition (0/5). Tuning tau beats learning a per-class rule.
+   (`runs/p25`; the single-partition `runs/p22` read +0.059 / +0.224 and was
+   the optimistic draw.)
 6. **Appearance scoring on frozen CLIP L/14-336 adds nothing beyond
    calibration.** (`docs/APPEARANCE_TAU_INTERACTION_RESULT.md`)
 
@@ -63,14 +66,29 @@ The additive alpha/tau formulation is a poor converter of that increment.
 decision rule converts ~3.4× more of the model's complementary information into
 Pareto movement than the additive arm, at the same R@50 floor.
 
-With beta selected inside the training folds only (`runs/p22`, tau=0, k=5):
+With beta selected inside the training folds only, **resampled over 5
+independent fold partitions** (`runs/p25`, tau=0, k=5). The single-partition
+number (`runs/p22`, +2.894) was a favourable draw and is superseded:
 
-| arm | R@50 | mR@50 | Pareto gap vs tau frontier | floor 66.5 |
+| arm | R@50 mean ± sd | Pareto gap mean ± sd | Pareto min | clears floor |
 |---|---|---|---|---|
-| achieved additive C' | 67.474 | 22.837 | +0.861 | ok |
-| prior_only (no vision) | 65.651 | 26.354 | +0.059 | FAIL |
-| shuffled-model null | 65.495 | 26.608 | +0.224 | FAIL |
-| **full (prior + model)** | **66.673** | **25.161** | **+2.894** | **ok** |
+| achieved additive C' | 67.474 | +0.861 | — | 5/5 |
+| prior_only (no vision) | 65.861 ± 0.265 | **−1.205 ± 0.793** | −1.937 | **0/5** |
+| shuffled-model null | 65.856 ± 0.278 | **−1.137 ± 0.838** | −1.922 | **0/5** |
+| **full (prior + model)** | **66.656 ± 0.257** | **+1.911 ± 1.056** | **+0.244** | **4/5** |
+
+Two findings of opposite sign, both load-bearing:
+
+- **WEAKENED.** The absolute gap is partition-dependent (+0.244…+2.941) and the
+  arm fails the R@50 floor on 1 of 5 partitions. It is **not** yet a reliably
+  usable operating point.
+- **STRENGTHENED.** The *separation* from both nulls is ≥ **+1.84** Pareto
+  points on **every** partition (`full − prior_only` min +1.904,
+  `full − shuffled` min +1.842). The separation is the defensible quantity; the
+  absolute level is not.
+- **A learned calibration does not even match tau.** The no-vision arms average
+  −1.2 Pareto points — *below* the tau frontier — and clear the floor 0/5. Tuning
+  tau beats learning a per-class rule.
 
 This is a 3,000-image screening result and is **not** a headline.
 
@@ -84,8 +102,9 @@ This is a 3,000-image screening result and is **not** a headline.
 | `p19` | same, fully class-balanced | R collapses to 25–31; mR reaches 42.2 |
 | `p20` | beta frontier | superseded by p21 (×100 Pareto bug) |
 | `p21` | beta frontier, corrected, with null | full off-frontier at beta=0.20 |
-| `p22` | nested beta selection | **operating-point-free confirmation of p21** |
-| `p23` | throughput pilot, workers 7 | measures the full-val cost |
+| `p22` | nested beta selection | operating-point-free, but ONE partition |
+| `p23` | throughput pilot, workers 7 | 0.95x -- GPU-bound, more workers cannot help |
+| `p25` | nested selection resampled over 5 partitions | **magnitude weakened, separation confirmed** |
 
 ## 6. Experiments pending
 
