@@ -201,6 +201,15 @@ class CandidateProbe:
         return m
 
     # -------------------------------------------------------------- metrics
+    def _metrics_on(self, pred_col: torch.Tensor, y: torch.Tensor) -> Dict[str, float]:
+        """R/mR on a row SUBSET -- used only inside nested selection."""
+        pred = self.B.col_to_class[pred_col]
+        hit = (pred == y).float()
+        num = torch.zeros(self.C).index_add_(0, y, hit)
+        den = torch.zeros(self.C).index_add_(0, y, torch.ones_like(hit))
+        pres = den > 0
+        return {"R": float(hit.mean()), "mR": float((num[pres] / den[pres]).mean())}
+
     def _metrics(self, pred_col: torch.Tensor, arm: str) -> Dict[str, Any]:
         pred = self.B.col_to_class[pred_col]
         hit = (pred == self.y).float()
@@ -267,6 +276,69 @@ def frontier(B: Mech, tau: float, k: int, betas: List[float],
             "rows": rows, "baselines": bl}
 
 
+def nested(B: Mech, tau: float, k: int, betas: List[float],
+           epochs: int, l2: float, floor: float = R_FLOOR) -> Dict[str, Any]:
+    """Nested cross-fitting: beta is SELECTED inside the training folds only.
+
+    The frontier table shows `full` clearing the R@50 floor at beta=0.20 with a
+    Pareto gap of +2.86 against the tau frontier, where prior_only and the null
+    both fail the floor. But beta=0.20 was read off that table, so as it stands
+    it is a validation-optimised operating point quoted as if it were
+    pre-registered -- exactly what the directive forbids.
+
+    This removes the operating point from the reported number entirely. For each
+    outer fold: hold it out, split the remaining folds into an inner fit set and
+    an inner selection set, fit every beta on the inner fit set, choose the beta
+    that maximises mR@50 subject to R@50 >= floor on the inner SELECTION set,
+    refit at that beta on all non-outer folds, and predict the outer fold. No
+    label from an outer fold ever touches the fit or the choice, so the pooled
+    out-of-fold metrics are honest with no chosen constant anywhere in them.
+
+    The selection objective is the project's actual target -- maximise mR at the
+    R floor -- and is fixed before the run, not the metric that happened to look
+    best.
+    """
+    chosen, pred_col = [], None
+    P = CandidateProbe(B, tau, k)
+    bl = P.baselines()
+    Xc = {a: P._blocks(a, torch.Generator().manual_seed(SEED))
+          for a in ("prior_only", "full", "shuffled_model")}
+    out: Dict[str, Any] = {"tau": tau, "k": k, "betas": betas, "floor": floor,
+                           "baselines": bl, "arms": {}}
+    for arm, X in Xc.items():
+        pred_col = P.prior_top1_col.clone()
+        picks = []
+        for f in range(N_FOLDS):
+            te = P.fold == f
+            inner_sel = P.fold == ((f + 1) % N_FOLDS)      # one inner fold selects
+            inner_fit = (~te) & (~inner_sel)
+            best_b, best_key = betas[0], None
+            for b in betas:
+                w = P._fit_fold(X, inner_fit, epochs, l2, b)
+                sel = (X[inner_sel] @ w).argmax(-1)
+                pc = P.cand[inner_sel].gather(1, sel.unsqueeze(1)).squeeze(1)
+                m = P._metrics_on(pc, P.y[inner_sel])
+                key = (m["R"] >= floor, m["mR"])           # floor first, then mR
+                if best_key is None or key > best_key:
+                    best_key, best_b = key, b
+            picks.append(best_b)
+            w = P._fit_fold(X, ~te, epochs, l2, best_b)
+            sel = (X[te] @ w).argmax(-1)
+            pred_col[te] = P.cand[te].gather(1, sel.unsqueeze(1)).squeeze(1)
+        m = P._metrics(pred_col, arm)
+        m.pop("_per", None)
+        m["dR_points"] = (m["R"] - bl["prior"]["R"]) * 100.0
+        m["dmR_points"] = (m["mR"] - bl["prior"]["mR"]) * 100.0
+        m["meets_R_floor"] = bool(m["R"] >= floor)
+        m["betas_chosen_per_outer_fold"] = picks
+        CPAm = sys.modules["cprime_analysis"]
+        curve = [{"R": (q := B.metrics(B.score(t, ALPHA_HIST, None)))["R"], "mR": q["mR"]}
+                 for t in CPAm.TAUS]
+        m["pareto_dmR_points"] = CPAm.pareto_gap(curve, m["R"], m["mR"])
+        out["arms"][arm] = m
+    return out
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
@@ -278,6 +350,8 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--ks", default="3,5")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--l2", type=float, default=1e-4)
+    ap.add_argument("--nested", action="store_true",
+                    help="select beta inside the training folds only (honest OOF)")
     ap.add_argument("--frontier", action="store_true",
                     help="sweep beta and compare the learned R/mR frontier with tau's")
     ap.add_argument("--betas", default="0.0,0.1,0.2,0.3,0.5,0.75,1.0")
@@ -296,6 +370,43 @@ def main(argv: Optional[List[str]] = None) -> int:
          f"[gate] model-term identity {e:.3e} OK")
     _log(f"  folds={N_FOLDS} (split by IMAGE) seed={SEED} l2={args.l2} "
          f"floor R@50={R_FLOOR*100:.1f} loss={'class-balanced' if args.balanced else 'plain CE'}")
+
+    if args.nested:
+        betas = [float(b) for b in args.betas.split(",")]
+        out: Dict[str, Any] = {"tool": "candidate_scorer_probe_nested", "seed": SEED,
+                               "n_folds": N_FOLDS, "R_floor": R_FLOOR,
+                               "betas": betas, "by": {}}
+        for tau in [float(t) for t in args.taus.split(",")]:
+            for k in [int(x) for x in args.ks.split(",")]:
+                nr = nested(B, tau, k, betas, args.epochs, args.l2)
+                bl = nr["baselines"]
+                _log(f"\n{'-'*104}\n  NESTED (beta chosen inside training folds)  tau={tau} k={k}"
+                     f"\n  prior R@50 {bl['prior']['R']*100:.3f} mR {bl['prior']['mR']*100:.3f}"
+                     f"   |  achieved additive R@50 {bl['achieved']['R']*100:.3f}"
+                     f" mR {bl['achieved']['mR']*100:.3f}\n{'-'*104}")
+                _log(f"  {'arm':>16} {'R@50':>8} {'mR@50':>8} {'dR':>8} {'dmR':>8}"
+                     f" {'paretoGap':>10} {'floor':>6} {'head':>7} {'body':>7} {'tail':>7}  betas")
+                for a, m in nr["arms"].items():
+                    pg = m["pareto_dmR_points"]
+                    _log(f"  {a:>16} {m['R']*100:>8.3f} {m['mR']*100:>8.3f}"
+                         f" {m['dR_points']:>+8.3f} {m['dmR_points']:>+8.3f}"
+                         f" {('n/a' if pg is None else f'{pg:+.3f}'):>10}"
+                         f" {'ok' if m['meets_R_floor'] else 'FAIL':>6}"
+                         f" {m['head_mR']*100:>7.2f} {m['body_mR']*100:>7.2f}"
+                         f" {m['tail_mR']*100:>7.2f}  {m['betas_chosen_per_outer_fold']}")
+                F, Pq = nr["arms"]["full"], nr["arms"]["prior_only"]
+                Nq = nr["arms"]["shuffled_model"]
+                _log(f"\n    full - prior_only : dR {F['dR_points']-Pq['dR_points']:+.3f}"
+                     f"   dmR {F['dmR_points']-Pq['dmR_points']:+.3f}")
+                _log(f"    full - null       : dR {F['dR_points']-Nq['dR_points']:+.3f}"
+                     f"   dmR {F['dmR_points']-Nq['dmR_points']:+.3f}")
+                nr["baselines"]["prior"].pop("_per", None)
+                nr["baselines"]["achieved"].pop("_per", None)
+                out["by"][f"tau{tau}_k{k}"] = nr
+        Path(args.out).parent.mkdir(parents=True, exist_ok=True)
+        Path(args.out).write_text(json.dumps(out, indent=2), encoding="utf-8")
+        _log(f"\n[written] {args.out}")
+        return 0
 
     if args.frontier:
         betas = [float(b) for b in args.betas.split(",")]
