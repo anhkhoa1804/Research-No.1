@@ -54,9 +54,12 @@ This is a **decision-rule** failure sitting on top of a much smaller
 | failure | size | fixable how |
 |---|---|---|
 | the model's within-pair variation is only weakly aligned with truth | WPRD 0.554 vs geometry's 0.596 — a 0.042 gap | retraining / better objective |
-| **composition discards ~91% of whatever within-pair variation exists** | **entropy 0.566 → 0.063** | **decision rule only — no retraining** |
+| composition discards ~91% of whatever within-pair variation exists | entropy 0.566 → 0.063 | decision rule only — no retraining |
 
-**The second is far larger than the first.**
+~~**The second is far larger than the first.**~~ **WITHDRAWN by `runs/p45`.**
+Restoring the discarded variation buys +1.07 points against a registered +2.0
+threshold, at a near one-for-one cost in prior-correct rows. The second failure
+is *bounded by* the first, not larger than it.
 
 ## Why every earlier result follows from it
 
@@ -69,7 +72,30 @@ This is a **decision-rule** failure sitting on top of a much smaller
 | mR rises with tau, not with grounding (`p29`, `p35`) | tau reweights classes; it does not restore within-pair variation |
 | tail grounding indistinguishable from chance in the evaluated head (`p35`) | the smaller, genuine representation failure |
 
-## What it predicts, and what to do next
+## CORRECTION — `runs/p45` tested the prescription and it is WEAK
+
+The **descriptive** content above stands: the deployed system is 97.45%
+pair-constant-predictable against reality's 69.23%, the model term alone is
+68.97%, and composition discards ~91% of the within-pair variation.
+
+The **prescriptive inference below does not.** `runs/p45` amplified the
+within-group component exactly as this document proposed, pre-registered, and
+found a floor-holding gain of only **+1.07 points** of adversarial-fixed share
+against a registered SUPPORTED threshold of +2.0 — **WEAK**. The trade is close
+to one-for-one: λ=1→2 fixes 473 more adversarial rows and breaks 1,063
+prior-correct ones, so net rows fall from +762 to +172.
+
+**Composition discards the within-pair variation because that variation is
+mostly wrong.** `alpha = 3.75` is close to a rational response to a weak signal.
+The 91% figure measures how much is discarded, not how much is available. The
+claim below that the composition failure is "far larger" and "fixable by
+decision rule only" is **withdrawn**; the two failures are not separable, and
+the composition failure is bounded by the representation failure.
+
+The binding constraint is the **quality** of the within-pair signal
+(WPRD 0.554), not the composition. See `docs/WITHIN_PAIR_COMPOSITION_RESULT.md`.
+
+## What it predicted, and how that turned out
 
 **Prediction (testable on the existing cache, no GPU):** a composition that
 preserves within-pair variation — e.g. applying the prior *between* groups but
