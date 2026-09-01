@@ -134,3 +134,26 @@ def test_shuffled_null_keeps_the_feature_marginal_but_breaks_the_row_link(P):
     # null's value multiset is not a permutation of the real one. What must hold
     # is that every null value is a real entry of the model term somewhere.
     assert set(null[..., -3].flatten().tolist()) <= set(P.md.flatten().tolist())
+
+
+# ------------------------------------------- 5. resampling the fold partition
+def test_fold_salt_repartitions_but_stays_deterministic(mods):
+    csp, _ = mods
+    ids = [str(i) for i in range(400)]
+    a = [csp.fold_of_image(i, 5, 0) for i in ids]
+    b = [csp.fold_of_image(i, 5, 1) for i in ids]
+    assert a == [csp.fold_of_image(i, 5, 0) for i in ids]   # reproducible
+    assert a != b                                            # genuinely different
+    assert sum(x != y for x, y in zip(a, b)) > len(ids) // 4
+
+
+def test_every_salt_still_splits_by_image(mods, B):
+    """A re-partition must not quietly break the leakage guarantee."""
+    csp, _ = mods
+    for salt in (0, 1, 2):
+        P = csp.CandidateProbe(B, 0.0, 5, csp.SEED, salt)
+        per_img = {}
+        for row in range(P.n):
+            per_img.setdefault(int(B.gt_img[row]), set()).add(int(P.fold[row]))
+        assert all(len(v) == 1 for v in per_img.values())
+        assert int(torch.bincount(P.fold, minlength=5).min()) > 0

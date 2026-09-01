@@ -65,15 +65,23 @@ def _log(m: str = "") -> None:
     print(m, flush=True)
 
 
-def fold_of_image(image_id: str, n_folds: int = N_FOLDS) -> int:
-    """Deterministic, order-independent, seed-independent fold assignment."""
-    h = hashlib.sha256(str(image_id).encode("utf-8")).digest()
+def fold_of_image(image_id: str, n_folds: int = N_FOLDS, salt: int = 0) -> int:
+    """Deterministic, order-independent fold assignment.
+
+    `salt` re-partitions the images into a DIFFERENT set of folds while staying
+    fully deterministic. It exists so the headline can be resampled: a single
+    5-fold partition is one draw, and a Pareto gap that only survives on the
+    partition it was measured on is not a result.
+    """
+    h = hashlib.sha256(f"{salt}:{image_id}".encode("utf-8")).digest()
     return int.from_bytes(h[:8], "big") % n_folds
 
 
 class CandidateProbe:
-    def __init__(self, B: Mech, tau: float, k: int, seed: int = SEED):
+    def __init__(self, B: Mech, tau: float, k: int, seed: int = SEED,
+                 fold_salt: int = 0):
         self.B, self.tau, self.k, self.seed = B, tau, k, seed
+        self.fold_salt = fold_salt
         self.pr = B.rows(B.score(tau, ALPHA_HIST, None))     # (n_gt, C) prior term
         self.md = B.rows(B.score(tau, 0.0, B.model))         # (n_gt, C) model term
         self.y = B.gt_y
@@ -98,7 +106,8 @@ class CandidateProbe:
         eq = (self.cand == self.gt_col.unsqueeze(1))
         self.gt_pos = torch.where(self.gt_in, eq.float().argmax(-1), torch.full((self.n,), -1)).long()
 
-        self.fold = torch.tensor([fold_of_image(B.meta["image_id"][int(i)])
+        self.fold = torch.tensor([fold_of_image(B.meta["image_id"][int(i)],
+                                                N_FOLDS, fold_salt)
                                   for i in B.gt_img], dtype=torch.long)
 
     # ------------------------------------------------------------- features
@@ -277,7 +286,8 @@ def frontier(B: Mech, tau: float, k: int, betas: List[float],
 
 
 def nested(B: Mech, tau: float, k: int, betas: List[float],
-           epochs: int, l2: float, floor: float = R_FLOOR) -> Dict[str, Any]:
+           epochs: int, l2: float, floor: float = R_FLOOR,
+           fold_salt: int = 0) -> Dict[str, Any]:
     """Nested cross-fitting: beta is SELECTED inside the training folds only.
 
     The frontier table shows `full` clearing the R@50 floor at beta=0.20 with a
@@ -299,12 +309,12 @@ def nested(B: Mech, tau: float, k: int, betas: List[float],
     best.
     """
     chosen, pred_col = [], None
-    P = CandidateProbe(B, tau, k)
+    P = CandidateProbe(B, tau, k, SEED, fold_salt)
     bl = P.baselines()
     Xc = {a: P._blocks(a, torch.Generator().manual_seed(SEED))
           for a in ("prior_only", "full", "shuffled_model")}
     out: Dict[str, Any] = {"tau": tau, "k": k, "betas": betas, "floor": floor,
-                           "baselines": bl, "arms": {}}
+                           "fold_salt": fold_salt, "baselines": bl, "arms": {}}
     for arm, X in Xc.items():
         pred_col = P.prior_top1_col.clone()
         picks = []
@@ -350,6 +360,9 @@ def main(argv: Optional[List[str]] = None) -> int:
     ap.add_argument("--ks", default="3,5")
     ap.add_argument("--epochs", type=int, default=200)
     ap.add_argument("--l2", type=float, default=1e-4)
+    ap.add_argument("--repeats", type=int, default=1,
+                    help="re-partition the folds this many times (salts 0..N-1) "
+                         "and report mean/sd -- resamples the headline")
     ap.add_argument("--nested", action="store_true",
                     help="select beta inside the training folds only (honest OOF)")
     ap.add_argument("--frontier", action="store_true",
@@ -378,8 +391,30 @@ def main(argv: Optional[List[str]] = None) -> int:
                                "betas": betas, "by": {}}
         for tau in [float(t) for t in args.taus.split(",")]:
             for k in [int(x) for x in args.ks.split(",")]:
-                nr = nested(B, tau, k, betas, args.epochs, args.l2)
+                reps = [nested(B, tau, k, betas, args.epochs, args.l2,
+                               R_FLOOR, salt) for salt in range(args.repeats)]
+                nr = reps[0]
                 bl = nr["baselines"]
+                if args.repeats > 1:
+                    import statistics as _st
+                    agg = {}
+                    for a in ("prior_only", "full", "shuffled_model"):
+                        for f in ("R", "mR", "pareto_dmR_points"):
+                            vs = [r["arms"][a][f] for r in reps
+                                  if r["arms"][a][f] is not None]
+                            agg[f"{a}.{f}"] = {
+                                "mean": _st.mean(vs),
+                                "sd": (_st.stdev(vs) if len(vs) > 1 else 0.0),
+                                "min": min(vs), "max": max(vs), "n": len(vs)}
+                    nr["resampled"] = {"repeats": args.repeats, "stats": agg,
+                                       "per_salt": [
+                                           {"salt": r["fold_salt"],
+                                            "arms": {a: {"R": r["arms"][a]["R"],
+                                                         "mR": r["arms"][a]["mR"],
+                                                         "pareto": r["arms"][a]["pareto_dmR_points"],
+                                                         "floor": r["arms"][a]["meets_R_floor"]}
+                                                     for a in ("prior_only", "full", "shuffled_model")}}
+                                           for r in reps]}
                 _log(f"\n{'-'*104}\n  NESTED (beta chosen inside training folds)  tau={tau} k={k}"
                      f"\n  prior R@50 {bl['prior']['R']*100:.3f} mR {bl['prior']['mR']*100:.3f}"
                      f"   |  achieved additive R@50 {bl['achieved']['R']*100:.3f}"
@@ -400,6 +435,18 @@ def main(argv: Optional[List[str]] = None) -> int:
                      f"   dmR {F['dmR_points']-Pq['dmR_points']:+.3f}")
                 _log(f"    full - null       : dR {F['dR_points']-Nq['dR_points']:+.3f}"
                      f"   dmR {F['dmR_points']-Nq['dmR_points']:+.3f}")
+                if "resampled" in nr:
+                    st = nr["resampled"]["stats"]
+                    _log(f"\n    RESAMPLED over {args.repeats} independent fold partitions:")
+                    _log(f"      {'arm':>16} {'R@50 mean+-sd':>20} {'pareto mean+-sd':>20}"
+                         f" {'pareto min':>11} {'floor held':>11}")
+                    for a in ("prior_only", "full", "shuffled_model"):
+                        r_, p_ = st[f"{a}.R"], st[f"{a}.pareto_dmR_points"]
+                        held = sum(1 for x in nr["resampled"]["per_salt"]
+                                   if x["arms"][a]["floor"])
+                        _log(f"      {a:>16} {r_['mean']*100:>13.3f} +-{r_['sd']*100:<5.3f}"
+                             f" {p_['mean']:>13.3f} +-{p_['sd']:<5.3f}"
+                             f" {p_['min']:>+11.3f} {held:>7}/{args.repeats}")
                 nr["baselines"]["prior"].pop("_per", None)
                 nr["baselines"]["achieved"].pop("_per", None)
                 out["by"][f"tau{tau}_k{k}"] = nr
