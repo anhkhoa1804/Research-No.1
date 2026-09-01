@@ -70,7 +70,39 @@ any of them as a current result. Current state of record:
 > baseline (36.29 %). Report the delta against the prior, never the
 > calibrated number alone. Full analysis: `docs/PROJECT_STATUS.md` §10.
 
-**What *has* been measured against the one recovered checkpoint, on current code** (all small-sample diagnostics, none a baseline — see `docs/PROJECT_STATUS.md` §10 for the full table): the raw CLIP-text scoring path reaches R@50 = 25.26 % / mR@50 = 5.84 % at n=50 (`runs/text_path_gate/`), and the classifier path reaches 1.41 % / 0.94 % at n=16 because that head is untrained in this checkpoint. **The full historical configuration — text path *plus* the frequency prior at α=3.75 — has never been run at any sample size.** Reproducing it is the next experiment; the protocol is `docs/GCP_EXPERIMENT_PROTOCOL.md`.
+**What *has* been measured against the one recovered checkpoint, on current code** (all small-sample diagnostics, none a baseline — see `docs/PROJECT_STATUS.md` §10 for the full table): the raw CLIP-text scoring path reaches R@50 = 25.26 % / mR@50 = 5.84 % at n=50 (`runs/text_path_gate/`), and the classifier path reaches 1.41 % / 0.94 % at n=16 because that head is untrained in this checkpoint.
+
+> **⚠ SUPERSEDED, 2026-09-01.** This paragraph used to end: *"The full
+> historical configuration — text path plus the frequency prior at α=3.75 — has
+> never been run at any sample size. Reproducing it is the next experiment."*
+> **That is no longer true and must not be cited.** It has been run — at 240
+> images, at 3,000 images and on the full validation split — and the results
+> changed the project's conclusions rather than confirming them:
+>
+> - Against a **leak-free train-derived** prior the model's contribution is
+>   **+0.673 R@50 points**, not the ≈ +2.7 implied by the control block above.
+>   The two are not comparable: the block above uses the **historical** prior on
+>   the **full** split (64.37 / 20.30), while the C' work uses the
+>   **train-derived** prior on a **3,000-image** subset (66.80 / 21.98).
+>   Different prior, different N.
+> - The **+2.3 mR** implied contribution is largely **τ**, not the model. A
+>   no-vision recalibration reproduces the model's entire mR gain
+>   (`f004fe2`), and calibration-only decision rules provably cannot leave the
+>   τ frontier (`runs/p22`).
+> - The model does **not** improve global ranking: it worsens mean GT rank
+>   1.83 → 2.78 while still producing net beneficial top-1 flips. It behaves as
+>   a bounded tie-breaker, not a better ranker.
+>
+> Current state of record: **`docs/RESEARCH_STATE.md`**. Bottleneck adjudication:
+> `docs/BOTTLENECK_ASSESSMENT.md`. The historical protocol remains
+> `docs/GCP_EXPERIMENT_PROTOCOL.md`.
+
+**The table above has still never been re-derived under the current evaluator.**
+Four evaluator defects have been fixed since those numbers were produced — GT
+triplet index misalignment (`220c5c2e`), `eval_batches=0` evaluating zero images
+(`74c54a2`), a `topk`/`argmax` tie-break affecting 522 GT rows (`7d4a658`), and
+`min(25, eval_batches)` inverting the unlimited sentinel (`9ab094d`). Treat every
+row of it as `UNKNOWN` provenance until re-derived.
 
 ## 3. Current supported experiments
 
