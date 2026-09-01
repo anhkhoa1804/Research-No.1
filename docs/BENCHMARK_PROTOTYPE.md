@@ -1,7 +1,8 @@
 # Prototype protocol: prior-controlled relational grounding on existing VG150
 
-**No new data.** Every component below is computable from annotations that
-already exist. The protocol is the contribution; a dataset is only justified if
+**No new data for the components marked BUILT.** Two components (C6 strong,
+C9) were checked and found **not** answerable from VG150; that is recorded
+rather than assumed. The protocol is the contribution; a dataset is only justified if
 the protocol first shows that existing data cannot answer a component.
 
 The question the protocol asks:
@@ -74,19 +75,35 @@ advantage *grows* toward the tail (+0.033 head–head → +0.123 tail–tail).
   most in need of more data, and **Haystack** already supplies rare-predicate
   annotations with explicit negatives — reuse before collecting.
 
-## C6 — role swap / directional reversal · **SPEC**
+## C6 — role swap / directional reversal · **DOWNGRADED after counting**
 
-For a group (A,B), does the model's predicate ranking change appropriately when
-subject and object are exchanged — i.e. is (A, on, B) distinguished from
-(B, on, A)?
+I specced this as SPEC and then counted it, as the spec required. The count
+kills the strong version and weakens the weak one.
 
-- **Measures:** role binding, which WPRD does not test (it holds the ordered
-  pair fixed).
-- **Feasible on VG150 now:** requires groups where both (A,B) and (B,A) occur.
-  **Must be counted before being promised** — if the count is small, this
-  component is NEEDS DATA, not SPEC.
-- **Design note:** the natural statistic is the same double difference with the
-  roles swapped, so the prior cancels the same way.
+| quantity | VG150 validation |
+|---|---|
+| groups whose role-swapped pair (B,A) also occurs | 11,626 (25.5%), 75,996 rows |
+| ...with **both** directions decidable (≥2 GT) | 1,960 groups, **40,188 rows** |
+| role-swapped pairs with **different** GT sets | 11,442 of 11,626 |
+| role-swapped pairs co-occurring **in the same image** | **0** |
+
+Two conclusions:
+
+1. **The strong version is NEEDS DATA, not SPEC.** Same image, same two object
+   instances, roles exchanged: **zero instances exist.** VG annotates
+   (A, rel, B) once; it does not annotate the reverse direction for the same
+   instance pair. No amount of analysis recovers this from VG150.
+2. **The weak version does not inherit the protocol's key property.** WPRD's
+   prior cancellation works because it compares rows *within one group*. A
+   role-swap comparison is *between two different groups*, (A,B) and (B,A),
+   which have **different priors** — so the prior does **not** cancel, and the
+   test would be measuring prior asymmetry confounded with role binding. It
+   would need a different construction and would not be prior-free.
+
+**Corrected status: role binding is not testable in a prior-free way on VG150.**
+It is a genuine gap in the protocol and an honest motivation for future data —
+alongside C9, and for the same underlying reason (VG contains no controlled
+relational interventions).
 
 ## C7 — prior-adversarial cases · **SPEC**
 
@@ -108,7 +125,7 @@ WPRD. Excluding them **raises** every estimate (text 0.5542 → 0.5592), so the
 artifact is *conservative* — it dilutes rather than manufactures the finding.
 Any component above must report the excluded-same-instance variant alongside.
 
-## C9 — relational flip consistency · **NEEDS DATA**
+## C9 — relational flip consistency · **NEEDS DATA**  *(with C6-strong, the only two)*
 
 Same objects, same image up to a minimal change, relation genuinely different.
 VG gives *same-(s,o)-different-image*, which is not a controlled intervention.
