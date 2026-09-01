@@ -2585,6 +2585,7 @@ def main(argv: Optional[List[str]] = None) -> None:
                 "clip_unfreeze_after_epochs": int(getattr(cfg, "clip_unfreeze_after_epochs", 0)),
                 "num_batches": int(epoch_batches),
                 "positive_pairs": int(epoch_positive_pairs),
+
                 "candidate_pairs": int(epoch_candidate_pairs),
                 "avg_positive_pairs_per_batch": float(epoch_positive_pairs / max(1, epoch_batches)),
                 "avg_candidate_pairs_per_batch": float(epoch_candidate_pairs / max(1, epoch_batches)),
