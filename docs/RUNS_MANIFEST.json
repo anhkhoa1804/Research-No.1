@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 87,
-  "total_bytes": 1312518425,
+  "n_runs": 89,
+  "total_bytes": 1312533179,
   "runs": [
     {
       "name": "p10_model_recalibration",
@@ -3970,6 +3970,129 @@
         }
       ],
       "total_bytes": 13406,
+      "status": "OK"
+    },
+    {
+      "name": "p57_FAILED_constant_column",
+      "path": "runs/p57_FAILED_constant_column",
+      "command": ".venv/bin/python3 tools/geometry_decodability.py --out runs/p57_geometry_decodability/dec.json",
+      "commit": "db6dec3bcbfbfffcbe1529cae7c68c178f7a23b9",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Pre-registered in docs/GEOMETRY_DECODABILITY_PREREGISTRATION.md (commit db6dec3), before the tool existed. After p55/p56 closed the readout, objective and supervision routes, H6 survives only by elimination; this asks whether the 19 box features a linear probe uses to beat rel_feat are even linearly present inside rel_feat. CPU only, runs beside the p54 GPU pass.",
+      "exit_code": 0,
+      "runtime_seconds": 191.783,
+      "started_at_utc": "2026-09-02T06:47:39.740176+00:00",
+      "files": [
+        {
+          "path": "runs/p57_FAILED_constant_column/STOPPED.md",
+          "size_bytes": 981,
+          "sha256": "b2dbdf0c668cc09e1469eb6d47b192598d6d9058d63e478e1bb68a98addca2eb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_FAILED_constant_column/command.txt",
+          "size_bytes": 95,
+          "sha256": "cfa2316a63bf99fde63cab360a215d9d66f56940233c8d871d27f56512b16d42",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_FAILED_constant_column/dec.json",
+          "size_bytes": 1373,
+          "sha256": "a4616dd37e7b227648e4765a2c1e08461870875e718e3207e3c46790fdc6dd3e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_FAILED_constant_column/provenance.json",
+          "size_bytes": 3020,
+          "sha256": "fd8f6999deea501fae0852e58f1ffdac3894195113d666cd11701de8d8bf001d",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_FAILED_constant_column/result.json",
+          "size_bytes": 341,
+          "sha256": "93f2b9664c9249d8bdd4e9a45abadf4d598f171a3f8985d98d4de67f1ddad9ec",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_FAILED_constant_column/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_FAILED_constant_column/stdout.log",
+          "size_bytes": 2058,
+          "sha256": "07ab87cd616b40e60b8b44a270546e9577a1306b07a890e8c68d3127d50306d4",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7868,
+      "status": "OK"
+    },
+    {
+      "name": "p57_geometry_decodability",
+      "path": "runs/p57_geometry_decodability",
+      "command": ".venv/bin/python3 tools/geometry_decodability.py --out runs/p57_geometry_decodability/dec.json",
+      "commit": "6d6fb92b13bb93354ec863be0e7ea3495956072d",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Pre-registered in docs/GEOMETRY_DECODABILITY_PREREGISTRATION.md (commit db6dec3). Attempt 2. Attempt 1 (runs/p57_FAILED_constant_column) reported a verdict produced by a division artifact: _standardise appends a constant bias column whose zero variance made its R2 evaluate to -1.4e13. Constant targets are now screened out and gate X1 is two-sided. No registered threshold changed. CPU only, beside the p54 GPU pass.",
+      "exit_code": 0,
+      "runtime_seconds": 159.203,
+      "started_at_utc": "2026-09-02T06:51:44.610605+00:00",
+      "files": [
+        {
+          "path": "runs/p57_geometry_decodability/command.txt",
+          "size_bytes": 95,
+          "sha256": "cfa2316a63bf99fde63cab360a215d9d66f56940233c8d871d27f56512b16d42",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_geometry_decodability/dec.json",
+          "size_bytes": 1373,
+          "sha256": "da10eab6f6f851f0a63affc97b0b1624506989e9f0444caaa729bda4f6cec0bc",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_geometry_decodability/provenance.json",
+          "size_bytes": 3043,
+          "sha256": "ee76f72aa9a159fcbc03dd2a329ed81d4a715b63e3f23ef8069ab9e111f8eb32",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_geometry_decodability/result.json",
+          "size_bytes": 341,
+          "sha256": "3b8a6c3346ec0bb6926d9e9d5f7de3abc7baed51a27f27c7f76335001614daef",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_geometry_decodability/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p57_geometry_decodability/stdout.log",
+          "size_bytes": 2034,
+          "sha256": "f768afbf7eeb698249877f4a86f699bd61ddc5bad173694a7aa106f9666fa34a",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6886,
       "status": "OK"
     },
     {
