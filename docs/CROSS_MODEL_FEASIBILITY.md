@@ -198,3 +198,45 @@ So the honest status is unchanged in substance and much improved in position:
 > 26 GB archive, or any mirror of that one file.
 
 Every claim in this programme remains a measurement of one checkpoint.
+
+
+---
+
+# Correction — 2026-09-02, verified from disk
+
+**Section 3 above ("The checkpoint is downloaded and verified complete") is
+STALE. The IMP+ checkpoint is NOT on disk.**
+
+Verified: `downloads/` is empty; a filesystem-wide search for `*.h5`, `*.tar`,
+`*IMP*.pth` and for any file >500 MB outside the repo returns only
+`~/VG150_dataset.zip`. The 2.54 GB download described above was evidently made
+into a session scratchpad that has since been cleared. **It must be re-downloaded
+before any cross-model work; do not plan as if it were available.**
+
+Also re-checked this session, with network confirmed working
+(`curl -I https://huggingface.co` -> 200):
+
+- **`VG-SGG.h5` is still not on Hugging Face.** Searches over the dataset and
+  model APIs for `VG-SGG`, `VG_SGG`, `vg150`, `scene-graph-benchmark` and
+  `visual genome scene graph` return no `.h5` artifact.
+- **A new and better path was found.** `maelic/VG150-coco-format` is the
+  **standard VG150 split** (top-150 objects / 50 predicates, Xu et al.
+  selection) in COCO JSON, published as parquet, produced for SGG-Benchmark and
+  used in the REACT paper. It contains the standard split membership, boxes and
+  vocabulary — i.e. **everything `VG-SGG.h5` carries** — in a format that is
+  freely downloadable and needs no byte-range extraction from a 26 GB archive.
+
+**Revised cheapest path to the cross-model gate:**
+
+1. Download `maelic/VG150-coco-format` (parquet, no images needed for PredCls
+   with GT boxes).
+2. Write a converter COCO-JSON -> `VG-SGG.h5` schema (`labels`, `boxes_1024`,
+   `boxes_512`, `img_to_first_box`/`last_box`, `relationships`, `predicates`,
+   `img_to_first_rel`/`last_rel`, `split`). This is a documented, fixed schema.
+3. Re-download the `bknyaz/sgg` IMP+ checkpoint (no CUDA blocker; sm_89 is fine).
+4. **Run ordinary PredCls evaluation and reproduce the published R@50/mR@50.**
+   This is the gate. A converter bug shows up here, not in WPRD.
+5. Only after step 4 passes, compute WPRD.
+
+Estimated: ~1 day of engineering, ~1-2 GPU-hours for step 4. Step 2 is the risk;
+step 4 is the check that makes the risk survivable.

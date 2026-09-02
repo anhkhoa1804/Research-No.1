@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 89,
-  "total_bytes": 1312533179,
+  "n_runs": 95,
+  "total_bytes": 1667124869,
   "runs": [
     {
       "name": "p10_model_recalibration",
@@ -3823,6 +3823,9 @@
       "branch": "research/architecture-breakthrough",
       "working_tree_clean": true,
       "note": "Pre-registered held-out replication on the VG150 TEST split (docs/TEST_SPLIT_REPLICATION_PREREGISTRATION.md). Identical to runs/p36_relfeat_cache in every flag except --eval_split_name test and output paths. Frozen forward pass, no training, no gradient. GPU verified idle (0 MiB, 0 percent, no compute apps) immediately before launch; 2-batch smoke on split=test passed and the dump contract (rel_feat, pred_emb) was verified. No registered threshold altered.",
+      "exit_code": 0,
+      "runtime_seconds": 12684.973,
+      "started_at_utc": "2026-09-02T06:09:29.562886+00:00",
       "files": [
         {
           "path": "runs/p54_test_relfeat_cache/command.txt",
@@ -3832,9 +3835,44 @@
           "mtime": null
         },
         {
+          "path": "runs/p54_test_relfeat_cache/epoch_metrics/epoch_000.json",
+          "size_bytes": 90547,
+          "sha256": "bdd76cbab8e68a4f1a2b1895a9ec783e21522e2e38662f86d608c1fd89b0a362",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p54_test_relfeat_cache/latest_metrics.json",
+          "size_bytes": 90547,
+          "sha256": "bdd76cbab8e68a4f1a2b1895a9ec783e21522e2e38662f86d608c1fd89b0a362",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p54_test_relfeat_cache/metrics.jsonl",
+          "size_bytes": 65914,
+          "sha256": "0e58c69629068df17c88426a00a92e9196eb85dea873d95a5fe17183aed2d2d0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p54_test_relfeat_cache/pair_logits_relfeat.pt",
+          "size_bytes": 354294267,
+          "sha256": null,
+          "note": "large: size+mtime identity",
+          "mtime": 1788339328.9877214
+        },
+        {
           "path": "runs/p54_test_relfeat_cache/provenance.json",
           "size_bytes": 3039,
           "sha256": "f41a3e13485b40896e8741ac93f3cd949a40c850e882941b5e5a261bfe17ad86",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p54_test_relfeat_cache/result.json",
+          "size_bytes": 1871,
+          "sha256": "274eeb0cda4c459b6126545ed8109ecdf0e90a0b251e833404ee2c17512a11b4",
           "note": null,
           "mtime": null
         },
@@ -3847,14 +3885,14 @@
         },
         {
           "path": "runs/p54_test_relfeat_cache/stdout.log",
-          "size_bytes": 4390,
-          "sha256": "8e3ed791640a4a12db49244826413d5a218ef9afce5e224b1735bdee0ee3e081",
+          "size_bytes": 4991,
+          "sha256": "4fc19a99dca494e5e3533180ccf1157cc468085ede6b25d9d76945830bbd9ab6",
           "note": null,
           "mtime": null
         }
       ],
-      "total_bytes": 9151,
-      "status": "NO_RESULT_JSON"
+      "total_bytes": 354552898,
+      "status": "OK"
     },
     {
       "name": "p55_objective_relfeat",
@@ -4094,6 +4132,166 @@
       ],
       "total_bytes": 6886,
       "status": "OK"
+    },
+    {
+      "name": "p58_VOID_lambda_grid_too_narrow",
+      "path": "runs/p58_VOID_lambda_grid_too_narrow",
+      "command": ".venv/bin/python3 tools/geometry_fusion.py --out runs/p58_geometry_fusion/fusion.json",
+      "commit": "189159e178f12baf93f3e23393b701aff92c0c97",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Pre-registered in docs/GEOMETRY_FUSION_PREREGISTRATION.md (commit 8f35fff), before the tool existed. Replaces p37's R9, which compared a 788-d validation-cross-fitted ridge against a 20-d train-fitted CE probe and read the difference as a fact about the features. Every arm here shares one regime: same folds, same estimator, same nested lambda search by inner-fold log-loss, same preprocessing. Arm F (random-768 + geometry) isolates dimensionality. CPU only, 4 threads, runs beside the p54 GPU pass which is NOT touched.",
+      "exit_code": 0,
+      "runtime_seconds": 193.41,
+      "started_at_utc": "2026-09-02T07:06:59.032281+00:00",
+      "files": [
+        {
+          "path": "runs/p58_VOID_lambda_grid_too_narrow/STOPPED.md",
+          "size_bytes": 1002,
+          "sha256": "cdf40ca46e3dff84b09c648f6d6aa0879f17264d267372b442b0d93c5fee62cb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_VOID_lambda_grid_too_narrow/command.txt",
+          "size_bytes": 86,
+          "sha256": "c769b259422352bfda19f5bb931247071c7f6348503fd7683d8935df4ea8fa60",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_VOID_lambda_grid_too_narrow/fusion.json",
+          "size_bytes": 4646,
+          "sha256": "fcfcd666e7b510cf49f557cd926552fc4dce725c7f2cd7cbd2e432e59973e12c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_VOID_lambda_grid_too_narrow/provenance.json",
+          "size_bytes": 3100,
+          "sha256": "306a6676eab5e24670ed9518e230c054caa7578c705899b33c375e592f7597e5",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_VOID_lambda_grid_too_narrow/result.json",
+          "size_bytes": 325,
+          "sha256": "2cbb841eeca71f0f8eebe7a6552c6e2d26917daad4b66efc4f30addb9b48ed74",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_VOID_lambda_grid_too_narrow/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_VOID_lambda_grid_too_narrow/stdout.log",
+          "size_bytes": 3157,
+          "sha256": "dff101d6d77f37052367ca5f9a493217340e079d3b4a4d3927ce170ca0341bc9",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 12316,
+      "status": "OK"
+    },
+    {
+      "name": "p58_geometry_fusion",
+      "path": "runs/p58_geometry_fusion",
+      "command": ".venv/bin/python3 tools/geometry_fusion.py --out runs/p58_geometry_fusion/fusion.json",
+      "commit": "18268ac6fe975a8ad291bd9b54105b793b470c0e",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Attempt 2. Attempt 1 (runs/p58_VOID_lambda_grid_too_narrow) was VOIDED by its own registered gate Y5: every arm saturated against the lambda grid's 1e-4 floor on every fold, so the nested search never chose anything. Grid widened to 1e-8..1e0. Gate Y5 and every verdict threshold are unchanged from docs/GEOMETRY_FUSION_PREREGISTRATION.md (commit 8f35fff). CPU only, beside the untouched p54 GPU pass.",
+      "exit_code": 0,
+      "runtime_seconds": 231.138,
+      "started_at_utc": "2026-09-02T07:10:42.186656+00:00",
+      "files": [
+        {
+          "path": "runs/p58_geometry_fusion/command.txt",
+          "size_bytes": 86,
+          "sha256": "c769b259422352bfda19f5bb931247071c7f6348503fd7683d8935df4ea8fa60",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_geometry_fusion/fusion.json",
+          "size_bytes": 4518,
+          "sha256": "55ec20abd790d50d3e2eb910cb8f982d5bd03c15ff5cd84f38f143cc1b8cd816",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_geometry_fusion/provenance.json",
+          "size_bytes": 3007,
+          "sha256": "f4df289378440dae08cf880c03915480515b4783d46858719992989c3d1aeb97",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_geometry_fusion/result.json",
+          "size_bytes": 326,
+          "sha256": "1ff07ba645a28a4378d5a2c8707051ba46152e12c530cdb8ff08d4a02a9c920e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_geometry_fusion/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p58_geometry_fusion/stdout.log",
+          "size_bytes": 3066,
+          "sha256": "c8d863016faace3f21365f848f074c8d0446fe422cf092be318456f118948385",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 11003,
+      "status": "OK"
+    },
+    {
+      "name": "p59_test_readout_vs_representation",
+      "path": "runs/p59_test_readout_vs_representation",
+      "command": null,
+      "files": [
+        {
+          "path": "runs/p59_test_readout_vs_representation/NOTE.md",
+          "size_bytes": 548,
+          "sha256": "5ffd4cb2887478ca3499d557db69bf6e9f200f0e8d4e48fbab68cda9cfd33788",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p59_test_readout_vs_representation/rvr.json",
+          "size_bytes": 3927,
+          "sha256": "50033c54c833cc1213a5f70c46c42e8048ad74f32f34b54e8eb1f36e13645b91",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p59_test_readout_vs_representation/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p59_test_readout_vs_representation/stdout.log",
+          "size_bytes": 2642,
+          "sha256": "e9e99bc882b8e9b643fb9dd709c1731b0bf23cf7d5d3cc72c815b1a3a00752f4",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7117,
+      "status": "NO_RESULT_JSON"
     },
     {
       "name": "p5_arm2_trainprior_3000",
@@ -4375,6 +4573,82 @@
       ],
       "total_bytes": 264890,
       "status": "OK"
+    },
+    {
+      "name": "p60_estimator_matched_geometry",
+      "path": "runs/p60_estimator_matched_geometry",
+      "command": ".venv/bin/python3 -u tools/estimator_matched_geometry.py --out runs/p60_estimator_matched_geometry/est.json",
+      "files": [
+        {
+          "path": "runs/p60_estimator_matched_geometry/command.txt",
+          "size_bytes": 108,
+          "sha256": "2da633455ee0e13399c79dbdd196f1636c39c4db3daff4aead275ec7f906f31c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p60_estimator_matched_geometry/est.json",
+          "size_bytes": 4113,
+          "sha256": "e883e81c03e6b215ba04145d9098717648938fe336a5873b967de562fbb305c5",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p60_estimator_matched_geometry/stdout.log",
+          "size_bytes": 1912,
+          "sha256": "30736f088a2da0e5fbd955722047cc0b8e1281cf814c5b8185da9696a513d707",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6133,
+      "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p61_test_metric_grounding",
+      "path": "runs/p61_test_metric_grounding",
+      "command": null,
+      "files": [
+        {
+          "path": "runs/p61_test_metric_grounding/corr.json",
+          "size_bytes": 2463,
+          "sha256": "68e54e3aa7484f2ce0d6483e245d19d76a47cc9cfbf0db1b7098914e9db3f019",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p61_test_metric_grounding/stdout.log",
+          "size_bytes": 1496,
+          "sha256": "4dfdaf218285886b5d31eddc88abcd790a25df4a4c176470a707466c5846ab36",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 3959,
+      "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p62_test_supervision_structure",
+      "path": "runs/p62_test_supervision_structure",
+      "command": null,
+      "files": [
+        {
+          "path": "runs/p62_test_supervision_structure/stdout.log",
+          "size_bytes": 4564,
+          "sha256": "40262be7bf7778a3bd592eb02f4c1b73eb448f03ab0d1dbbef947cdf75049467",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p62_test_supervision_structure/sup.json",
+          "size_bytes": 2851,
+          "sha256": "ff483668421307f1bd4026351afaa3297dc891003d2f7466261a269aa4ddbe32",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7415,
+      "status": "NO_RESULT_JSON"
     },
     {
       "name": "p6_alias_control_3000",
