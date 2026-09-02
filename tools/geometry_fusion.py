@@ -47,7 +47,10 @@ GEO = _load("wprd_geometry_control")
 CSP = _load("candidate_scorer_probe")
 Mech = MECH.Mech
 N_FOLDS = 5
-LAMBDAS = [1e-4, 1e-3, 1e-2, 1e-1, 1e0]
+# Attempt 1 saturated against a 1e-4 floor on every arm and every fold
+# (runs/p58_VOID_lambda_grid_too_narrow), so gate Y5 voided it. Widened
+# downward. Y5 itself and every verdict threshold are unchanged.
+LAMBDAS = [1e-8, 1e-7, 1e-6, 1e-5, 1e-4, 1e-3, 1e-2, 1e-1, 1e0]
 G_TRAIN_FITTED_ANCHOR = 0.5961        # p37/p39, DIFFERENT REGIME. Anchor only.
 
 # indices into the 19 raw geometry features (see wprd_geometry_control._geom)
