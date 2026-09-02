@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 84,
-  "total_bytes": 1312483965,
+  "n_runs": 87,
+  "total_bytes": 1312518425,
   "runs": [
     {
       "name": "p10_model_recalibration",
@@ -3813,6 +3813,163 @@
         }
       ],
       "total_bytes": 8049,
+      "status": "OK"
+    },
+    {
+      "name": "p54_test_relfeat_cache",
+      "path": "runs/p54_test_relfeat_cache",
+      "command": ".venv/bin/python3 -u -m openvocab_rel.train --stage 3 --gpu_preset l4_24gb --eval_only true --epochs 0 --resume true --resume_from checkpoints/demo_best/pure_best_adapt_light_mR50.pt --vg150_root datasets_vg150_clean --vg150_enabled true --vg150_source local-jsonl --eval_split_name test --device cuda --batch_size 12 --num_workers 4 --clip_input_res 336 --eval_batches 0 --eval_fast_mode false --explicit_spoa_enabled false --text_conditioned_projection_enabled false --relationness_enabled false --eval_sgg_use_relationness false --eval_sgg_predicate_score_mode ensemble --eval_sgg_predicate_ensemble_alpha 0.0 --adaptive_calibration_enabled true --bayes_calibration_weight 0.0 --freq_bias_enabled true --freq_bias_path datasets_vg150_clean/frequency_prior_train.json --freq_bias_alpha 3.75 --freq_bias_smoothing 1.0 --eval_sgg_use_gt_pairs true --eval_sgg_grounding_dino_enabled false --eval_sgg_dump_pair_logits_path runs/p54_test_relfeat_cache/pair_logits_relfeat.pt --eval_sgg_dump_rel_feat true --run_name p54_test_relfeat_cache --out_dir runs/p54_test_relfeat_cache --save_metrics_json runs/p54_test_relfeat_cache/metrics.jsonl",
+      "commit": "0dae133d005f009896637b3b8d328e5c130d6264",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "Pre-registered held-out replication on the VG150 TEST split (docs/TEST_SPLIT_REPLICATION_PREREGISTRATION.md). Identical to runs/p36_relfeat_cache in every flag except --eval_split_name test and output paths. Frozen forward pass, no training, no gradient. GPU verified idle (0 MiB, 0 percent, no compute apps) immediately before launch; 2-batch smoke on split=test passed and the dump contract (rel_feat, pred_emb) was verified. No registered threshold altered.",
+      "files": [
+        {
+          "path": "runs/p54_test_relfeat_cache/command.txt",
+          "size_bytes": 1136,
+          "sha256": "6d7cdee9e6cde850c7f1d84c839fa4dcc19573c953abed927c3441709d7a9124",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p54_test_relfeat_cache/provenance.json",
+          "size_bytes": 3039,
+          "sha256": "f41a3e13485b40896e8741ac93f3cd949a40c850e882941b5e5a261bfe17ad86",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p54_test_relfeat_cache/stderr.log",
+          "size_bytes": 586,
+          "sha256": "1c11794fae481919c80b2c49ef70db4c5e1e651788c62118ef4938c1df2d3240",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p54_test_relfeat_cache/stdout.log",
+          "size_bytes": 4390,
+          "sha256": "8e3ed791640a4a12db49244826413d5a218ef9afce5e224b1735bdee0ee3e081",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 9151,
+      "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p55_objective_relfeat",
+      "path": "runs/p55_objective_relfeat",
+      "command": ".venv/bin/python3 tools/objective_ablation_relfeat.py --epochs 20 --pairs-per-epoch 200000 --hidden 256 --boot 200 --out runs/p55_objective_relfeat/obj.json",
+      "commit": "75b1e8e193f8fde1293029bdb78f98c3d2a5728e",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Pre-registered in docs/OBJECTIVE_ABLATION_RELFEAT_PREREGISTRATION.md (commit 75b1e8e), before the tool existed. The registered transfer of p48 from box geometry to rel_feat, with p48's supervision-supply confound fixed by C_ce_matched (CE restricted to exactly the rows the contrastive arm may learn from). Cross-fitted over 5 validation folds split by image, identical construction to p37. Optimisation budget matched as well as data: contrastive acceptance ~32 percent, so pairs-per-epoch 200000 yields ~64k accepted pairs per fold per epoch against C_ce_matched's ~57.7k rows. CPU only, runs beside the p54 GPU pass. Thresholds inherited from p48 unchanged.",
+      "exit_code": 0,
+      "runtime_seconds": 1251.077,
+      "started_at_utc": "2026-09-02T06:19:58.885132+00:00",
+      "files": [
+        {
+          "path": "runs/p55_objective_relfeat/command.txt",
+          "size_bytes": 157,
+          "sha256": "6990266e367a34913a519a6365ac166890411d28b16cc28783d4cc131dfa4485",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p55_objective_relfeat/obj.json",
+          "size_bytes": 5070,
+          "sha256": "84225ec708687bc5ac15b825fbc961fea02efe0577d67380c87528c6b07ddd79",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p55_objective_relfeat/provenance.json",
+          "size_bytes": 3343,
+          "sha256": "09aad8b8eb372f54104383da952f7f68f3b21c21317533db6e415d9acc86efcd",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p55_objective_relfeat/result.json",
+          "size_bytes": 456,
+          "sha256": "0be2860a78b76b299bddd23037d2d0ed379b8f8a828e7015faa36424f5debb85",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p55_objective_relfeat/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p55_objective_relfeat/stdout.log",
+          "size_bytes": 2877,
+          "sha256": "06883bcb65f9d63bc11fe5a0426d9534e146998fe25f2fc2e24aeff146ecbc6a",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 11903,
+      "status": "OK"
+    },
+    {
+      "name": "p56_supervision_scaling",
+      "path": "runs/p56_supervision_scaling",
+      "command": ".venv/bin/python3 tools/supervision_scaling.py --draws 2000 --epochs 30 --min-train-rows 20 --out runs/p56_supervision_scaling/scal.json",
+      "commit": "25b14503d24b299d0bdd3bfbdfc2b3f253c5c748",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Pre-registered in docs/SUPERVISION_SCALING_PREREGISTRATION.md (commit 25b1450), before the tool existed. The registered H6-vs-H8 discriminator: if supervision scarcity explains p37's representation limit, the checkpoint's WPRD should rise with the training supervision its (s,o) pair received; geometry, fitted globally over 19 shared features, is the control that cannot manufacture that signature. Part C measures directly what per-pair supervision buys on a channel known to carry signal. One block is labelled EXPLORATORY, NOT A CRITERION: it was added after a pilot showed the classifier head's bin means trending while the registered cell-level Spearman read ~0, and it changes no threshold and decides no verdict. CPU only, runs beside the p54 GPU pass and p55.",
+      "exit_code": 0,
+      "runtime_seconds": 338.254,
+      "started_at_utc": "2026-09-02T06:30:37.263933+00:00",
+      "files": [
+        {
+          "path": "runs/p56_supervision_scaling/command.txt",
+          "size_bytes": 137,
+          "sha256": "a12f3e350cf3523431d44318d9860a66cde2114d1df1359260ddf05ca1ededff",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p56_supervision_scaling/provenance.json",
+          "size_bytes": 3479,
+          "sha256": "1e2ed6b15269cc0295e26a03e8785ed9bb4dd0a80f6ac73366665e82b1e0becf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p56_supervision_scaling/result.json",
+          "size_bytes": 423,
+          "sha256": "310996121d53881a2b275af4b9f09badd1dcdc9ec590561e50a20280eab1fa31",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p56_supervision_scaling/scal.json",
+          "size_bytes": 4903,
+          "sha256": "feffa47bf7e95617382ff98f68281297e13ad5bf6fc6277df11f5344872c4c2c",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p56_supervision_scaling/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p56_supervision_scaling/stdout.log",
+          "size_bytes": 4464,
+          "sha256": "e727314d40202f58caf41f7ceeb59a53068d694e6e67ba3304d4bfddfe593c0f",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 13406,
       "status": "OK"
     },
     {
