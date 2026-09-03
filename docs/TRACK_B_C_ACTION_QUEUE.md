@@ -50,20 +50,23 @@ task's originally stated priority order** — not because the environment
 work became easier, but because the alternative was found to be a dead end
 rather than merely harder-to-rank.
 
-**Recommended next step for Track B, scoped for a dedicated session (not
-squeezed into a mixed-analysis one):** patch
-`~/external_models/energy-based-scene-graph/maskrcnn_benchmark/csrc/`
-mechanically — replace `.type()` with `.scalar_type()` in every
-`AT_DISPATCH_*` call, then rebuild and iterate on whatever the next error is
-(likely `THC/THC.h` removal or `AT_CHECK`→`TORCH_CHECK` renames, both
-well-known, mechanical fixes for this exact codebase vintage). Budget: a
-few hours of iterative compile-fix-recompile cycles, not the multi-day
-estimate this doc carried before empirical confirmation — the failure mode
-is now precisely known, which is most of what made the original estimate
-uncertain. The cloned repo and the isolated build venv
-(`/tmp/vctree_probe_venv`, not preserved across VM restarts — recreate with
-`torch==2.9.1+cu129` to match this host exactly) are left in place at
-`~/external_models/` for continuity.
+**UPDATE (later session): the environment fix is DONE, not just planned.**
+`docs/VCTREE_TDE_ENVIRONMENT_RESULT.md` — the patch
+(`tools/cross_model/patches/vctree_maskrcnn_benchmark_torch2_compat.patch`)
+builds and passes a GPU smoke test on **both**
+`mods333/energy-based-scene-graph` and `KaihuaTang/Scene-Graph-Benchmark.pytorch`
+(TDE's home). The blocker has moved: it is no longer environment
+compatibility, it is **checkpoint acquisition** — every VCTree PredCls
+checkpoint link found is dead (personal OneDrive/SharePoint, 404s traced to
+the source, and Tang's own README says no VCTree checkpoint was ever
+published); Tang's own Motifs+TDE PredCls checkpoint download is blocked by
+an anonymous-link browser-redemption flow that four independent automated
+attempts could not complete (confirmed structural, not a retry-able
+glitch). **Needs a human to download one file via browser** — see that
+document's "what would unblock this" section. The cloned repos and the
+isolated build venv (`/tmp/vctree_probe_venv`, not preserved across VM
+restarts — recreate with `torch==2.9.1+cu129` to match this host exactly)
+are left in place at `~/external_models/` for continuity.
 
 **Target for this track: n=3 first** (current: PURE, IMP+; next: whichever
 of ranks 1–4 clears its B0 pilot first), **then reassess** before committing
