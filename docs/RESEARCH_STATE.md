@@ -207,6 +207,22 @@ The narrow, defensible claim: *the checkpoint's advantage on R@50/mR@50 does not
 come from relational discrimination; it comes from being calibrated against the
 prior.* At tau ≥ 0.1 model+geometry beats both (**+4.051**).
 
+**`p41` REPLICATED on the held-out TEST split (`p64`, 2026-09-03), CPU only,
+`p54` cache.** Every winner and every selected mixing weight is identical
+between splits at all four tau: MODEL beats GEOMETRY at tau ∈ {0, 0.05} (val
++1.948/+1.716, test +1.615/+1.162), GEOMETRY beats MODEL at tau ∈ {0.1, 0.2}
+(val +1.826/+2.281, test +2.956/+1.841). Not pre-registered before running
+(no threshold table existed for this specific analysis), so this is a
+descriptive replication against `p41`'s own numbers, not a pass against a
+committed criterion. A separate, non-pre-registered corrected analysis fixing
+a known bug in the nested-CV arm's selection key (`docs/GEOMETRY_SGG_BASELINE_RESULT.md`
+limitation 1: it selected on mR alone and always picked w=0) shows that once
+the geometry mixing weight is chosen without any eval-split leakage
+(cross-fitted, floor-respecting), MODEL wins 7 of 8 val+test tau cells,
+including most of the tau ≥ 0.1 region where the disclosed-leakage "best
+fixed w" analysis had shown GEOMETRY winning. Detail:
+`docs/GEOMETRY_SGG_TEST_REPLICATION_RESULT.md`.
+
 `p32` reaches the same place independently: on the estimable subset the model
 term is beaten by every pair-conditioned statistic tested
 (`G_model − F_pair_foldfit = −1.706`).
@@ -312,6 +328,7 @@ Full detail: `docs/CROSS_MODEL_IMP_PLUS_RESULT.md` §10.
 | `p40` | where geometry wins | margin grows toward the tail, +0.123 at tail–tail |
 | `p41` | geometry on the FIELD's metric | **corrective**: model wins at tau<=0.05 |
 | cross-model (IMP+) | first cross-model WPRD point + decomposition | geometry ≥ model replicates 2/2; pair identity proven invisible to WPRD; inversion untestable cross-codebase, not refuted |
+| `p64` | `p41` replicated on held-out TEST (`p54` cache) + corrected nested-CV control | **REPLICATED**, 4/4 tau winners match; corrected control shows MODEL wins 7/8 cells once eval-split leakage in `w`-selection is removed |
 
 ## 6. Experiments pending
 

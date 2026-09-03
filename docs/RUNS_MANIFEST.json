@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 97,
-  "total_bytes": 1667145051,
+  "n_runs": 100,
+  "total_bytes": 1667187057,
   "runs": [
     {
       "name": "cross_model_imp_plus",
@@ -4702,6 +4702,180 @@
       ],
       "total_bytes": 10350,
       "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p64_test_geometry_sgg",
+      "path": "runs/p64_test_geometry_sgg",
+      "command": ".venv/bin/python3 tools/geometry_sgg_baseline.py --dump runs/p54_test_relfeat_cache/pair_logits_relfeat.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p64_test_geometry_sgg/base.json --taus 0.0,0.05,0.1,0.2 --weights 0.0,0.25,0.5,0.75,1.0,1.5,2.0,3.0",
+      "commit": "380e29ee6d04509d0a93114bea8cdec954d1202d",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "p41 replicated on the held-out TEST split (runs/p54 cache): registered R@50/mR@50 Pareto composition, model vs train-fitted geometry probe, tau sweep. Identical to p41 except --dump points at the p54 test cache.",
+      "exit_code": 0,
+      "runtime_seconds": 155.98,
+      "started_at_utc": "2026-09-03T06:53:01.786765+00:00",
+      "files": [
+        {
+          "path": "runs/p64_test_geometry_sgg/base.json",
+          "size_bytes": 17293,
+          "sha256": "932c3c4786e71b1ef865116c9a433ed550ce228af03a173fdebfcc3d9b1a2a8d",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg/command.txt",
+          "size_bytes": 321,
+          "sha256": "c13c8e2805bdad378caeb5d5a1609c61b3493828ce3915707f61776ebed82b91",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg/provenance.json",
+          "size_bytes": 2857,
+          "sha256": "5fe383e91192f2e63dd1e6b476586ff4dc80fdf4c89fab1bd7accbaa340aa2bb",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg/result.json",
+          "size_bytes": 632,
+          "sha256": "a63caf7585009b1d5428007ab04228cedf90044f119418bace11774eff47dd88",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg/stdout.log",
+          "size_bytes": 6735,
+          "sha256": "f8de44b23b725a738fad70bc6d0da099cc370f3dc3a3acfae0951207175ee58e",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 27838,
+      "status": "OK"
+    },
+    {
+      "name": "p64_test_geometry_sgg_nested_corrected",
+      "path": "runs/p64_test_geometry_sgg_nested_corrected",
+      "command": ".venv/bin/python3 tools/geometry_sgg_nested_corrected.py --dump runs/p54_test_relfeat_cache/pair_logits_relfeat.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p64_test_geometry_sgg_nested_corrected/nested.json --taus 0.0,0.05,0.1,0.2 --weights 0.0,0.25,0.5,0.75,1.0,1.5,2.0,3.0",
+      "commit": "380e29ee6d04509d0a93114bea8cdec954d1202d",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Corrected nested arm for p41/p64: key=(R>=prior_only R, mR) instead of the mR-only key that always picked w=0. Run on the p54 TEST cache.",
+      "exit_code": 0,
+      "runtime_seconds": 138.652,
+      "started_at_utc": "2026-09-03T06:57:09.752912+00:00",
+      "files": [
+        {
+          "path": "runs/p64_test_geometry_sgg_nested_corrected/command.txt",
+          "size_bytes": 348,
+          "sha256": "208e2104570ee974fd7c507e6914c21c50e251cf8c50110b6be89523967bb0d6",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg_nested_corrected/nested.json",
+          "size_bytes": 1949,
+          "sha256": "807be8ed89a9fb90195df7975267d724b935dee75dbd22752cc7edfa6e47bc04",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg_nested_corrected/provenance.json",
+          "size_bytes": 2839,
+          "sha256": "5a5760702cd5909e8600521e9fc9a6ae3df928f82fc355382b63bbc2879a5fb0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg_nested_corrected/result.json",
+          "size_bytes": 677,
+          "sha256": "65f0f3bac27212bf94e62b9b8b2ed4a8c268d7af3fa167796971cb95f9b643f0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg_nested_corrected/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_test_geometry_sgg_nested_corrected/stdout.log",
+          "size_bytes": 1267,
+          "sha256": "3d5eba755a06211c84afd0d0a3ff32e687e539d50a745bb311223d363a8e548f",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7080,
+      "status": "OK"
+    },
+    {
+      "name": "p64_val_geometry_sgg_nested_corrected",
+      "path": "runs/p64_val_geometry_sgg_nested_corrected",
+      "command": ".venv/bin/python3 tools/geometry_sgg_nested_corrected.py --dump runs/p24_full_val_cache/pair_logits.pt --prior datasets_vg150_clean/frequency_prior_train.json --train-jsonl datasets_vg150_clean/train.jsonl --out runs/p64_val_geometry_sgg_nested_corrected/nested.json --taus 0.0,0.05,0.1,0.2 --weights 0.0,0.25,0.5,0.75,1.0,1.5,2.0,3.0",
+      "commit": "380e29ee6d04509d0a93114bea8cdec954d1202d",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": false,
+      "note": "Same corrected-nested control (see p64_test_geometry_sgg_nested_corrected) run on the VALIDATION cache (runs/p24) for direct val/test comparison of the corrected control.",
+      "exit_code": 0,
+      "runtime_seconds": 146.438,
+      "started_at_utc": "2026-09-03T06:59:46.021740+00:00",
+      "files": [
+        {
+          "path": "runs/p64_val_geometry_sgg_nested_corrected/command.txt",
+          "size_bytes": 335,
+          "sha256": "6ffa5bd5d2391d6fd4a5323823f377b28bfdb15306175c95a8e2f5bfef450485",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_val_geometry_sgg_nested_corrected/nested.json",
+          "size_bytes": 1951,
+          "sha256": "f8bbcf0e9f71385880895db0fba912eab38fc7b5948e307e5c0e05f5084bffc8",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_val_geometry_sgg_nested_corrected/provenance.json",
+          "size_bytes": 2872,
+          "sha256": "8088573b07387d043805d6f4e49d26915bf6e4cf2c622979b31a484bb5623b9f",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_val_geometry_sgg_nested_corrected/result.json",
+          "size_bytes": 663,
+          "sha256": "3ea372a4f466b53859c941cb8b28316e097582b1e9c4ae40251e05f48fe11abf",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_val_geometry_sgg_nested_corrected/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p64_val_geometry_sgg_nested_corrected/stdout.log",
+          "size_bytes": 1267,
+          "sha256": "ee4452980a6f6bb241b0851612c52ffc0114bf81f74b7fbc1a078b9aa8693ce7",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7088,
+      "status": "OK"
     },
     {
       "name": "p6_alias_control_3000",

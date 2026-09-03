@@ -121,6 +121,13 @@ At tau >= 0.1 the best arm measured anywhere in this cycle is **model +
 geometry** (+4.051 at tau=0.2), so the two carry partially complementary
 information. See `docs/GEOMETRY_SGG_BASELINE_RESULT.md`.
 
+**This replicates on the held-out TEST split** (`p64`, CPU only, not
+pre-registered): identical winner and identical selected mixing weight at all
+four tau. A corrected, non-registered control also shows most of the
+tau>=0.1 geometry advantage above was eval-split leakage in how the mixing
+weight was chosen — MODEL wins 7 of 8 val+test cells once that leakage is
+removed. See `docs/GEOMETRY_SGG_TEST_REPLICATION_RESULT.md`.
+
 ---
 
 ## What PURE actually learned
@@ -166,7 +173,13 @@ validation with no held-out selection, so "better grounded" is robust and
 - **Not** that the encoder is incapable — only that its *readouts* are behind
   geometry. `p36`/`p37` test whether `rel_feat` itself holds more. **PENDING.**
 - **Not** anything about SGDet or SGCls. All of this is PredCls with GT pairs.
-- **Not** anything about the test split. All of this is validation.
+- **Not** anything about the test split, for most of the findings above.
+  Items 1–4 (WPRD ordering, prior control, the 0.554/0.573/0.596 numbers) and
+  the `p41` composed-metric reversal in §5 now have a held-out TEST
+  replication (`docs/TEST_SPLIT_REPLICATION_RESULT.md`,
+  `docs/GEOMETRY_SGG_TEST_REPLICATION_RESULT.md`). Everything else in this
+  file (stratified tail tables, the mechanism decomposition in §"what PURE
+  actually learned") is still validation-only.
 
 ## Limitations that cut against the finding, recorded
 
