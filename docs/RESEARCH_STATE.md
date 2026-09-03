@@ -13,6 +13,12 @@ and what is running. Every claim carries its evidential class.
 > (66.59 / 22.30). Different prior, different N. A delta against one is not a
 > delta against the other.
 
+> **PAPER A = FROZEN, READY TO DRAFT** (2026-09-03). Full freeze audit,
+> claim-by-claim evidence table, manuscript blueprint, and the binary
+> decision: `docs/PAPER_A_FREEZE_AUDIT.md`. Do not add a new Paper A
+> scientific hypothesis without first re-opening that audit; documentation
+> and manuscript-drafting work may proceed directly from it.
+
 ---
 
 ## 1. Strongest validated result
