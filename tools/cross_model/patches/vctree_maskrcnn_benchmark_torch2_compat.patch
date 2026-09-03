@@ -1,0 +1,429 @@
+diff --git a/maskrcnn_benchmark/csrc/ROIAlign.h b/maskrcnn_benchmark/csrc/ROIAlign.h
+index 3907dea..2b049f0 100644
+--- a/maskrcnn_benchmark/csrc/ROIAlign.h
++++ b/maskrcnn_benchmark/csrc/ROIAlign.h
+@@ -14,7 +14,7 @@ at::Tensor ROIAlign_forward(const at::Tensor& input,
+                             const int pooled_height,
+                             const int pooled_width,
+                             const int sampling_ratio) {
+-  if (input.type().is_cuda()) {
++  if (input.is_cuda()) {
+ #ifdef WITH_CUDA
+     return ROIAlign_forward_cuda(input, rois, spatial_scale, pooled_height, pooled_width, sampling_ratio);
+ #else
+@@ -34,7 +34,7 @@ at::Tensor ROIAlign_backward(const at::Tensor& grad,
+                              const int height,
+                              const int width,
+                              const int sampling_ratio) {
+-  if (grad.type().is_cuda()) {
++  if (grad.is_cuda()) {
+ #ifdef WITH_CUDA
+     return ROIAlign_backward_cuda(grad, rois, spatial_scale, pooled_height, pooled_width, batch_size, channels, height, width, sampling_ratio);
+ #else
+diff --git a/maskrcnn_benchmark/csrc/ROIPool.h b/maskrcnn_benchmark/csrc/ROIPool.h
+index 200fd73..13db1a2 100644
+--- a/maskrcnn_benchmark/csrc/ROIPool.h
++++ b/maskrcnn_benchmark/csrc/ROIPool.h
+@@ -13,7 +13,7 @@ std::tuple<at::Tensor, at::Tensor> ROIPool_forward(const at::Tensor& input,
+                                 const float spatial_scale,
+                                 const int pooled_height,
+                                 const int pooled_width) {
+-  if (input.type().is_cuda()) {
++  if (input.is_cuda()) {
+ #ifdef WITH_CUDA
+     return ROIPool_forward_cuda(input, rois, spatial_scale, pooled_height, pooled_width);
+ #else
+@@ -34,7 +34,7 @@ at::Tensor ROIPool_backward(const at::Tensor& grad,
+                                  const int channels,
+                                  const int height,
+                                  const int width) {
+-  if (grad.type().is_cuda()) {
++  if (grad.is_cuda()) {
+ #ifdef WITH_CUDA
+     return ROIPool_backward_cuda(grad, input, rois, argmax, spatial_scale, pooled_height, pooled_width, batch_size, channels, height, width);
+ #else
+diff --git a/maskrcnn_benchmark/csrc/SigmoidFocalLoss.h b/maskrcnn_benchmark/csrc/SigmoidFocalLoss.h
+index 308861e..dc1a3e6 100644
+--- a/maskrcnn_benchmark/csrc/SigmoidFocalLoss.h
++++ b/maskrcnn_benchmark/csrc/SigmoidFocalLoss.h
+@@ -13,7 +13,7 @@ at::Tensor SigmoidFocalLoss_forward(
+ 		const int num_classes, 
+ 		const float gamma, 
+ 		const float alpha) {
+-  if (logits.type().is_cuda()) {
++  if (logits.is_cuda()) {
+ #ifdef WITH_CUDA
+     return SigmoidFocalLoss_forward_cuda(logits, targets, num_classes, gamma, alpha);
+ #else
+@@ -30,7 +30,7 @@ at::Tensor SigmoidFocalLoss_backward(
+ 			     const int num_classes,
+ 			     const float gamma,
+ 			     const float alpha) {
+-  if (logits.type().is_cuda()) {
++  if (logits.is_cuda()) {
+ #ifdef WITH_CUDA
+     return SigmoidFocalLoss_backward_cuda(logits, targets, d_losses, num_classes, gamma, alpha);
+ #else
+diff --git a/maskrcnn_benchmark/csrc/_disabled_deform/WHY_DISABLED.md b/maskrcnn_benchmark/csrc/_disabled_deform/WHY_DISABLED.md
+new file mode 100644
+index 0000000..26e2923
+--- /dev/null
++++ b/maskrcnn_benchmark/csrc/_disabled_deform/WHY_DISABLED.md
+@@ -0,0 +1 @@
++DISABLED: deformable conv/pool are not used by the default R-50-FPN VCTree PredCls config (STAGE_WITH_DC defaults off); excluded from the build to shrink the torch2 compat patch surface from 15 files/98 occurrences to 9 files. Not deleted -- moved here, restorable if a future config needs them.
+diff --git a/maskrcnn_benchmark/csrc/deform_conv.h b/maskrcnn_benchmark/csrc/_disabled_deform/deform_conv.h
+similarity index 100%
+rename from maskrcnn_benchmark/csrc/deform_conv.h
+rename to maskrcnn_benchmark/csrc/_disabled_deform/deform_conv.h
+diff --git a/maskrcnn_benchmark/csrc/cuda/deform_conv_cuda.cu b/maskrcnn_benchmark/csrc/_disabled_deform/deform_conv_cuda.cu
+similarity index 100%
+rename from maskrcnn_benchmark/csrc/cuda/deform_conv_cuda.cu
+rename to maskrcnn_benchmark/csrc/_disabled_deform/deform_conv_cuda.cu
+diff --git a/maskrcnn_benchmark/csrc/cuda/deform_conv_kernel_cuda.cu b/maskrcnn_benchmark/csrc/_disabled_deform/deform_conv_kernel_cuda.cu
+similarity index 100%
+rename from maskrcnn_benchmark/csrc/cuda/deform_conv_kernel_cuda.cu
+rename to maskrcnn_benchmark/csrc/_disabled_deform/deform_conv_kernel_cuda.cu
+diff --git a/maskrcnn_benchmark/csrc/deform_pool.h b/maskrcnn_benchmark/csrc/_disabled_deform/deform_pool.h
+similarity index 100%
+rename from maskrcnn_benchmark/csrc/deform_pool.h
+rename to maskrcnn_benchmark/csrc/_disabled_deform/deform_pool.h
+diff --git a/maskrcnn_benchmark/csrc/cuda/deform_pool_cuda.cu b/maskrcnn_benchmark/csrc/_disabled_deform/deform_pool_cuda.cu
+similarity index 100%
+rename from maskrcnn_benchmark/csrc/cuda/deform_pool_cuda.cu
+rename to maskrcnn_benchmark/csrc/_disabled_deform/deform_pool_cuda.cu
+diff --git a/maskrcnn_benchmark/csrc/cuda/deform_pool_kernel_cuda.cu b/maskrcnn_benchmark/csrc/_disabled_deform/deform_pool_kernel_cuda.cu
+similarity index 100%
+rename from maskrcnn_benchmark/csrc/cuda/deform_pool_kernel_cuda.cu
+rename to maskrcnn_benchmark/csrc/_disabled_deform/deform_pool_kernel_cuda.cu
+diff --git a/maskrcnn_benchmark/csrc/compat/thc_shim.h b/maskrcnn_benchmark/csrc/compat/thc_shim.h
+new file mode 100644
+index 0000000..cd99545
+--- /dev/null
++++ b/maskrcnn_benchmark/csrc/compat/thc_shim.h
+@@ -0,0 +1,12 @@
++// Minimal torch2-compatibility shim for the handful of THC/* symbols this
++// codebase's CUDA extensions use. THC/THC.h and friends were removed from
++// libtorch; this replaces exactly the symbols actually called here
++// (THCCeilDiv, THCudaCheck) with their modern ATen/c10 equivalents. Not a
++// general-purpose THC replacement -- scoped to this port only.
++#pragma once
++#include <ATen/cuda/CUDAContext.h>
++#include <c10/cuda/CUDAException.h>
++
++#define THCudaCheck(EXPR) C10_CUDA_CHECK(EXPR)
++
++__host__ __device__ inline long THCCeilDiv(long a, long b) { return (a + b - 1) / b; }
+diff --git a/maskrcnn_benchmark/csrc/cpu/ROIAlign_cpu.cpp b/maskrcnn_benchmark/csrc/cpu/ROIAlign_cpu.cpp
+index d35aedf..7050fd7 100644
+--- a/maskrcnn_benchmark/csrc/cpu/ROIAlign_cpu.cpp
++++ b/maskrcnn_benchmark/csrc/cpu/ROIAlign_cpu.cpp
+@@ -224,8 +224,8 @@ at::Tensor ROIAlign_forward_cpu(const at::Tensor& input,
+                                 const int pooled_height,
+                                 const int pooled_width,
+                                 const int sampling_ratio) {
+-  AT_ASSERTM(!input.type().is_cuda(), "input must be a CPU tensor");
+-  AT_ASSERTM(!rois.type().is_cuda(), "rois must be a CPU tensor");
++  AT_ASSERTM(!input.is_cuda(), "input must be a CPU tensor");
++  AT_ASSERTM(!rois.is_cuda(), "rois must be a CPU tensor");
+ 
+   auto num_rois = rois.size(0);
+   auto channels = input.size(1);
+@@ -239,7 +239,7 @@ at::Tensor ROIAlign_forward_cpu(const at::Tensor& input,
+     return output;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(input.type(), "ROIAlign_forward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "ROIAlign_forward", [&] {
+     ROIAlignForward_cpu_kernel<scalar_t>(
+          output_size,
+          input.data<scalar_t>(),
+diff --git a/maskrcnn_benchmark/csrc/cpu/nms_cpu.cpp b/maskrcnn_benchmark/csrc/cpu/nms_cpu.cpp
+index 1153dea..e7bf2e5 100644
+--- a/maskrcnn_benchmark/csrc/cpu/nms_cpu.cpp
++++ b/maskrcnn_benchmark/csrc/cpu/nms_cpu.cpp
+@@ -6,9 +6,9 @@ template <typename scalar_t>
+ at::Tensor nms_cpu_kernel(const at::Tensor& dets,
+                           const at::Tensor& scores,
+                           const float threshold) {
+-  AT_ASSERTM(!dets.type().is_cuda(), "dets must be a CPU tensor");
+-  AT_ASSERTM(!scores.type().is_cuda(), "scores must be a CPU tensor");
+-  AT_ASSERTM(dets.type() == scores.type(), "dets should have the same type as scores");
++  AT_ASSERTM(!dets.is_cuda(), "dets must be a CPU tensor");
++  AT_ASSERTM(!scores.is_cuda(), "scores must be a CPU tensor");
++  AT_ASSERTM(dets.scalar_type() == scores.scalar_type(), "dets should have the same type as scores");
+ 
+   if (dets.numel() == 0) {
+     return at::empty({0}, dets.options().dtype(at::kLong).device(at::kCPU));
+@@ -68,7 +68,7 @@ at::Tensor nms_cpu(const at::Tensor& dets,
+                const at::Tensor& scores,
+                const float threshold) {
+   at::Tensor result;
+-  AT_DISPATCH_FLOATING_TYPES(dets.type(), "nms", [&] {
++  AT_DISPATCH_FLOATING_TYPES(dets.scalar_type(), "nms", [&] {
+     result = nms_cpu_kernel<scalar_t>(dets, scores, threshold);
+   });
+   return result;
+diff --git a/maskrcnn_benchmark/csrc/cuda/ROIAlign_cuda.cu b/maskrcnn_benchmark/csrc/cuda/ROIAlign_cuda.cu
+index 1142fb3..f330ea6 100644
+--- a/maskrcnn_benchmark/csrc/cuda/ROIAlign_cuda.cu
++++ b/maskrcnn_benchmark/csrc/cuda/ROIAlign_cuda.cu
+@@ -1,10 +1,8 @@
+ // Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
+ #include <ATen/ATen.h>
+ #include <ATen/cuda/CUDAContext.h>
++#include "../compat/thc_shim.h"
+ 
+-#include <THC/THC.h>
+-#include <THC/THCAtomics.cuh>
+-#include <THC/THCDeviceUtils.cuh>
+ 
+ // TODO make it in a common file
+ #define CUDA_1D_KERNEL_LOOP(i, n)                            \
+@@ -260,8 +258,8 @@ at::Tensor ROIAlign_forward_cuda(const at::Tensor& input,
+                                  const int pooled_height,
+                                  const int pooled_width,
+                                  const int sampling_ratio) {
+-  AT_ASSERTM(input.type().is_cuda(), "input must be a CUDA tensor");
+-  AT_ASSERTM(rois.type().is_cuda(), "rois must be a CUDA tensor");
++  AT_ASSERTM(input.is_cuda(), "input must be a CUDA tensor");
++  AT_ASSERTM(rois.is_cuda(), "rois must be a CUDA tensor");
+ 
+   auto num_rois = rois.size(0);
+   auto channels = input.size(1);
+@@ -280,7 +278,7 @@ at::Tensor ROIAlign_forward_cuda(const at::Tensor& input,
+     return output;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(input.type(), "ROIAlign_forward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "ROIAlign_forward", [&] {
+     RoIAlignForward<scalar_t><<<grid, block, 0, stream>>>(
+          output_size,
+          input.contiguous().data<scalar_t>(),
+@@ -309,8 +307,8 @@ at::Tensor ROIAlign_backward_cuda(const at::Tensor& grad,
+                                   const int height,
+                                   const int width,
+                                   const int sampling_ratio) {
+-  AT_ASSERTM(grad.type().is_cuda(), "grad must be a CUDA tensor");
+-  AT_ASSERTM(rois.type().is_cuda(), "rois must be a CUDA tensor");
++  AT_ASSERTM(grad.is_cuda(), "grad must be a CUDA tensor");
++  AT_ASSERTM(rois.is_cuda(), "rois must be a CUDA tensor");
+ 
+   auto num_rois = rois.size(0);
+   auto grad_input = at::zeros({batch_size, channels, height, width}, grad.options());
+@@ -326,7 +324,7 @@ at::Tensor ROIAlign_backward_cuda(const at::Tensor& grad,
+     return grad_input;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(grad.type(), "ROIAlign_backward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(grad.scalar_type(), "ROIAlign_backward", [&] {
+     RoIAlignBackwardFeature<scalar_t><<<grid, block, 0, stream>>>(
+          grad.numel(),
+          grad.contiguous().data<scalar_t>(),
+diff --git a/maskrcnn_benchmark/csrc/cuda/ROIPool_cuda.cu b/maskrcnn_benchmark/csrc/cuda/ROIPool_cuda.cu
+index 8f072ff..c849c64 100644
+--- a/maskrcnn_benchmark/csrc/cuda/ROIPool_cuda.cu
++++ b/maskrcnn_benchmark/csrc/cuda/ROIPool_cuda.cu
+@@ -1,10 +1,8 @@
+ // Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
+ #include <ATen/ATen.h>
+ #include <ATen/cuda/CUDAContext.h>
++#include "../compat/thc_shim.h"
+ 
+-#include <THC/THC.h>
+-#include <THC/THCAtomics.cuh>
+-#include <THC/THCDeviceUtils.cuh>
+ 
+ 
+ // TODO make it in a common file
+@@ -112,8 +110,8 @@ std::tuple<at::Tensor, at::Tensor> ROIPool_forward_cuda(const at::Tensor& input,
+                                 const float spatial_scale,
+                                 const int pooled_height,
+                                 const int pooled_width) {
+-  AT_ASSERTM(input.type().is_cuda(), "input must be a CUDA tensor");
+-  AT_ASSERTM(rois.type().is_cuda(), "rois must be a CUDA tensor");
++  AT_ASSERTM(input.is_cuda(), "input must be a CUDA tensor");
++  AT_ASSERTM(rois.is_cuda(), "rois must be a CUDA tensor");
+ 
+   auto num_rois = rois.size(0);
+   auto channels = input.size(1);
+@@ -134,7 +132,7 @@ std::tuple<at::Tensor, at::Tensor> ROIPool_forward_cuda(const at::Tensor& input,
+     return std::make_tuple(output, argmax);
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(input.type(), "ROIPool_forward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(input.scalar_type(), "ROIPool_forward", [&] {
+     RoIPoolFForward<scalar_t><<<grid, block, 0, stream>>>(
+          output_size,
+          input.contiguous().data<scalar_t>(),
+@@ -164,8 +162,8 @@ at::Tensor ROIPool_backward_cuda(const at::Tensor& grad,
+                                  const int channels,
+                                  const int height,
+                                  const int width) {
+-  AT_ASSERTM(grad.type().is_cuda(), "grad must be a CUDA tensor");
+-  AT_ASSERTM(rois.type().is_cuda(), "rois must be a CUDA tensor");
++  AT_ASSERTM(grad.is_cuda(), "grad must be a CUDA tensor");
++  AT_ASSERTM(rois.is_cuda(), "rois must be a CUDA tensor");
+   // TODO add more checks
+ 
+   auto num_rois = rois.size(0);
+@@ -182,7 +180,7 @@ at::Tensor ROIPool_backward_cuda(const at::Tensor& grad,
+     return grad_input;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(grad.type(), "ROIPool_backward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(grad.scalar_type(), "ROIPool_backward", [&] {
+     RoIPoolFBackward<scalar_t><<<grid, block, 0, stream>>>(
+          grad.numel(),
+          grad.contiguous().data<scalar_t>(),
+diff --git a/maskrcnn_benchmark/csrc/cuda/SigmoidFocalLoss_cuda.cu b/maskrcnn_benchmark/csrc/cuda/SigmoidFocalLoss_cuda.cu
+index 456a5f2..a79c153 100644
+--- a/maskrcnn_benchmark/csrc/cuda/SigmoidFocalLoss_cuda.cu
++++ b/maskrcnn_benchmark/csrc/cuda/SigmoidFocalLoss_cuda.cu
+@@ -4,10 +4,8 @@
+ // cyfu@cs.unc.edu
+ #include <ATen/ATen.h>
+ #include <ATen/cuda/CUDAContext.h>
++#include "../compat/thc_shim.h"
+ 
+-#include <THC/THC.h>
+-#include <THC/THCAtomics.cuh>
+-#include <THC/THCDeviceUtils.cuh>
+ 
+ #include <cfloat>
+ 
+@@ -107,8 +105,8 @@ at::Tensor SigmoidFocalLoss_forward_cuda(
+ 		const int num_classes, 
+ 		const float gamma, 
+ 		const float alpha) {
+-  AT_ASSERTM(logits.type().is_cuda(), "logits must be a CUDA tensor");
+-  AT_ASSERTM(targets.type().is_cuda(), "targets must be a CUDA tensor");
++  AT_ASSERTM(logits.is_cuda(), "logits must be a CUDA tensor");
++  AT_ASSERTM(targets.is_cuda(), "targets must be a CUDA tensor");
+   AT_ASSERTM(logits.dim() == 2, "logits should be NxClass");
+ 
+   const int num_samples = logits.size(0);
+@@ -126,7 +124,7 @@ at::Tensor SigmoidFocalLoss_forward_cuda(
+     return losses;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(logits.type(), "SigmoidFocalLoss_forward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(logits.scalar_type(), "SigmoidFocalLoss_forward", [&] {
+     SigmoidFocalLossForward<scalar_t><<<grid, block, 0, stream>>>(
+          losses_size,
+          logits.contiguous().data<scalar_t>(),
+@@ -149,9 +147,9 @@ at::Tensor SigmoidFocalLoss_backward_cuda(
+ 		const int num_classes, 
+ 		const float gamma, 
+ 		const float alpha) {
+-  AT_ASSERTM(logits.type().is_cuda(), "logits must be a CUDA tensor");
+-  AT_ASSERTM(targets.type().is_cuda(), "targets must be a CUDA tensor");
+-  AT_ASSERTM(d_losses.type().is_cuda(), "d_losses must be a CUDA tensor");
++  AT_ASSERTM(logits.is_cuda(), "logits must be a CUDA tensor");
++  AT_ASSERTM(targets.is_cuda(), "targets must be a CUDA tensor");
++  AT_ASSERTM(d_losses.is_cuda(), "d_losses must be a CUDA tensor");
+ 
+   AT_ASSERTM(logits.dim() == 2, "logits should be NxClass");
+ 
+@@ -170,7 +168,7 @@ at::Tensor SigmoidFocalLoss_backward_cuda(
+     return d_logits;
+   }
+ 
+-  AT_DISPATCH_FLOATING_TYPES(logits.type(), "SigmoidFocalLoss_backward", [&] {
++  AT_DISPATCH_FLOATING_TYPES(logits.scalar_type(), "SigmoidFocalLoss_backward", [&] {
+     SigmoidFocalLossBackward<scalar_t><<<grid, block, 0, stream>>>(
+          d_logits_size,
+          logits.contiguous().data<scalar_t>(),
+diff --git a/maskrcnn_benchmark/csrc/cuda/nms.cu b/maskrcnn_benchmark/csrc/cuda/nms.cu
+index 833d852..c60d4a2 100644
+--- a/maskrcnn_benchmark/csrc/cuda/nms.cu
++++ b/maskrcnn_benchmark/csrc/cuda/nms.cu
+@@ -1,9 +1,8 @@
+ // Copyright (c) Facebook, Inc. and its affiliates. All Rights Reserved.
+ #include <ATen/ATen.h>
+ #include <ATen/cuda/CUDAContext.h>
++#include "../compat/thc_shim.h"
+ 
+-#include <THC/THC.h>
+-#include <THC/THCDeviceUtils.cuh>
+ 
+ #include <vector>
+ #include <iostream>
+@@ -69,7 +68,7 @@ __global__ void nms_kernel(const int n_boxes, const float nms_overlap_thresh,
+ // boxes is a N x 5 tensor
+ at::Tensor nms_cuda(const at::Tensor boxes, float nms_overlap_thresh) {
+   using scalar_t = float;
+-  AT_ASSERTM(boxes.type().is_cuda(), "boxes must be a CUDA tensor");
++  AT_ASSERTM(boxes.is_cuda(), "boxes must be a CUDA tensor");
+   auto scores = boxes.select(1, 4);
+   auto order_t = std::get<1>(scores.sort(0, /* descending=*/true));
+   auto boxes_sorted = boxes.index_select(0, order_t);
+@@ -80,13 +79,11 @@ at::Tensor nms_cuda(const at::Tensor boxes, float nms_overlap_thresh) {
+ 
+   scalar_t* boxes_dev = boxes_sorted.data<scalar_t>();
+ 
+-  THCState *state = at::globalContext().lazyInitCUDA(); // TODO replace with getTHCState
+-
++  // torch2 compat: THCState/THCudaMalloc removed; plain cudaMalloc is
++  // functionally equivalent for this one-off allocation (no caching-
++  // allocator reuse needed for a single NMS call per forward pass).
+   unsigned long long* mask_dev = NULL;
+-  //THCudaCheck(THCudaMalloc(state, (void**) &mask_dev,
+-  //                      boxes_num * col_blocks * sizeof(unsigned long long)));
+-
+-  mask_dev = (unsigned long long*) THCudaMalloc(state, boxes_num * col_blocks * sizeof(unsigned long long));
++  THCudaCheck(cudaMalloc(&mask_dev, boxes_num * col_blocks * sizeof(unsigned long long)));
+ 
+   dim3 blocks(THCCeilDiv(boxes_num, threadsPerBlock),
+               THCCeilDiv(boxes_num, threadsPerBlock));
+@@ -122,7 +119,7 @@ at::Tensor nms_cuda(const at::Tensor boxes, float nms_overlap_thresh) {
+     }
+   }
+ 
+-  THCudaFree(state, mask_dev);
++  THCudaCheck(cudaFree(mask_dev));
+   // TODO improve this part
+   return std::get<0>(order_t.index({
+                        keep.narrow(/*dim=*/0, /*start=*/0, /*length=*/num_to_keep).to(
+diff --git a/maskrcnn_benchmark/csrc/nms.h b/maskrcnn_benchmark/csrc/nms.h
+index 312fed4..0cf71db 100644
+--- a/maskrcnn_benchmark/csrc/nms.h
++++ b/maskrcnn_benchmark/csrc/nms.h
+@@ -11,7 +11,7 @@ at::Tensor nms(const at::Tensor& dets,
+                const at::Tensor& scores,
+                const float threshold) {
+ 
+-  if (dets.type().is_cuda()) {
++  if (dets.is_cuda()) {
+ #ifdef WITH_CUDA
+     // TODO raise error if not compiled with CUDA
+     if (dets.numel() == 0)
+diff --git a/maskrcnn_benchmark/csrc/vision.cpp b/maskrcnn_benchmark/csrc/vision.cpp
+index 3097199..a74d59c 100644
+--- a/maskrcnn_benchmark/csrc/vision.cpp
++++ b/maskrcnn_benchmark/csrc/vision.cpp
+@@ -3,8 +3,9 @@
+ #include "ROIAlign.h"
+ #include "ROIPool.h"
+ #include "SigmoidFocalLoss.h"
+-#include "deform_conv.h"
+-#include "deform_pool.h"
++// deform_conv.h / deform_pool.h intentionally excluded from this port: not
++// used by the default R-50-FPN VCTree PredCls config (STAGE_WITH_DC is off).
++// See csrc/_disabled_deform/WHY_DISABLED.md.
+ 
+ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+   m.def("nms", &nms, "non-maximum suppression");
+@@ -14,12 +15,4 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+   m.def("roi_pool_backward", &ROIPool_backward, "ROIPool_backward");
+   m.def("sigmoid_focalloss_forward", &SigmoidFocalLoss_forward, "SigmoidFocalLoss_forward");
+   m.def("sigmoid_focalloss_backward", &SigmoidFocalLoss_backward, "SigmoidFocalLoss_backward");
+-  // dcn-v2
+-  m.def("deform_conv_forward", &deform_conv_forward, "deform_conv_forward");
+-  m.def("deform_conv_backward_input", &deform_conv_backward_input, "deform_conv_backward_input");
+-  m.def("deform_conv_backward_parameters", &deform_conv_backward_parameters, "deform_conv_backward_parameters");
+-  m.def("modulated_deform_conv_forward", &modulated_deform_conv_forward, "modulated_deform_conv_forward");
+-  m.def("modulated_deform_conv_backward", &modulated_deform_conv_backward, "modulated_deform_conv_backward");
+-  m.def("deform_psroi_pooling_forward", &deform_psroi_pooling_forward, "deform_psroi_pooling_forward");
+-  m.def("deform_psroi_pooling_backward", &deform_psroi_pooling_backward, "deform_psroi_pooling_backward");
+ }
+\ No newline at end of file
