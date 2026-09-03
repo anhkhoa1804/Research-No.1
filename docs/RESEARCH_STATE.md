@@ -1,6 +1,6 @@
 # RESEARCH_STATE — living research map
 
-Updated: 2026-09-01. Branch: `research/architecture-breakthrough`.
+Updated: 2026-09-03. Branch: `research/architecture-breakthrough`.
 This file is the single place that says what is currently believed, what is not,
 and what is running. Every claim carries its evidential class.
 
@@ -216,6 +216,41 @@ predicates, which tau does without looking at the image, while the head actually
 run cannot tell tail relations apart at all. The metric and the mechanism are
 decoupled.
 
+## 4d. First cross-model WPRD point — IMP+ (`bknyaz/sgg`, 2026-09-03)
+
+**MEASURED**, with two flagged provenance gaps (no captured exit code;
+mislabeled commit hash in the run log — see `docs/CROSS_MODEL_IMP_PLUS_RESULT.md`
+§5). Clean log, checkpoint SHA256-verified, 0 missing/unexpected state-dict
+keys, 0 missing GT-pair lookups over 183,640 rows, WPRD prior-control identity
+exact 0.5000. R@K/mR@K land in the published target's range but above it by
+more than sampling noise alone explains (§3 of that doc) — treat as
+"plausible, not a verified reproduction."
+
+IMP+ WPRD = **0.6205** (macro) / **0.5703** (weighted) — the **highest WPRD of
+any arm measured in this project**, including PURE's best geometry-fusion arm
+(0.6163) — and simultaneously its mR@50 (24.03, NoGC) is also the highest
+measured, beating every PURE arm. This is the opposite quadrant from PURE's
+within-model pattern (`p49`: high-WPRD arms paid for it in mR@50). **One
+cross-model point is not enough to decide** between "the mR@K↔WPRD inversion
+is not a general property of models" and "it was specific to PURE's
+prior+visual linear ensemble construction" — but it is a real counter-example
+to the mechanism, not a confirmation, and it directly weakens Paper B's
+general framing (`docs/PAPER1_EVALUATION_TABLE.md`) until decomposed. It does
+**not** touch Paper A (single-checkpoint PURE claims) and it **strengthens**
+Paper C (WPRD-as-protocol: the metric ported cleanly to a second codebase,
+prior-control identity held exactly, decidable-row fraction replicated within
+1.4 points of PURE's).
+
+No decomposition (pair-matched null, stratified head/body/tail, geometry
+ceiling) has been run on IMP+ yet — whether its WPRD reflects genuine
+image-conditioned grounding or the same (subject,object)-identity effect
+`p26`/`p35` found in PURE, funneled through the motifs LSTM's object-label
+context instead of CLIP text embeddings, is open. That decomposition (CPU,
+~1-2h, reuses `wprd_pairs_full.pt`) is the recommended next step — see
+`docs/CROSS_MODEL_IMP_PLUS_RESULT.md` §9.
+
+Full detail, tables, and the four-question breakdown: `docs/CROSS_MODEL_IMP_PLUS_RESULT.md`.
+
 ## 5. Experiments completed this cycle
 
 | run | question | verdict |
@@ -244,6 +279,7 @@ decoupled.
 | `p38`/`p39` | box-geometry control (cross-fit / train-fit) | geometry **0.5961** > both heads |
 | `p40` | where geometry wins | margin grows toward the tail, +0.123 at tail–tail |
 | `p41` | geometry on the FIELD's metric | **corrective**: model wins at tau<=0.05 |
+| cross-model (IMP+) | first cross-model WPRD point | WPRD 0.6205 (highest yet) co-occurs with highest mR@50 — inversion does not replicate at this point |
 
 ## 6. Experiments pending
 

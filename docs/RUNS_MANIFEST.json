@@ -1,9 +1,39 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 95,
-  "total_bytes": 1667124869,
+  "n_runs": 97,
+  "total_bytes": 1667136809,
   "runs": [
+    {
+      "name": "cross_model_imp_plus",
+      "path": "runs/cross_model_imp_plus",
+      "command": null,
+      "files": [
+        {
+          "path": "runs/cross_model_imp_plus/full_eval_result.json",
+          "size_bytes": 607,
+          "sha256": "0b7934766126ed11576dc9d78f8ac6ef1d54626130c7b11f1c9c0f62e62408d1",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/cross_model_imp_plus/pilot_300.json",
+          "size_bytes": 604,
+          "sha256": "efa428b5644c10b3c8a9772ddff2129b82ccc4167e060f6da0854e318b16f737",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/cross_model_imp_plus/wprd_result_full.json",
+          "size_bytes": 379,
+          "sha256": "98b376e794e2b88caa50e79fe109204077d8e22822d5a49ae1b049da0778b1a4",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 1590,
+      "status": "NO_RESULT_JSON"
+    },
     {
       "name": "p10_model_recalibration",
       "path": "runs/p10_model_recalibration",
@@ -4648,6 +4678,22 @@
         }
       ],
       "total_bytes": 7415,
+      "status": "NO_RESULT_JSON"
+    },
+    {
+      "name": "p63_prior_override_diagnostics",
+      "path": "runs/p63_prior_override_diagnostics",
+      "command": null,
+      "files": [
+        {
+          "path": "runs/p63_prior_override_diagnostics/diag.json",
+          "size_bytes": 10350,
+          "sha256": "efc2d2d143a8097acd841a0a84de9e176e4f12e0ac98ceb402d86f990fa2ba48",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 10350,
       "status": "NO_RESULT_JSON"
     },
     {
