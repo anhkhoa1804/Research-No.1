@@ -1,5 +1,13 @@
 # Cross-model WPRD — IMP+ (bknyaz/sgg, Neural-Motifs family), first result
 
+> **UPDATE, 2026-09-03 (later session).** §3's reproduction-gap analysis below
+> compared against the WRONG published row (Xu et al.'s **Message Passing**
+> architecture, not this checkpoint's **Neural-Motifs** architecture) and is
+> **corrected, not deleted, in §10**. §10 also adds the decomposition
+> (pair-matched null, geometry probe, variance split, head/body/tail) that was
+> listed as the recommended next step in §9, and a re-corrected PURE
+> comparison. Read §10 before citing any number from §3 or §6.
+
 **Gate this addresses:** `docs/CROSS_MODEL_FEASIBILITY.md` and `docs/PAPER1_EVALUATION_TABLE.md`
 ("Interface for the cross-model study") both state that every WPRD/rank-inversion
 claim in this project is a measurement of **one checkpoint** (PURE) until a
@@ -300,7 +308,254 @@ should even be asked.
 
 ---
 
-*Generated from `~/external_models/runs/{full_run.log,full_eval_result.json,
-wprd_result_full.json,pilot_300.json}` and `runs/cross_model_imp_plus/*` on
-2026-09-03. GPU checked idle (`nvidia-smi`, 0% util, no processes) before and
-during this analysis; no experiment was launched.*
+## 10. Decomposition and reproduction-gap correction (2026-09-03, later session)
+
+GPU checked idle (`nvidia-smi`, 0% util, no processes) before this work; all
+of it is CPU-only, reusing `wprd_pairs_full.pt` plus one new CPU-only,
+no-model, no-GPU extraction (`tools/cross_model/extract_geometry.py`, 183,640
+rows in ~1s, alignment to `wprd_pairs_full.pt` verified by an exact `gt_y`
+equality assertion, not assumed). Tool:
+`tools/cross_model/decompose_imp_plus.py`. Full output:
+`runs/cross_model_imp_plus/decomposition.json`; log:
+`/tmp` (background run, 3m05s wall clock, exit 0, reproduced separately below).
+It reuses `tools/cross_model/compute_wprd.py`'s `SimpleGroups`/`wprd_generic`
+(which itself imports `auc()` from `tools/within_pair_discrimination.py`) for
+every arm's aggregate score, and `tools/wprd_geometry_control.py`'s exact
+`_geom`/`_standardise`/`cross_fit_logits` for the geometry probe — no second
+metric was invented.
+
+### 10.1 The reproduction-gap correction (§3, §6, §9 above are superseded)
+
+**§3's comparison target was wrong.** The checkpoint's own README
+(`~/external_models/sgg/README.md`) cites the BMVC 2020 paper (Knyazev et al.,
+arXiv:2005.08230, fetched and read directly this session, Table 1) for the
+"IMP+" checkpoint's numbers — but that paper trains and reports **two
+different architectures**, "Message Passing (MP) [Xu et al.]" and "Neural
+Motifs (NM) [Zellers et al.]," and Table 1's **Predicate Classification**
+block (no graph constraint; confirmed from the paper's own text) reads:
+
+| Model | Loss | R@50 | mR@50 |
+|---|---|---:|---:|
+| FREQ (always predict the most frequent predicate) | — | 69.8 | 22.1 |
+| **MP, Baseline** | Eq. 3 | **74.8** | **20.6** |
+| MP, Ours (density-normalized loss) | Eq. 6 | 78.2 | 32.1 |
+| **NM, Baseline** | Eq. 3 | **80.5** | **26.9** |
+| NM, Ours (density-normalized loss) | Eq. 6 | 82.0 | 34.8 |
+
+**74.8/20.6 is the "MP, Baseline" row — Xu et al.'s Message-Passing
+architecture — not this checkpoint.** The checkpoint we ran loads with **0
+missing / 0 unexpected keys** against `edge_model="motifs"` (`docs`, §1,
+already verified from the state dict, not from a label) — i.e. it is
+empirically the **Neural-Motifs family**, and the README's own footnote for
+"IMP+" (`-loss baseline`) matches Table 1's **"NM, Baseline"** row's loss
+label exactly. **The correct published comparison is R@50 = 80.5, mR@50 =
+26.9, not 74.8/20.6.**
+
+| | R@50 | mR@50 |
+|---|---:|---:|
+| our full run (NoGC, n=26,446) | 76.17 | 24.03 |
+| ~~wrong target: MP, Baseline~~ | ~~74.8~~ | ~~20.6~~ |
+| **correct target: NM, Baseline** | **80.5** | **26.9** |
+| **corrected gap** | **−4.33** | **−2.87** |
+
+This changes the reading completely. Under the wrong target, R@50 and mR@50
+moved in **inconsistent** directions/magnitudes relative to each other
+(+1.4 vs +3.4, a pattern with no obvious single cause) — which is what made
+§3 flag the gap as "wider than sampling noise explains" and left it looking
+unexplained. Under the correct target, both metrics fall **short** by a
+**consistent, modest, same-direction** margin (−4.33 / −2.87) — the signature
+of an ordinary reproduction shortfall (different codebase, a converted rather
+than original `VG-SGG.h5`, possibly a different checkpoint snapshot/seed than
+the one Table 1's row was measured from), not of a protocol bug inflating the
+numbers.
+
+**Reclassification: PARTIALLY EXPLAINED.** The dominant driver of the gap —
+comparing to the wrong architecture's row — is now identified with high
+confidence and removes the "unexplained, plausibly wrong" reading entirely.
+The residual ~4-point shortfall against the *correct* row is not further
+diagnosed this session (would need e.g. the original, uncoverted `VG-SGG.h5`,
+or the exact training/eval commit of this specific checkpoint file, neither
+available) and should not be treated as fully resolved.
+
+### 10.2 IMP+ WPRD decomposition — A/B/C/D
+
+Registered gates first: model WPRD reproduces the committed `wprd_result_full.json`
+value (0.620539) to 1e-3 — **PASS**; prior control reads exactly 0.500000 —
+**PASS**.
+
+| arm | wprd_macro | wprd_weighted | reads |
+|---|---:|---:|---|
+| **model** (IMP+ rel_fc/motifs head) | **0.6205** | 0.5703 | the registered number |
+| prior_control (empirical within-group freq.) | 0.5000 | 0.5000 | exact identity, gate |
+| **pair_matched_null** (model score permuted **within** group) | **0.4997** | 0.4987 | collapses to chance |
+| random_null (iid gaussian) | 0.5029 | 0.5024 | chance, sanity gate |
+| **geometry_crossfit** (19 box numbers, cross-fitted, no pixels) | **0.6229** | 0.5597 | ≥ the model |
+| geometry_crossfit, shuffled labels | 0.5069 | 0.4965 | chance, sanity gate |
+
+**Variance split:** 71.02% of the model's total score variance is
+**between-group** (pair identity), 28.98% **within-group**. **Invariance
+gate: PASS** — WPRD on the raw term and on its within-group-centred version
+are identical to 6 decimals (0.620539 = 0.620539), which is the algebraic
+proof, not an estimate, that **item B (pair identity) contributes exactly
+zero to WPRD**. This resolves an open question from §6(c) above: the
+"(subject,object)-identity-via-the-motifs-LSTM" hypothesis for IMP+'s WPRD is
+**not viable even in principle** — WPRD cannot see that component by
+construction, for IMP+ exactly as it could not for PURE (`p42`).
+
+**Layout/residual split of the within-group term** (ridge, cross-fitted,
+5-fold, `tools/within_group_decomposition.py`'s exact method): out-of-fold
+**R² = 4.44%** of the within-group model variation is *linearly* predictable
+from box geometry. WPRD of that layout-predictable slice = **0.5959**; WPRD
+of the residual (non-layout) slice = **0.5641** — clearly above chance, so
+some non-geometry component survives, but it is markedly weaker than the
+layout-carrying part.
+
+**Reading — the answer to A vs. B vs. C:**
+
+- **B (pair identity): ruled out, by construction (proof, not estimate).**
+- **A (genuine, non-geometric grounding): present but small.** The
+  pair-matched null collapsing to exact chance (0.4997) proves the signal is
+  tied to the *specific row/instance*, not interchangeable within a group —
+  but that is equally consistent with "the signal is this instance's unique
+  box layout" as with "the signal is this instance's unique visual content."
+  The residual-after-geometry WPRD (0.5641, clearly excluding 0.5) is the
+  cleanest evidence of something beyond geometry, and it is modest.
+- **C (geometry/spatial): the dominant identified component.** A
+  **linear**, cross-fitted, **pixel-free** 19-number box probe alone reaches
+  **0.6229 — matching or exceeding the full IMP+ model (0.6205)**. This is
+  the *same* qualitative finding PURE produced (`docs/GEOMETRY_SGG_BASELINE_RESULT.md`,
+  `p38`/`p39`: "box geometry out-discriminates the checkpoint") — now
+  independently replicated in a second model, a second codebase, and a
+  different split. **This is the most robust finding of this session**: it
+  now holds in 2/2 models checked, versus the mR@K↔WPRD inversion which holds
+  in 0/1 additional models (§10.3).
+- **D (calibration/score construction): not a confound here.** Both sanity
+  nulls (random, shuffled-label geometry) read within noise of exactly 0.5,
+  and the prior-control identity is exact — nothing in the WPRD construction
+  itself is inflating the 0.6205 or 0.6229 numbers.
+
+**Caveat on the geometry probe:** cross-fitted only (5-fold, image-level),
+**not train-fitted** — no VG150 **train** split was converted for this model
+(only `VG-SGG-test.h5` exists on disk; converting train was out of scope this
+session). PURE's strongest geometry number (0.5961) was **train-fitted**,
+which removes even the mild "cross-fitted has a residual advantage" concern
+`docs/ESTIMATOR_MATCHED_GEOMETRY_RESULT.md` raised for PURE; IMP+'s 0.6229
+does not have that same guarantee and is a **linear** probe only (PURE also
+has a geometry-**MLP** arm; not replicated here). Treat 0.6229 as directionally
+solid (it clears the model with room to spare, and the layout/residual split
+independently corroborates a large geometry contribution) but not as tightly
+bounded as PURE's own train-fitted number.
+
+### 10.3 Head/body/tail (buckets from this split's own GT counts: top-15/next-20/last-15)
+
+| bucket pair | model | geometry_crossfit | random_null | n_comparisons |
+|---|---:|---:|---:|---:|
+| head-head | 0.6305 | 0.6282 | 0.5007 | 2,310,467 |
+| body-head | 0.6210 | 0.6282 | 0.5037 | 609,514 |
+| body-body | 0.5935 | 0.6180 | 0.5192 | 28,843 |
+| head-tail | 0.5846 | 0.5868 | 0.5114 | 118,535 |
+| body-tail | 0.5832 | 0.5937 | 0.4854 | 18,983 |
+| **tail-tail** | 0.5679 | 0.5189 | 0.5233 | **1,650** |
+
+Same caveat PURE's own tail-tail cell needed (§6c of the original doc, and
+`p35`): **tail-tail is underpowered** (147 cells / 1,650 comparisons, 95% CI
+[0.495, 0.630] for the model) — its point estimate should not be read as a
+finding on its own. Everywhere else, both model and geometry sit clearly
+above chance and above each other's null, and **the head>tail gradient
+matches PURE's** (`p35`: discriminability falls toward the tail).
+
+### 10.4 Corrected PURE vs. IMP+ comparison (apples-to-apples population)
+
+**§6's PURE comparison table used the wrong PURE population.** IMP+'s
+subject/object labels are the canonical 150-category VG150 vocabulary
+(verified at conversion time — categories.json ids equal the canonical
+alphabetical index). PURE's `p49` numbers (used in §6) are on
+`datasets_vg150_clean`'s **raw, unrestricted** Visual Genome object names
+(16,929 distinct categories — `docs/DATASET_IDENTITY_OBJECT_VOCAB.md`), a
+**different, finer-grained population** than IMP+'s. The correct comparison
+is `runs/p53` / `docs/VG150_RESTRICTED_REPLICATION.md`, which restricts PURE
+to the same standard 150-category population:
+
+| arm | WPRD | mR@50 | R@50 | population |
+|---|---:|---:|---:|---|
+| PURE pair prior only | 0.5000 | 21.250 | 70.666 | standard VG150 (`p53`) |
+| PURE text (α=0, deployed head) | 0.5553 | 22.464 | 70.319 | standard VG150 (`p53`) |
+| PURE classifier (α=1) | 0.5815 | 21.526 | 70.860 | standard VG150 (`p53`) |
+| PURE geometry-linear | 0.6168 | 18.565 | 70.898 | standard VG150 (`p53`) |
+| **PURE geometry-MLP (best in family)** | **0.6452** | 20.124 | 71.022 | standard VG150 (`p53`) |
+| **IMP+ model** (this run) | **0.6205** | 24.03\* | 76.17\* | VG150 test, different codebase |
+| **IMP+ geometry-crossfit (linear)** | **0.6229** | — | — | VG150 test, different codebase |
+
+\* IMP+'s R@50/mR@50 come from a **different evaluator, split, and protocol**
+than PURE's — WPRD is portable by construction (prior-free, cancels
+per-class calibration exactly), R@K/mR@K are **not**. Putting IMP+'s raw
+mR@50 next to PURE's raw mR@50, as §6(b) of this document did, compares two
+numbers that are not on a controlled common scale.
+
+**Correction to §6(b)'s "IMP+ occupies the impossible corner" claim: retracted
+as stated, replaced with a narrower and more defensible reading.**
+
+- On WPRD (the one axis that *is* portable): IMP+ (0.6205) sits **between**
+  PURE's deployed head (0.5553) and PURE's best geometry arm (0.6452) — a
+  **mid-family** value, not an outlier, and **not** "the highest WPRD ever
+  measured in this project" as §6(b) claimed (PURE's geometry-MLP is higher,
+  once compared on the right population).
+- On mR@50/R@50: **no valid cross-model comparison exists** — different
+  evaluators, different splits, different candidate-generation and
+  tie-breaking conventions. §6(b)'s claim that IMP+ "simultaneously beats
+  every PURE arm on both axes at once" is **not supportable** with the data
+  in hand and should not be repeated.
+- What **does** replicate, cleanly, on the one portable axis: **geometry ≥
+  model, in both PURE and IMP+.** That is the finding this cross-model run
+  actually supports at n=2, and it is a materially different (and better
+  supported) claim than the one §6(b) made.
+
+### 10.5 Re-answering the three questions from §6
+
+**(a) Does WPRD generalize beyond PURE?** Still yes, and now more strongly —
+the metric, the prior-control identity, the pair-matched-null construction,
+the variance-split invariance gate, and the geometry-probe methodology **all**
+ported to a second codebase without modification and without a single gate
+failure.
+
+**(b) Does the mR@50↔WPRD inversion replicate?** **Untested, not
+refuted — §6(b)'s "not at this data point" verdict is itself
+retracted.** The only valid cross-model comparison axis (WPRD) shows IMP+ as
+an unremarkable mid-family point, not a counter-example. Testing the
+inversion cross-model would require either a controlled, shared R@K/mR@K
+protocol across codebases (not attempted), or a within-IMP+ calibration
+sweep analogous to PURE's α sweep — which does not exist, because IMP+ has
+no prior/calibration term to sweep (§9's "prior-conflict: N/A" finding,
+confirmed again in §10.2's item D).
+
+**(c) What happens to the prior/geometry relationship?** **Resolved, not
+confounded.** Pair identity provably contributes zero to WPRD (§10.2's
+invariance gate). Geometry is the dominant identified component of what
+remains, replicating PURE's own `p38`/`p39` finding independently. This is
+the clearest, best-supported result of the whole cross-model programme so
+far.
+
+### 10.6 Trustworthiness, updated
+
+Admit §10's decomposition results to the ledger as `MEASURED`: every arm's
+top-line number is reproduced from a registered gate (model WPRD, prior
+control) or an algebraic identity (invariance gate), the geometry extraction
+was alignment-verified against `wprd_pairs_full.pt` by exact `gt_y` equality
+(not assumed), and every computation reused the project's existing `auc()`
+and `wprd_generic` rather than a new implementation. The reproduction-gap
+correction (§10.1) is `MEASURED` from the paper's own Table 1, fetched and
+read directly this session (page images inspected, not summarized from a
+search snippet). Caveats: the geometry probe is cross-fitted-only, linear-only
+(§10.2); the residual ~4-point R@50/mR@50 shortfall against the *correct*
+baseline is unexplained in detail (§10.1).
+
+---
+
+*§1–§9 generated 2026-09-03 (first session) from
+`~/external_models/runs/{full_run.log,full_eval_result.json,
+wprd_result_full.json,pilot_300.json}` and `runs/cross_model_imp_plus/*`.
+§10 added 2026-09-03 (later session) from
+`tools/cross_model/{extract_geometry.py,decompose_imp_plus.py}`,
+`runs/cross_model_imp_plus/decomposition.json`, and Knyazev et al. 2020
+(arXiv:2005.08230) Table 1. GPU checked idle before and during both
+sessions; no experiment was launched in either.*

@@ -2,13 +2,20 @@
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
   "n_runs": 97,
-  "total_bytes": 1667136809,
+  "total_bytes": 1667145051,
   "runs": [
     {
       "name": "cross_model_imp_plus",
       "path": "runs/cross_model_imp_plus",
       "command": null,
       "files": [
+        {
+          "path": "runs/cross_model_imp_plus/decomposition.json",
+          "size_bytes": 8242,
+          "sha256": "c5eb877493ca9636e676f8c864b35a557049e3e70119e2c1b496dd80a3502557",
+          "note": null,
+          "mtime": null
+        },
         {
           "path": "runs/cross_model_imp_plus/full_eval_result.json",
           "size_bytes": 607,
@@ -31,7 +38,7 @@
           "mtime": null
         }
       ],
-      "total_bytes": 1590,
+      "total_bytes": 9832,
       "status": "NO_RESULT_JSON"
     },
     {

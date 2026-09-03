@@ -156,7 +156,17 @@ def run(data_dir, ckpt_path, n_images, batch_size, device_str, out_json, wprd_ou
             "mR@20": float(mean_recall_nogc["R@20"]) * 100, "mR@50": float(mean_recall_nogc["R@50"]) * 100,
             "mR@100": float(mean_recall_nogc["R@100"]) * 100,
         },
-        "published_target_NoGC_MP_baseline": {"R@50": 74.8, "mR@50": 20.6, "source": "Knyazev et al. BMVC 2020, Table 1"},
+        # CORRECTED 2026-09-03: Table 1 of Knyazev et al. BMVC 2020 (arXiv:2005.08230)
+        # reports TWO architectures, "MP" (Xu et al., Message Passing) and "NM"
+        # (Zellers et al., Neural Motifs). This checkpoint loads with 0 missing/0
+        # unexpected keys against edge_model="motifs" -- it is NM, not MP -- and the
+        # README's "-loss baseline" flag for this checkpoint matches Table 1's
+        # "NM, Baseline" loss label, not "MP, Baseline". The MP row (74.8/20.6) was
+        # cited here originally by mistake; see docs/CROSS_MODEL_IMP_PLUS_RESULT.md
+        # section 10.1 for the correction, left as history rather than silently
+        # dropped.
+        "published_target_NoGC_NM_baseline": {"R@50": 80.5, "mR@50": 26.9, "source": "Knyazev et al. BMVC 2020, Table 1, 'NM, Baseline' row"},
+        "published_target_NoGC_MP_baseline_WRONG_ARCHITECTURE": {"R@50": 74.8, "mR@50": 20.6, "source": "Knyazev et al. BMVC 2020, Table 1, 'MP, Baseline' row -- Message Passing, NOT this checkpoint's Neural-Motifs architecture; kept only so the original (incorrect) comparison is traceable"},
     }
     print(json.dumps(result, indent=2))
     if out_json:
