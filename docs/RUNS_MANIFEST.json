@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 100,
-  "total_bytes": 1667187057,
+  "n_runs": 101,
+  "total_bytes": 1667195644,
   "runs": [
     {
       "name": "cross_model_imp_plus",
@@ -4875,6 +4875,64 @@
         }
       ],
       "total_bytes": 7088,
+      "status": "OK"
+    },
+    {
+      "name": "p65_minimal_fix_clean_fusion",
+      "path": "runs/p65_minimal_fix_clean_fusion",
+      "command": ".venv/bin/python3 tools/estimator_matched_geometry_v2.py --out runs/p65_minimal_fix_clean_fusion/est.json",
+      "commit": "22d21a36c0c5a551e84270221355af966c3dc4bb",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "p65 -- minimal dx_rel/dy_rel fix and cleaned (group-centered) rel_feat + geometry fusion, under p60's exact matched MLP estimator. Preregistered in docs/MINIMAL_FIX_AND_CLEAN_FUSION_PREREGISTRATION.md. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 342.087,
+      "started_at_utc": "2026-09-03T07:42:28.428761+00:00",
+      "files": [
+        {
+          "path": "runs/p65_minimal_fix_clean_fusion/command.txt",
+          "size_bytes": 106,
+          "sha256": "aec03a16580d8321c15a937919b6cf0367bf944ed64a3d7406f980df4ce2c81a",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p65_minimal_fix_clean_fusion/est.json",
+          "size_bytes": 3363,
+          "sha256": "26849cce734274898d6bb0184385a9b255de3239755c8b59cd73a54c55294efc",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p65_minimal_fix_clean_fusion/provenance.json",
+          "size_bytes": 2829,
+          "sha256": "8f9faae83506bfcba4e8e0cf99a984b2390a93ab3db7822b2c082267505647f3",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p65_minimal_fix_clean_fusion/result.json",
+          "size_bytes": 355,
+          "sha256": "4461ab4f310bb63f789ed0e0ea497038c58361841477c57dbeecc1f0976a8229",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p65_minimal_fix_clean_fusion/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p65_minimal_fix_clean_fusion/stdout.log",
+          "size_bytes": 1934,
+          "sha256": "3381eaba61b25ee582b25c0a62b80c63d896261defd6968f6bd671c4aa25a599",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 8587,
       "status": "OK"
     },
     {
