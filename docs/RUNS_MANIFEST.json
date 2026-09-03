@@ -1,8 +1,8 @@
 {
   "tool": "build_runs_manifest",
   "why": "runs/ is gitignored; this ties every reported number to an artifact",
-  "n_runs": 101,
-  "total_bytes": 1667195644,
+  "n_runs": 103,
+  "total_bytes": 1667209561,
   "runs": [
     {
       "name": "cross_model_imp_plus",
@@ -4933,6 +4933,122 @@
         }
       ],
       "total_bytes": 8587,
+      "status": "OK"
+    },
+    {
+      "name": "p66_nonlinear_dxdy",
+      "path": "runs/p66_nonlinear_dxdy",
+      "command": ".venv/bin/python3 tools/nonlinear_dxdy_decodability.py --out runs/p66_nonlinear_dxdy/dec.json",
+      "commit": "35a2c3d8f944fe4bbcf916007bd5975292b15dfc",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "p66 -- nonlinear (MLP) decodability of dx_rel/dy_rel from rel_feat vs linear (p57) and shuffled-label control. Preregistered in docs/NONLINEAR_DXDY_DECODABILITY_PREREGISTRATION.md. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 236.426,
+      "started_at_utc": "2026-09-03T07:57:34.266454+00:00",
+      "files": [
+        {
+          "path": "runs/p66_nonlinear_dxdy/command.txt",
+          "size_bytes": 94,
+          "sha256": "a16da29f4ab38516de122b1f2324453b343df2abac5f9db6a476fdd0f23503a1",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p66_nonlinear_dxdy/dec.json",
+          "size_bytes": 1789,
+          "sha256": "094ce53d3a686f498af3bf8c137986413bda242a571735bc3eab3647d9f9b53b",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p66_nonlinear_dxdy/provenance.json",
+          "size_bytes": 2798,
+          "sha256": "4ee8f30f1253b3a99cfe0aecc15d4216485752f156fdc1d3a7025b452fded54d",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p66_nonlinear_dxdy/result.json",
+          "size_bytes": 333,
+          "sha256": "9e69ec6979174d9a74c605f9ec2ea2dd5b25cfc9cee31fc6008d691094dfdbb0",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p66_nonlinear_dxdy/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p66_nonlinear_dxdy/stdout.log",
+          "size_bytes": 1370,
+          "sha256": "cf91465226dca9f9ec23db5fda65c2ba98f0db78af7ebc3aca8649f8ae77cba0",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 6384,
+      "status": "OK"
+    },
+    {
+      "name": "p67_auxiliary_spatial_loss",
+      "path": "runs/p67_auxiliary_spatial_loss",
+      "command": ".venv/bin/python3 tools/auxiliary_spatial_loss.py --out runs/p67_auxiliary_spatial_loss/aux.json",
+      "commit": "9a428f68ff0b7d22900175f5b0bf9815918d3a2e",
+      "branch": "research/architecture-breakthrough",
+      "working_tree_clean": true,
+      "note": "p67 -- auxiliary dx_rel/dy_rel regression loss on the frozen-rel_feat readout (shared trunk, CE + lambda*MSE). Preregistered in docs/AUXILIARY_SPATIAL_LOSS_PREREGISTRATION.md. CPU only.",
+      "exit_code": 0,
+      "runtime_seconds": 389.526,
+      "started_at_utc": "2026-09-03T08:06:41.638917+00:00",
+      "files": [
+        {
+          "path": "runs/p67_auxiliary_spatial_loss/aux.json",
+          "size_bytes": 2889,
+          "sha256": "8bcfb3b1dba936a7bf29b751b182df10315baccabf35f56abacfe45676d0c610",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p67_auxiliary_spatial_loss/command.txt",
+          "size_bytes": 97,
+          "sha256": "c43a9f0bed93603db636e02ceb22cbae5be8c7f98e53c788eca09f1ea8ab1284",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p67_auxiliary_spatial_loss/provenance.json",
+          "size_bytes": 2806,
+          "sha256": "465fa662e75bcfc3548f5659c8dd1e6fc3a7d8ff7ea442fc50410fbadc60847e",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p67_auxiliary_spatial_loss/result.json",
+          "size_bytes": 344,
+          "sha256": "0cde6b60dc97dfe5e530af85dad00f51ad7a2f46a665f163cc83ed096a6c6171",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p67_auxiliary_spatial_loss/stderr.log",
+          "size_bytes": 0,
+          "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+          "note": null,
+          "mtime": null
+        },
+        {
+          "path": "runs/p67_auxiliary_spatial_loss/stdout.log",
+          "size_bytes": 1397,
+          "sha256": "2deaed790997a697d4570367ad7c0b18af806abbce910cc53b4142dfacdf4f63",
+          "note": null,
+          "mtime": null
+        }
+      ],
+      "total_bytes": 7533,
       "status": "OK"
     },
     {

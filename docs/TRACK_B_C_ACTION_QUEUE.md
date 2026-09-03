@@ -9,37 +9,61 @@ exited by the end of it — logged, not competed with.
 
 ---
 
-## Track B — ranked candidate models (info gain / cost)
+## Track B — ranked candidate models (info gain / cost), UPDATED after this session's concrete B0-equivalent checks
 
 Builds on `docs/CROSS_MODEL_FEASIBILITY.md` (bknyaz/sgg IMP+ already secured
-— n=1 additional model, `docs/CROSS_MODEL_IMP_PLUS_RESULT.md`). This
-session's web research updates the landscape for the task's stated
-priorities (VCTree, TDE, one substantially different family) with current
-checkpoint/codebase availability.
+— n=1 additional model, `docs/CROSS_MODEL_IMP_PLUS_RESULT.md`). **This
+session cloned and directly inspected three candidate codebases
+(`yrcong/RelTR`, `naver-ai/egtr`, `mods333/energy-based-scene-graph`) and
+attempted a real environment build for the third — this is no longer a
+web-search-only ranking; two candidates were ruled out by reading their
+actual code, and the third's exact failure mode was reproduced, not
+assumed.**
 
-| rank | candidate | family | codebase | checkpoint | env risk | PredCls support | est. porting effort | est. GPU cost | info gain |
-|---|---|---|---|---|---|---|---|---|---|
-| **1** | **RelTR** (`yrcong/RelTR`) | DETR/transformer, one-stage, no explicit frequency-bias term | self-contained, modern-ish PyTorch, no maskrcnn-benchmark | **public, VG-pretrained, downloadable** | **low** — standard transformer ops, no exotic custom CUDA kernels expected (needs direct verification) | **unconfirmed** — architecture is end-to-end detection+relation; whether GT boxes can be substituted for strict PredCls needs a code read | ~0.5–1 day (mostly: confirm PredCls mode, write the WPRD-cache extraction hook) | ~0.5–1.5 GPU-h for a full-split PredCls pass, if supported | **highest** — the only candidate architecturally unrelated to the frequency-prior-conditioned, object-context-LSTM paradigm IMP+ and PURE both share; a genuine test of whether "geometry ≥ learned head" generalizes outside that paradigm |
-| **2** | **VCTree** via `mods333/energy-based-scene-graph` | Tree-LSTM context, Motifs-adjacent family | reports pretrained VCTree weights; framework requirements **not yet checked** this session | reported available | **unknown**, cheap to check (read one README) | GT-boxes PredCls, per family convention | 0.5 day if framework is modern; else falls back to rank 3's cost | TBD pending B0 | moderate — sibling to IMP+'s family, but a materially different context-encoding mechanism (tree-structured vs. sequential LSTM), useful second point in the Motifs-adjacent family |
-| **3** | **VCTree + TDE**, official (`KaihuaTang/Scene-Graph-Benchmark.pytorch`) | Tree-LSTM context (VCTree) + causal-effect post-hoc adjustment (TDE) | `maskrcnn-benchmark`, torch 1.4–1.9, CUDA 10/11, many custom CUDA ops | public, OneDrive | **high** — same sm_89/old-torch/custom-CUDA-kernel blocker documented in `docs/CROSS_MODEL_FEASIBILITY.md`, unresolved | yes, GT-boxes PredCls is this repo's native mode | ~1–2 days (env bring-up is the risk, not the science) | ~1–2 GPU-h once running | **VCTree: moderate** (redundant with rank 2 if that lands); **TDE: high and free** once any model in this repo runs — TDE is an *inference-time* causal adjustment on an already-trained checkpoint's logits, not a separately trained model, so cracking this codebase once yields both VCTree and TDE (and Motifs, already covered elsewhere) simultaneously |
-| **4** | **EGTR** (`naver-ai/egtr`, CVPR 2024) | DETR/transformer, backbone-shared relation extraction | modern, HuggingFace-adjacent, actively maintained (2024) | needs confirmation this session did not check | **low**, likely lower than RelTR given recency | needs confirmation | ~0.5–1 day | ~0.5–1.5 GPU-h | high, same rationale as RelTR (different family) — backup/parallel candidate to rank 1, worth a same-cost B0 check in parallel with RelTR rather than strictly sequenced after it |
-| **5** | **VCTree**, official (`KaihuaTang/VCTree-Scene-Graph-Generation`) | Tree-LSTM context | pre-`Scene-Graph-Benchmark.pytorch`, likely an even older Faster-RCNN-based stack | public | **highest** — oldest codebase in the survey | yes | 2+ days, high failure risk | unknown | low priority — strictly dominated by rank 3's VCTree path (same architecture, newer/better-maintained host codebase) unless rank 3's env work is somehow easier to redirect at this repo specifically, which is not expected |
+| rank | candidate | family | verified status | PredCls support | env risk | info gain |
+|---|---|---|---|---|---|---|
+| **1** | **VCTree** (+ **TDE**, free once this stack runs) via `mods333/energy-based-scene-graph` or `KaihuaTang/Scene-Graph-Benchmark.pytorch` | Tree-LSTM context (Motifs-adjacent) + causal post-hoc adjustment | **checkpoints confirmed available** — the `mods333` fork links direct `VCTree-Predcls` weights (both CE and energy-based variants) — but the **environment build was attempted this session and confirmed to fail**: `maskrcnn_benchmark/csrc/cpu/ROIAlign_cpu.cpp` uses the pre-1.5 `input.type()` API inside `AT_DISPATCH_FLOATING_TYPES`, which does not compile against this host's torch 2.9.1/cu129 (`error: cannot convert 'const at::DeprecatedTypeProperties' to 'c10::ScalarType'`, `ATen/Dispatch.h:198`). This is the well-documented, mechanical maskrcnn-benchmark-on-modern-PyTorch problem (also affects ROIPool, NMS, SigmoidFocalLoss, deform_conv — same pattern, ~8–15 call sites across ~10 files, by the shape of this codebase) | **yes, natively** — this is a two-stage detect-then-classify architecture built around `MODEL.ROI_RELATION_HEAD.USE_GT_BOX`/`USE_GT_OBJECT_LABEL` flags, exactly PredCls's own definition | **confirmed, not assumed**: real but bounded — every failure is the same class of fix (`.type()` → `.scalar_type()`, and likely a few `THC.h`/`AT_CHECK` renames elsewhere), tedious but mechanical, historically well-trodden by other users of this exact codebase family | **highest of any tractable candidate**: TDE rides free once this compiles, VCTree is a materially different context-encoder from IMP+'s LSTM, and PredCls is native — no architecture mismatch |
+| **2** | **RelTR** (`yrcong/RelTR`) | DETR/transformer, one-stage, sparse fixed-query decoding | **checkpoint public and downloadable; codebase cloned and read this session** | **RULED OUT — no PredCls mode exists, and none can be added by porting.** Grepped the full codebase for `predcls`/`gt_box`-as-input/`use_gt`: zero hits. RelTR's queries jointly predict subject/object boxes *and* the predicate — there is no mechanism to condition the model on an externally-specified (subject, object) box pair the way two-stage detectors do. Forcing GT boxes in would require replacing the box-prediction sub-network with a box-matching/re-routing scheme — a research-level architecture change, not a port | n/a — architectural mismatch, not an engineering cost | **downgraded from last session's rank 1.** The earlier ranking assumed "modern codebase = tractable" without checking whether the *task* (PredCls) is even representable in a one-stage sparse-query architecture. It is not, for any codebase in this family (RelTR, and see EGTR below) |
+| **3** | **EGTR** (`naver-ai/egtr`, CVPR 2024) | DETR/deformable-attention, one-stage | **checkpoint public; codebase cloned and read this session** | **RULED OUT, same reason as RelTR** — no `predcls`/GT-box-input hooks found; `evaluate_egtr.py` computes standard joint-detection graph metrics only | n/a, same architectural mismatch. Additionally uses **deformable attention** (`model/deformable_detr.py`), historically requiring a compiled custom CUDA kernel — a second, independent risk this codebase carries on top of the PredCls mismatch, not investigated further since the mismatch alone is disqualifying | **downgraded**, same reason as RelTR |
+| **4** | **VCTree**, official (`KaihuaTang/Scene-Graph-Benchmark.pytorch`) | Tree-LSTM context + TDE | not re-cloned this session (the `mods333` fork, rank 1, is built directly on top of it and shares its exact `maskrcnn_benchmark/` source tree and blocker) | yes, native | same confirmed blocker as rank 1 | **redundant with rank 1** — attempt rank 1's fork first; fall back here only if that fork's fix turns out to diverge from upstream in some way that matters |
+| **5** | **VCTree**, oldest official repo (`KaihuaTang/VCTree-Scene-Graph-Generation`, pre-2019, pre-`Scene-Graph-Benchmark.pytorch`) | Tree-LSTM context | not cloned | yes, native | strictly worse than rank 1/4 (older, less maintained fork of the same problem) | not worth pursuing while rank 1 exists |
 
-**Divergence from the task's stated priority order (VCTree, TDE, different
-family), noted explicitly rather than silently reordered:** ranking by
-information-gain/cost puts the architecturally-different family first,
-because (a) IMP+ already secured one Motifs-adjacent point, so a second
-Motifs-adjacent point (VCTree) has a lower marginal information gain than a
-structurally different paradigm, and (b) the cheapest realistic path to
-VCTree/TDE both run through a documented, previously-encountered hard
-environment blocker (old `maskrcnn-benchmark` + CUDA extensions vs. this
-host's sm_89/CUDA-13 stack), while RelTR/EGTR are modern, self-contained
-codebases with no comparable blocker on record. **This is a ranking by cost
-and marginal information, not a claim that VCTree/TDE are less scientifically
-valuable** — TDE in particular is the more conceptually on-point candidate
-for Paper B's discrimination/calibration thesis, since it is itself a
-calibration-family intervention. If the env blocker for rank 3 turns out to
-be cheaper than estimated (untested this session), it should be promoted.
+**The single highest-value finding this session produced for Track B**: the
+architectural gate (does the model even have a place to put a GT box pair
+in?) matters *before* the environment gate, and it was not checked last
+session. RelTR/EGTR looked cheap because their *environments* looked
+tractable; they are not viable *at all* for this specific comparison,
+regardless of environment, because one-stage sparse/dense query SGG models
+do not expose a PredCls-shaped input/output interface. This is a permanent,
+architecture-level exclusion for this family, not a cost estimate.
+
+**This session reverses last session's ranking, on evidence, not on a change
+of mind.** Last session ranked RelTR above VCTree/TDE on the assumption that
+a modern, self-contained codebase implies low cost; this session's direct
+code inspection found that assumption failed on the more important axis —
+whether the task (PredCls) is even representable — before the environment
+axis was ever reached. VCTree/TDE's environment blocker, meanwhile, is
+confirmed real but is now a *known, bounded, mechanical* problem (a specific
+API-migration pattern with a well-understood fix shape) rather than an
+open unknown. **Net effect: VCTree/TDE move back to rank 1, matching the
+task's originally stated priority order** — not because the environment
+work became easier, but because the alternative was found to be a dead end
+rather than merely harder-to-rank.
+
+**Recommended next step for Track B, scoped for a dedicated session (not
+squeezed into a mixed-analysis one):** patch
+`~/external_models/energy-based-scene-graph/maskrcnn_benchmark/csrc/`
+mechanically — replace `.type()` with `.scalar_type()` in every
+`AT_DISPATCH_*` call, then rebuild and iterate on whatever the next error is
+(likely `THC/THC.h` removal or `AT_CHECK`→`TORCH_CHECK` renames, both
+well-known, mechanical fixes for this exact codebase vintage). Budget: a
+few hours of iterative compile-fix-recompile cycles, not the multi-day
+estimate this doc carried before empirical confirmation — the failure mode
+is now precisely known, which is most of what made the original estimate
+uncertain. The cloned repo and the isolated build venv
+(`/tmp/vctree_probe_venv`, not preserved across VM restarts — recreate with
+`torch==2.9.1+cu129` to match this host exactly) are left in place at
+`~/external_models/` for continuity.
 
 **Target for this track: n=3 first** (current: PURE, IMP+; next: whichever
 of ranks 1–4 clears its B0 pilot first), **then reassess** before committing
@@ -94,36 +118,42 @@ to a 4th/5th model, per the task's own instruction.
 |---|---|---|---|---|---|---|---|---|---|---|
 | PURE | frozen-CLIP + frequency-prior ensemble | this repo | VG150 val+test | 132,556 / 132,334 | 0.5542 / 0.5446 | 0.5961 / 0.5916 (train-fit) | 0.5000 / 0.5000 | 0.4983 / 0.5001 | exact (own checkpoint) | `p33`, `p59` |
 | IMP+ | Neural-Motifs (LSTM object-context) | `bknyaz/sgg` | VG150 test | 183,640 | 0.6205 | 0.6229 (cross-fit) | 0.5000 | 0.4997 (pair-matched) | plausible range, PARTIALLY EXPLAINED gap vs. correct published row | `docs/CROSS_MODEL_IMP_PLUS_RESULT.md` §10 |
-| VCTree | Tree-LSTM context | TBD (rank 2 or 3 above) | TBD | — | — | — | — | — | **NOT YET RUN** | next candidate |
-| TDE | causal adjustment on Motifs/VCTree | `Scene-Graph-Benchmark.pytorch` | TBD | — | — | — | — | — | **NOT YET RUN**, rides on rank-3 env work | — |
-| RelTR / EGTR | DETR/transformer | own | TBD | — | — | — | — | — | **NOT YET RUN** | rank-1/4 candidate |
+| VCTree | Tree-LSTM context | `mods333/energy-based-scene-graph` | TBD | — | — | — | — | — | **BLOCKED**, confirmed this session: `ROIAlign_cpu.cpp` fails to compile against torch 2.9.1 (`AT_DISPATCH_FLOATING_TYPES`/`input.type()` API removed) | checkpoints confirmed available (direct PredCls links); mechanical fix identified, not yet applied |
+| TDE | causal adjustment on Motifs/VCTree | `Scene-Graph-Benchmark.pytorch` | TBD | — | — | — | — | — | **BLOCKED**, same root cause (shares `maskrcnn_benchmark/` source tree) | rides free once VCTree's env is fixed |
+| RelTR | DETR/transformer, one-stage sparse-query | `yrcong/RelTR` | n/a | — | — | — | — | — | **RULED OUT** | no PredCls mode exists in the architecture; confirmed by direct code read this session, not a porting-cost judgment |
+| EGTR | DETR/deformable-attention, one-stage | `naver-ai/egtr` | n/a | — | — | — | — | — | **RULED OUT**, same reason as RelTR | also carries an unexamined deformable-attention CUDA-kernel risk, moot given the architectural exclusion |
 
 ---
 
 ## Track C — ranked experiments (info gain / GPU minute)
 
-Post-`p65` state: readout (H5) dead, objective (H2) refuted on both
-channels, supervision (H8) refuted, and now — this session — the minimal
-spatial-feature fix (NEUTRAL) and cleaned-fusion (HARMFUL) are also closed.
-Every additive, frozen-readout intervention this programme has designed has
-been tried. Ranked by expected information gain per unit cost, **not**
-executed in this session except rank 1:
+Post-`p67` state: readout (H5) dead, objective (H2) refuted on both
+channels, supervision (H8) refuted, the minimal spatial-feature fix
+(NEUTRAL), cleaned-fusion (HARMFUL), nonlinear decodability of `dy_rel`
+(present, R²=0.292) and `dx_rel` (weakly present, R²=0.073), and now the
+auxiliary-loss readout fix (NEUTRAL) are all closed. Every additive,
+frozen-readout, and readout-training-signal intervention this programme has
+designed has been tried.
 
-| rank | experiment | cost | status | why it's next |
+| rank | experiment | cost | status | outcome |
 |---|---|---|---|---|
-| **1** | **Minimal `dx_rel`/`dy_rel` fix + cleaned-fusion, matched estimator** | CPU, ~6 min | **DONE this session (`p65`)** — MINIMAL-FIX-NEUTRAL, CLEAN-FUSION-HARMFUL | closed the one previously-void (`p58`) test and the one never-attempted cleaned-fusion combination |
-| 2 | Nonlinear (kernel or shallow-MLP, not linear-R²) decodability of `dx_rel`/`dy_rel` specifically from `rel_feat` | CPU, ~10–15 min | not run | `p57`'s R²=0.052 for `dx_rel` is a **linear** decodability bound; a nonlinear probe distinguishes "genuinely absent" (C1) from "present but nonlinearly entangled" (a sharper version of C2) more rigorously than `p65`'s linear-input MLP-readout test did, since `p65` fed `dx_rel` as an extra linear input rather than asking whether it's nonlinearly recoverable from the other 768 dimensions |
-| 3 | Held-out TEST replication of `p60`'s estimator-matched-geometry finding | CPU, ~5–8 min | not run | `p60` (the anchor for `B_geometry` = 0.5976 that `p65` built on) was run on validation only, unlike most of the rest of the programme's load-bearing WPRD numbers, which now have test replications (`p59`). Cheap, closes a real freeze-quality gap before this number is leaned on further |
-| 4 | Role-swap / directional WPRD variant | CPU, ~30–60 min (new tool) | not run, motivated by `docs/BENCHMARK_LITERATURE_GAP.md` | tests whether swapping subject/object roles specifically probes the directional-predicate gap `p40`/`p57` identified (geometry wins spatially-decidable, directional contrasts; the model wins functional ones) — more a Track B/benchmark-development item than a successor-architecture one, ranked here because it is cheap and CPU-only |
-| 5 | Small **joint-training** pilot: retrain only a small head (not the full encoder) on frozen CLIP features **with** `dx_rel`/`dy_rel`/geometry injected as an explicit auxiliary input from the start of training, not concatenated post-hoc onto a frozen `rel_feat` | GPU, small (~0.5–1 h estimated, needs its own pilot-scale check first) | not run — **the one remaining untested class** per `p65`'s own limitation | `p65` only tested frozen post-hoc probes; SUCCESSOR_HYPOTHESES.md's decision rule anticipated this exact fork. **Do not run this yet** — items 2–3 are cheaper and could still change the picture (e.g., if item 2 finds `dx_rel` IS nonlinearly present in `rel_feat`, a joint-training pilot targeting a different mechanism than "feed it the raw box numbers" might be indicated instead) |
+| 1 | Minimal `dx_rel`/`dy_rel` fix + cleaned-fusion, matched estimator | CPU, 6 min | **DONE (`p65`)** | MINIMAL-FIX-NEUTRAL, CLEAN-FUSION-HARMFUL |
+| 2 | Nonlinear (MLP) decodability of `dx_rel`/`dy_rel` from `rel_feat` | CPU, 4 min | **DONE (`p66`)** | `dy_rel` R²=0.292 (>chance, moderate); `dx_rel` R²=0.073 (>chance, marginal) |
+| 3 | Auxiliary `dx_rel`/`dy_rel` regression loss on the frozen-`rel_feat` readout | CPU, 6.5 min | **DONE (`p67`)** | AUX-LOSS-NEUTRAL, flat across a 4x lambda sweep — the readout-fix branch is closed too |
+| 4 | Held-out TEST replication of `p60`'s estimator-matched-geometry finding | CPU, ~5–8 min | **not run** | `p60` (the anchor `B_geometry`=0.5976 that `p65`/`p67` both build on) is validation-only, unlike most other load-bearing WPRD numbers. Cheap, closes a real freeze-quality gap |
+| 5 | Role-swap / directional WPRD variant | CPU, ~30–60 min (new tool) | **not run**, motivated by `docs/BENCHMARK_LITERATURE_GAP.md` | more a Track B/benchmark-development item than a successor-architecture one |
 
-**Recommendation, per the task's own decision logic:** run ranks 2–3 (both
-CPU, both cheap, both close real gaps) before considering rank 5's GPU
-pilot. Do not invent a sixth architecture; three consecutive additive-fusion
-failures (`p37`, `p60`, `p65`) plus a neutral minimal fix is strong enough
-evidence to make "no model, only the diagnosis and the benchmark" a live,
-acceptable outcome — exactly as `docs/SUCCESSOR_HYPOTHESES.md` pre-committed
-to accepting if this happened.
+**The successor-architecture ladder is now, by this session's own accounting,
+exhausted for anything that leaves the encoder frozen** (6 independent
+tests, 3 distinct intervention kinds, 2 estimator families — see
+`docs/AUXILIARY_SPATIAL_LOSS_RESULT.md`'s summary table). The one remaining
+untested class — a jointly retrained encoder — is not recommended as an
+immediate next step: `p67` specifically weakens its expected payoff, since
+the readout could not use even a directly, explicitly supervised,
+information-theoretically-real signal. Rank 4 (test-split replication of
+`p60`) is the highest-value remaining Track C item precisely because it is
+a freeze-quality chore, not a new hypothesis — everything else on this
+ladder that could cheaply be tried, has been.
 
 ---
 
