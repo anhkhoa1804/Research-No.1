@@ -146,6 +146,20 @@ designed has been tried.
 | 4 | Held-out TEST replication of `p60`'s estimator-matched-geometry finding | CPU, ~5–8 min | **not run** | `p60` (the anchor `B_geometry`=0.5976 that `p65`/`p67` both build on) is validation-only, unlike most other load-bearing WPRD numbers. Cheap, closes a real freeze-quality gap |
 | 5 | Role-swap / directional WPRD variant | CPU, ~30–60 min (new tool) | **not run**, motivated by `docs/BENCHMARK_LITERATURE_GAP.md` | more a Track B/benchmark-development item than a successor-architecture one |
 
+> **SUPERSEDED for Track C by `p68`/`p69` (2026-09-06).** The ladder below was
+> built on the belief that the encoder *receives* geometry and discards it.
+> `p68` measured that 6 of the 8 geometry channels reaching `forward_pairs`
+> are bit-exactly constant, and `p69` (pre-registered, 6/6 gates, MATERIAL)
+> measured that the missing channels are worth **+0.0341 WPRD**, ~90% of it
+> box size. `p69` also found `A_relfeat` (0.5732) sits *above* a probe on the
+> channels PURE actually receives (0.5635), so the encoder is **not**
+> destroying spatial information relative to its inputs — it is starved of
+> them. The ranked item below ("joint retraining not recommended, `p67`
+> weakens its payoff") is **reversed**: the payoff estimate was made without
+> knowing the input was degenerate. **C1 is now the top Track C item.** See
+> `docs/GEOMETRY_INPUT_DEGENERACY_RESULT.md` and
+> `docs/PURE_VISIBLE_GEOMETRY_RESULT.md`.
+
 **The successor-architecture ladder is now, by this session's own accounting,
 exhausted for anything that leaves the encoder frozen** (6 independent
 tests, 3 distinct intervention kinds, 2 estimator families — see
