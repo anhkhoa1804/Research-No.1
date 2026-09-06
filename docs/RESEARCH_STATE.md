@@ -305,6 +305,43 @@ suspected) as the dominant driver, in 2 independent models now.
 
 Full detail: `docs/CROSS_MODEL_IMP_PLUS_RESULT.md` §10.
 
+## 4e. `p68` — the geometry input is 6/8 bit-exactly constant (2026-09-06)
+
+**MEASURED**, in-situ over 17,196 real validation pairs from a live forward
+pass with the historical checkpoint. Detail:
+`docs/GEOMETRY_INPUT_DEGENERACY_RESULT.md`.
+
+Six of the eight geometry features reaching `forward_pairs` — `rw`, `rh`,
+`ar1`, `ar2`, `a1`, `a2` — have **exactly one distinct value each (zero)**.
+Only `dx`, `dy` vary, in whole-frame rather than subject-box units.
+
+**Cause (VERIFIED FACT, source).** `relational_model.py:725` normalises boxes
+to `[0,1]` (`/img_res`) before calling `geom_feats_torch`, whose
+`clamp_min(1.0)` was written for pixel-space boxes. Every clamp binds,
+returning exactly 1.0, so all six log-ratio/log-area channels collapse to
+`log(1) = 0`. A units-contract violation at the call site. No test covers
+this regime — `tests/test_geometry.py` uses only pixel-scale boxes.
+
+**Consequence.** The model has **no access to box scale at all** through the
+geometry path. This partially, mechanically explains the programme's most
+robust finding (geometry out-discriminates the checkpoint): the comparison was
+never "learned encoder vs raw geometry" but "encoder given 2 frame-relative
+offsets vs probe given 19 real box numbers". `p57`'s `dx_rel` R² = 0.052 is
+explained rather than merely observed — `dx_rel` needs subject width, which is
+one of the zeroed channels.
+
+**Also:** `geom_alpha` is **dead code** in this checkpoint (bit-identical to
+its 0.1 init; the saved cfg's `vector_fusion_gate=True` means that branch never
+executes). The live `fusion_gate` is architecturally input-dependent but
+**empirically constant** at 0.50155 ± 0.00013. Geometry is *not* gated off — it
+enters at half weight; the gate's *adaptivity* is what collapsed.
+
+**No measured number in this project changes. No frozen Paper A claim is
+invalidated** — flagged for re-read before submission, not reopened. Whether
+*fixing* the units raises WPRD is untested by `p68`; `p69`
+(`docs/PURE_VISIBLE_GEOMETRY_PREREGISTRATION.md`) was pre-registered to try to
+falsify that inference **before** any GPU is spent.
+
 ## 5. Experiments completed this cycle
 
 | run | question | verdict |

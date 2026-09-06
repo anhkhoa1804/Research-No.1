@@ -47,6 +47,50 @@ reproduces `p55` to **+0.0000**), CIs **disjoint**, `regime_gap = -0.0015`
 | **H10** | **Candidate-generation bottleneck** | — | **MR** GT in prior top-5 for 89.7%; scorer EXHAUSTED 9/9 (`p28`) | **FALSIFIED** | settled |
 | **+H11** | **Benchmark metric mismatch** | **MR** Spearman(R@50, WPRD) +0.741 / **+0.951**; Spearman(mR@50, WPRD) −0.650 / −0.629, both p<0.05, replicating across two populations (`p49`,`p53`) | **effective n ≈ 3** (12 arms cluster into ~3 families, one cache, one checkpoint); Pareto correlation ns on both | **SUGGESTIVE, NOT ESTABLISHED** — but now **HELD-OUT**: `p61` on TEST gives +0.914 (p=0.0005) and −0.727 (p=0.0080). The effective-n≈3 objection is untouched. | **cross-model — the gate on Paper B** |
 
+## `p68` — the geometry PURE receives is 6/8 bit-exactly constant (2026-09-06)
+
+**MEASURED, in-situ, 17,196 real validation pairs, live forward pass with the
+historical checkpoint.** Full writeup:
+`docs/GEOMETRY_INPUT_DEGENERACY_RESULT.md`.
+
+Of the 8 geometry features handed to `forward_pairs`, six (`rw`, `rh`, `ar1`,
+`ar2`, `a1`, `a2`) have **exactly one distinct value each — zero**. Only `dx`
+and `dy` vary, and in whole-frame rather than subject-box units.
+
+**VERIFIED FACT, cause.** `relational_model.py:725` divides boxes by
+`img_res` (336) before calling `geom_feats_torch`, whose `clamp_min(1.0)` on
+widths/heights was written for pixel-space boxes. On `[0,1]` boxes every clamp
+binds and returns exactly 1.0, so all six log-ratio/log-area channels become
+`log(1) = 0`. A units-contract violation at the call site, not a bug in
+`geom_feats_torch`. `tests/test_geometry.py` uses only pixel-scale boxes
+(10–200), so the clamp never binds in any test and the production regime is
+untested.
+
+**What it does to H6's reading.** `p57`'s "the encoder discards relative
+position" (`dx_rel` R² = 0.052) sharpens: `dx_rel = (c2x−c1x)/w_subject`
+differs from the model's `dx = (c2x−c1x)/W_frame` by exactly the subject
+width — one of the zeroed channels. `dx_rel` is not *under-used* by the
+encoder; it is **not a function of the encoder's geometry inputs at all**.
+The geometry-vs-`rel_feat` gap moves from *unexplained* to **partially
+mechanically explained**: the comparison was never "learned encoder vs raw
+geometry", it was "encoder given 2 frame-relative offsets vs probe given 19
+real box numbers".
+
+**Second finding, same run.** `geom_alpha` is **dead code** in this
+checkpoint — bit-identical to its 0.1 init, zero gradient, because the saved
+cfg has `vector_fusion_gate=True` so that branch never executes. The live gate
+(`fusion_gate`) is architecturally input-dependent but **empirically
+constant**: mean 0.50155, std 0.00013 across pairs, no dimension outside
+[0.1, 0.9]. Geometry is **not** suppressed by the gate — it enters at half
+weight; what collapsed is the gate's *adaptivity*. Do not read "gate = 0.5"
+as "geometry ignored".
+
+**No measured number in this project changes, and no frozen Paper A claim is
+invalidated** (flagged for re-read, not reopened). Whether *fixing* the units
+raises WPRD was explicitly untested by `p68` and is the question `p69`
+(`docs/PURE_VISIBLE_GEOMETRY_PREREGISTRATION.md`) was registered to attack
+before any GPU is spent.
+
 ## Retired this cycle
 
 | | |
